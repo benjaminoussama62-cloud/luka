@@ -1,0 +1,819 @@
+import { didYouMean, searchLocalIndex } from "./ayeba-index";
+import { searchCrawlIndex } from "./crawler";
+import type {
+  AlgorithmSliders,
+  FeaturedSnippet,
+  KnowledgePanel,
+  MapPlace,
+  MediaResult,
+  SearchResponse,
+  SearchResult,
+  ShopItem,
+} from "./types";
+
+type FetchOpts = {
+  zeroAi: boolean;
+  zeroAds: boolean;
+  privateMode: boolean;
+  sliders: AlgorithmSliders;
+};
+
+type RawHit = {
+  title: string;
+  url: string;
+  snippet: string;
+  source: string;
+};
+
+function domainOf(url: string) {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+}
+
+function favicon(domain: string) {
+  return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64`;
+}
+
+function isCongoHint(q: string) {
+  return /\b(rdc|congo|kinshasa|lubumbashi|katanga|goma|lingala|cobalt|coltan|bcc|unikin)\b/i.test(
+    q,
+  );
+}
+
+function credibilityFor(domain: string): number {
+  const high = [
+    "wikipedia.org",
+    "who.int",
+    "imf.org",
+    "worldbank.org",
+    "nasa.gov",
+    "nature.com",
+    "reuters.com",
+    "bbc.com",
+    "lemonde.fr",
+    "gov",
+    ".cd",
+    "un.org",
+    "edu",
+  ];
+  if (high.some((h) => domain.includes(h))) return 88 + Math.floor(Math.random() * 8);
+  if (domain.includes("blogspot") || domain.includes("medium.com")) return 55;
+  return 62 + Math.floor(Math.random() * 18);
+}
+
+function toResult(hit: RawHit, i: number, query: string): SearchResult {
+  const domain = domainOf(hit.url);
+  const congo =
+    isCongoHint(query) ||
+    domain.endsWith(".cd") ||
+    /\b(congo|rdc|kinshasa)\b/i.test(`${hit.title} ${hit.snippet}`);
+  const spammy = /\b(incroyable|secret|cliquez|crypto.?gratis|devenir riche)\b/i.test(
+    hit.title,
+  );
+  return {
+    id: `live-${i}-${domain}`,
+    title: hit.title,
+    url: hit.url,
+    domain,
+    snippet: hit.snippet || `Résultat pour « ${query} » — ${domain}`,
+    favicon: favicon(domain),
+    publishedAt: new Date().toISOString().slice(0, 10),
+    lang: /[àâçéèêëîïôùûü]/i.test(hit.title + hit.snippet) ? "fr" : "en",
+    sourceType: domain.includes("wikipedia")
+      ? "wiki"
+      : domain.includes("arxiv") || domain.includes("nature")
+        ? "academic"
+        : domain.includes("gov") || domain.endsWith(".cd")
+          ? "gov"
+          : "web",
+    suspectedAiSpam: spammy,
+    congoRelevant: congo,
+    region: congo ? "rdc" : domain.endsWith(".cd") ? "rdc" : "global",
+    keywords: query.toLowerCase().split(/\s+/),
+    trust: {
+      credibility: spammy ? 28 : credibilityFor(domain),
+      clickbaitRisk: spammy ? 90 : 12,
+      independentVerification: spammy ? 10 : 70,
+      humanAuthoredLikelihood: spammy ? 20 : 85,
+    },
+    conflict: { detected: false, category: "none" },
+  };
+}
+
+async function fetchWikipedia(query: string, lang: "fr" | "en"): Promise<RawHit[]> {
+  const controller = new AbortController();
+  const t = setTimeout(() => controller.abort(), 8000);
+  try {
+    const open = await fetch(
+      `https://${lang}.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(query)}&limit=8&namespace=0&format=json&origin=*`,
+      { signal: controller.signal, next: { revalidate: 0 } },
+    );
+    if (!open.ok) return [];
+    const data = (await open.json()) as [string, string[], string[], string[]];
+    const titles = data[1] ?? [];
+    const descs = data[2] ?? [];
+    const urls = data[3] ?? [];
+    return titles.map((title, i) => ({
+      title: `${title} — Wikipédia`,
+      url: urls[i],
+      snippet: descs[i] || `Article Wikipédia (${lang}) sur ${title}.`,
+      source: "wikipedia",
+    }));
+  } catch {
+    return [];
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+async function fetchWikiSummary(query: string): Promise<KnowledgePanel | undefined> {
+  for (const lang of ["fr", "en"] as const) {
+    try {
+      const res = await fetch(
+        `https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(query)}`,
+        { next: { revalidate: 0 } },
+      );
+      if (!res.ok) continue;
+      const data = (await res.json()) as {
+        title?: string;
+        extract?: string;
+        description?: string;
+        content_urls?: { desktop?: { page?: string } };
+        thumbnail?: { source?: string };
+      };
+      if (!data.extract) continue;
+      return {
+        title: data.title ?? query,
+        subtitle: data.description ?? `Wikipédia (${lang})`,
+        summary: data.extract,
+        facts: [
+          { label: "Source", value: `Wikipédia ${lang.toUpperCase()}` },
+          { label: "Type", value: "Encyclopédie" },
+          {
+            label: "Lien",
+            value: data.content_urls?.desktop?.page ?? `https://${lang}.wikipedia.org`,
+          },
+        ],
+        sources: [`${lang}.wikipedia.org`],
+        image: data.thumbnail?.source,
+      };
+    } catch {
+      /* try next */
+    }
+  }
+  return undefined;
+}
+
+async function fetchDuckDuckGo(query: string): Promise<RawHit[]> {
+  try {
+    const res = await fetch(
+      `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`,
+      { next: { revalidate: 0 } },
+    );
+    if (!res.ok) return [];
+    const data = (await res.json()) as {
+      AbstractText?: string;
+      AbstractURL?: string;
+      Heading?: string;
+      RelatedTopics?: Array<
+        | { Text?: string; FirstURL?: string }
+        | { Topics?: Array<{ Text?: string; FirstURL?: string }> }
+      >;
+      Results?: Array<{ Text?: string; FirstURL?: string }>;
+    };
+    const hits: RawHit[] = [];
+    if (data.AbstractText && data.AbstractURL) {
+      hits.push({
+        title: data.Heading || query,
+        url: data.AbstractURL,
+        snippet: data.AbstractText,
+        source: "duckduckgo",
+      });
+    }
+    const pushTopic = (t: { Text?: string; FirstURL?: string }) => {
+      if (!t.FirstURL || !t.Text) return;
+      hits.push({
+        title: t.Text.split(" - ")[0] || t.Text.slice(0, 80),
+        url: t.FirstURL,
+        snippet: t.Text,
+        source: "duckduckgo",
+      });
+    };
+    for (const item of data.RelatedTopics ?? []) {
+      if ("Topics" in item && item.Topics) item.Topics.forEach(pushTopic);
+      else pushTopic(item as { Text?: string; FirstURL?: string });
+    }
+    for (const r of data.Results ?? []) pushTopic(r);
+    return hits.slice(0, 12);
+  } catch {
+    return [];
+  }
+}
+
+async function fetchDuckDuckGoHtml(query: string): Promise<RawHit[]> {
+  try {
+    const res = await fetch("https://html.duckduckgo.com/html/", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "User-Agent": "AyebaSearch/1.0",
+      },
+      body: `q=${encodeURIComponent(query)}`,
+      next: { revalidate: 0 },
+    });
+    if (!res.ok) return [];
+    const html = await res.text();
+    const hits: RawHit[] = [];
+    const re =
+      /<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?<a[^>]*class="result__snippet"[^>]*>([\s\S]*?)<\/a>/gi;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(html)) && hits.length < 10) {
+      const url = decodeURIComponent(
+        m[1].includes("uddg=")
+          ? (m[1].match(/uddg=([^&]+)/)?.[1] ?? m[1])
+          : m[1],
+      );
+      const title = m[2].replace(/<[^>]+>/g, "").trim();
+      const snippet = m[3].replace(/<[^>]+>/g, "").trim();
+      if (url.startsWith("http") && title) {
+        hits.push({ title, url, snippet, source: "duckduckgo-html" });
+      }
+    }
+    // Fallback simpler pattern
+    if (hits.length === 0) {
+      const simple =
+        /class="result__a"[^>]*href="([^"]+)"[^>]*>([^<]+)</gi;
+      while ((m = simple.exec(html)) && hits.length < 8) {
+        let url = m[1];
+        if (url.includes("uddg=")) {
+          url = decodeURIComponent(url.match(/uddg=([^&]+)/)?.[1] ?? url);
+        }
+        hits.push({
+          title: m[2].trim(),
+          url,
+          snippet: `Résultat web pour « ${query} »`,
+          source: "duckduckgo-html",
+        });
+      }
+    }
+    return hits;
+  } catch {
+    return [];
+  }
+}
+
+async function fetchNewsRss(query: string): Promise<RawHit[]> {
+  try {
+    const res = await fetch(
+      `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=fr&gl=FR&ceid=FR:fr`,
+      {
+        headers: { "User-Agent": "AyebaSearch/1.0" },
+        next: { revalidate: 0 },
+      },
+    );
+    if (!res.ok) return [];
+    const xml = await res.text();
+    const items = [...xml.matchAll(/<item>([\s\S]*?)<\/item>/gi)].slice(0, 8);
+    return items.map((item) => {
+      const block = item[1];
+      const title = block.match(/<title><!\[CDATA\[(.*?)\]\]><\/title>/)?.[1]
+        ?? block.match(/<title>(.*?)<\/title>/)?.[1]
+        ?? "Article";
+      const link = block.match(/<link>(.*?)<\/link>/)?.[1] ?? "#";
+      const desc = (block.match(/<description><!\[CDATA\[(.*?)\]\]><\/description>/)?.[1]
+        ?? block.match(/<description>(.*?)<\/description>/)?.[1]
+        ?? "")
+        .replace(/<[^>]+>/g, "")
+        .slice(0, 220);
+      return { title, url: link, snippet: desc, source: "google-news" };
+    });
+  } catch {
+    return [];
+  }
+}
+
+function rankAndFilter(
+  results: SearchResult[],
+  query: string,
+  opts: FetchOpts,
+): SearchResult[] {
+  const q = query.toLowerCase();
+  const boostRdc = (100 - opts.sliders.locality) / 100;
+
+  return results
+    .filter((r) => {
+      if (opts.zeroAi && r.suspectedAiSpam) return false;
+      if ((opts.zeroAds || opts.privateMode) && r.isSponsored) return false;
+      return true;
+    })
+    .map((r) => {
+      let score = r.trust.credibility;
+      if (r.title.toLowerCase().includes(q)) score += 20;
+      if (r.congoRelevant) score += 18 * boostRdc + (isCongoHint(query) ? 25 : 0);
+      if (r.sourceType === "academic") score += opts.sliders.audience * 0.2;
+      if (r.sourceType === "wiki" || r.sourceType === "gov") score += opts.sliders.authority * 0.15;
+      score -= r.trust.clickbaitRisk * 0.2;
+      return { ...r, rankScore: Math.round(score) };
+    })
+    .sort((a, b) => (b.rankScore ?? 0) - (a.rankScore ?? 0));
+}
+
+function relatedFrom(query: string): string[] {
+  const base = query.trim();
+  return [
+    `${base} contexte`,
+    `${base} chronologie`,
+    `${base} sources officielles`,
+    `${base} Afrique`,
+    `${base} analyses`,
+    `${base} données`,
+  ];
+}
+
+function buildSynthesis(
+  query: string,
+  knowledge: KnowledgePanel | undefined,
+  results: SearchResult[],
+  news: SearchResult[],
+): string {
+  if (knowledge?.summary) {
+    const text = knowledge.summary.replace(/\s+/g, " ").trim();
+    const cut = text.length > 420 ? `${text.slice(0, 417).replace(/\s+\S*$/, "")}…` : text;
+    return cut;
+  }
+
+  const pieces = results
+    .slice(0, 3)
+    .map((r) => r.snippet.replace(/\s+/g, " ").trim())
+    .filter((s) => s.length > 40);
+
+  if (pieces.length >= 2) {
+    return `${pieces[0]} ${pieces[1]}`;
+  }
+  if (pieces[0]) return pieces[0];
+  if (news[0]?.snippet) return news[0].snippet.replace(/\s+/g, " ").trim();
+  return `Peu de contenu fiable trouvé pour « ${query} ». Reformulez ou élargissez la requête.`;
+}
+
+function buildQuestions(
+  query: string,
+  knowledge: KnowledgePanel | undefined,
+  results: SearchResult[],
+  news: SearchResult[],
+  congo: boolean,
+): { q: string; a: string }[] {
+  const out: { q: string; a: string }[] = [];
+
+  if (knowledge?.summary) {
+    out.push({
+      q: `Que sait-on de ${knowledge.title} ?`,
+      a: knowledge.summary.slice(0, 320),
+    });
+  } else if (results[0]) {
+    out.push({
+      q: `Que disent les sources principales ?`,
+      a: results[0].snippet,
+    });
+  }
+
+  if (news[0]) {
+    out.push({
+      q: `Quels faits récents ressortent ?`,
+      a: `${news[0].title}. ${news[0].snippet}`.slice(0, 320),
+    });
+  } else if (results[1]) {
+    out.push({
+      q: `Y a-t-il un complément utile ?`,
+      a: results[1].snippet,
+    });
+  }
+
+  if (congo) {
+    out.push({
+      q: `Quel est le lien avec la RDC ou l'Afrique centrale ?`,
+      a: results.find((r) => r.congoRelevant)?.snippet
+        ?? "Les sources régionales et .cd sont relevées quand elles existent ; le web mondial reste visible.",
+    });
+  }
+
+  return out.slice(0, 3);
+}
+
+async function fetchOpenverseImages(query: string): Promise<MediaResult[]> {
+  try {
+    const res = await fetch(
+      `https://api.openverse.org/v1/images/?q=${encodeURIComponent(query)}&page_size=12`,
+      {
+        headers: { "User-Agent": "AyebaSearch/1.0" },
+        next: { revalidate: 0 },
+      },
+    );
+    if (!res.ok) return [];
+    const data = (await res.json()) as {
+      results?: Array<{ id: string; title?: string; url?: string; thumbnail?: string; foreign_landing_url?: string }>;
+    };
+    return (data.results ?? []).map((img, i) => ({
+      id: img.id || `ov-${i}`,
+      title: img.title || query,
+      url: img.foreign_landing_url || img.url || "#",
+      thumb: img.thumbnail || img.url || "",
+      source: "Openverse",
+      type: "image" as const,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+async function fetchNominatim(query: string): Promise<MapPlace[]> {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=8&addressdetails=1`,
+      {
+        headers: { "User-Agent": "AyebaSearch/1.0 (congolaise search engine)" },
+        next: { revalidate: 0 },
+      },
+    );
+    if (!res.ok) return [];
+    const data = (await res.json()) as Array<{
+      place_id: number;
+      display_name: string;
+      lat: string;
+      lon: string;
+      type?: string;
+      class?: string;
+    }>;
+    return data.map((p) => ({
+      id: String(p.place_id),
+      name: p.display_name.split(",")[0] || p.display_name,
+      category: p.type || p.class || "lieu",
+      lat: Number(p.lat),
+      lon: Number(p.lon),
+      address: p.display_name,
+      url: `https://www.openstreetmap.org/?mlat=${p.lat}&mlon=${p.lon}#map=14/${p.lat}/${p.lon}`,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+function buildShopping(query: string): ShopItem[] {
+  const q = encodeURIComponent(query);
+  const thumb = (domain: string) =>
+    `https://www.google.com/s2/favicons?domain=${domain}&sz=128`;
+  return [
+    {
+      id: "shop-1",
+      title: `${query} — Jumia RDC`,
+      price: "comparer",
+      currency: "CDF",
+      store: "Jumia",
+      url: `https://www.jumia.cd/catalog/?q=${q}`,
+      thumb: thumb("jumia.cd"),
+      rating: 4.2,
+    },
+    {
+      id: "shop-2",
+      title: `${query} — Amazon`,
+      price: "comparer",
+      currency: "USD",
+      store: "Amazon",
+      url: `https://www.amazon.com/s?k=${q}`,
+      thumb: thumb("amazon.com"),
+      rating: 4.4,
+    },
+    {
+      id: "shop-3",
+      title: `${query} — Alibaba B2B`,
+      price: "devis",
+      currency: "USD",
+      store: "Alibaba",
+      url: `https://www.alibaba.com/trade/search?SearchText=${q}`,
+      thumb: thumb("alibaba.com"),
+      rating: 4.0,
+    },
+    {
+      id: "shop-4",
+      title: `${query} — eBay`,
+      price: "encheres",
+      currency: "USD",
+      store: "eBay",
+      url: `https://www.ebay.com/sch/i.html?_nkw=${q}`,
+      thumb: thumb("ebay.com"),
+      rating: 4.1,
+    },
+    {
+      id: "shop-5",
+      title: `${query} — marchés Kinshasa`,
+      price: "négociable",
+      currency: "CDF",
+      store: "Ayeba Local",
+      url: `https://www.openstreetmap.org/search?query=${encodeURIComponent(query + " marché Kinshasa")}`,
+      thumb: thumb("openstreetmap.org"),
+      rating: 3.9,
+    },
+    {
+      id: "shop-6",
+      title: `${query} — Google Shopping`,
+      price: "multi",
+      currency: "USD",
+      store: "Shopping",
+      url: `https://www.google.com/search?tbm=shop&q=${q}`,
+      thumb: thumb("google.com"),
+      rating: 4.3,
+    },
+  ];
+}
+
+export async function liveSearch(query: string, opts: FetchOpts): Promise<SearchResponse> {
+  const rawQuery = query.trim() || "actualité mondiale";
+  const corrected = didYouMean(rawQuery);
+  const q = corrected && corrected !== rawQuery.toLowerCase() ? corrected : rawQuery;
+
+  const [wikiFr, wikiEn, ddg, ddgHtml, news, knowledge, openImages, maps] = await Promise.all([
+    fetchWikipedia(q, "fr"),
+    fetchWikipedia(q, "en"),
+    fetchDuckDuckGo(q),
+    fetchDuckDuckGoHtml(q),
+    fetchNewsRss(q),
+    fetchWikiSummary(q),
+    fetchOpenverseImages(q),
+    fetchNominatim(`${q} République démocratique du Congo`),
+  ]);
+
+  const localDocs = [
+    ...searchLocalIndex(q),
+    ...(await searchCrawlIndex(q)).map((c) => ({
+      id: c.id,
+      title: c.title,
+      url: c.url,
+      snippet: c.snippet,
+      domain: c.domain,
+      keywords: c.keywords,
+      congoRelevant: c.localRelevant,
+      sourceType: c.sourceType,
+      credibility: c.credibility,
+    })),
+  ];
+  const localAsRaw = localDocs.map((d) => ({
+    title: d.title,
+    url: d.url,
+    snippet: d.snippet,
+    source: "ayeba-index",
+  }));
+
+  const raw = [...localAsRaw, ...ddgHtml, ...ddg, ...wikiFr, ...wikiEn, ...news];
+  const seen = new Set<string>();
+  const unique = raw.filter((h) => {
+    const key = h.url.split("#")[0];
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  let results = rankAndFilter(
+    unique.map((h, i) => {
+      const base = toResult(h, i, q);
+      const local = localDocs.find((d) => d.url === h.url);
+      if (local) {
+        return {
+          ...base,
+          trust: {
+            ...base.trust,
+            credibility: local.credibility,
+            humanAuthoredLikelihood: 96,
+          },
+          sourceType: local.sourceType,
+          congoRelevant: local.congoRelevant,
+          sitelinks: "sitelinks" in local ? local.sitelinks : undefined,
+          rankScore: (base.rankScore ?? 0) + 40,
+        };
+      }
+      return base;
+    }),
+    q,
+    opts,
+  ).sort((a, b) => (b.rankScore ?? 0) - (a.rankScore ?? 0));
+
+  if (results.length < 3) {
+    results = rankAndFilter(
+      [
+        ...results,
+        toResult(
+          {
+            title: `${q} — Recherche ouverte`,
+            url: `https://duckduckgo.com/?q=${encodeURIComponent(q)}`,
+            snippet: `Explorer davantage de résultats web pour « ${q} ».`,
+            source: "fallback",
+          },
+          999,
+          q,
+        ),
+      ],
+      q,
+      opts,
+    );
+  }
+
+  // Sitelinks synthétiques pour domaines majeurs
+  results = results.map((r) => {
+    if (r.sitelinks?.length) return r;
+    if (r.sourceType === "wiki" || r.domain.includes("wikipedia")) {
+      return {
+        ...r,
+        sitelinks: [
+          { title: "Sommaire", url: r.url },
+          { title: "Discussion", url: r.url.replace("/wiki/", "/wiki/Talk:") },
+          { title: "Historique", url: `${r.url}?action=history` },
+        ],
+      };
+    }
+    if (r.domain.includes("bcc.cd") || r.domain.endsWith(".cd") || r.sourceType === "gov") {
+      return {
+        ...r,
+        sitelinks: [
+          { title: "Accueil", url: `https://${r.domain}/` },
+          { title: "Contact", url: `https://${r.domain}/` },
+        ],
+      };
+    }
+    return r;
+  });
+
+  const newsResults = rankAndFilter(
+    news.map((h, i) => toResult(h, 1000 + i, q)).map((r) => ({ ...r, sourceType: "news" as const })),
+    q,
+    opts,
+  );
+
+  const images: MediaResult[] =
+    openImages.length > 0
+      ? openImages
+      : results.slice(0, 9).map((r, i) => ({
+          id: `img-${i}`,
+          title: r.title,
+          url: r.url,
+          thumb: r.favicon || "",
+          source: r.domain,
+          type: "image" as const,
+        }));
+
+  const videos: MediaResult[] = [
+    {
+      id: "yt-1",
+      title: `${q} — vidéos YouTube`,
+      url: `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`,
+      thumb: "https://www.google.com/s2/favicons?domain=youtube.com&sz=64",
+      source: "YouTube",
+      type: "video",
+      duration: "SERP",
+    },
+    {
+      id: "yt-2",
+      title: `${q} — actualité vidéo`,
+      url: `https://news.google.com/search?q=${encodeURIComponent(q)}&hl=fr`,
+      thumb: "https://www.google.com/s2/favicons?domain=news.google.com&sz=64",
+      source: "Google News",
+      type: "video",
+    },
+  ];
+
+  const shopping = buildShopping(q);
+
+  const featuredSnippet: FeaturedSnippet | undefined = knowledge
+    ? {
+        title: knowledge.title,
+        text: knowledge.summary.slice(0, 360),
+        url: knowledge.facts.find((f) => f.label === "Lien")?.value || results[0]?.url || "#",
+        domain: knowledge.sources[0] || "wikipedia.org",
+      }
+    : results[0]
+      ? {
+          title: results[0].title,
+          text: results[0].snippet,
+          url: results[0].url,
+          domain: results[0].domain,
+        }
+      : undefined;
+
+  const aiSummary = buildSynthesis(q, knowledge, results, newsResults);
+  const peopleAlsoAsk = buildQuestions(
+    q,
+    knowledge,
+    results,
+    newsResults,
+    isCongoHint(q),
+  );
+
+  const isSensitiveTopic =
+    /\b(élection|election|politique|président|parti|opposition)\b/i.test(q);
+
+  return {
+    query: rawQuery,
+    correctedQuery:
+      corrected && corrected.toLowerCase() !== rawQuery.toLowerCase() ? corrected : undefined,
+    approxResults: Math.max(unique.length * 185_000, results.length * 12_000),
+    results,
+    images,
+    videos,
+    news: newsResults.length ? newsResults : results.filter((r) => r.sourceType === "news"),
+    maps,
+    shopping,
+    community: [
+      {
+        id: "cm-reddit",
+        platform: "reddit",
+        title: `Fils Reddit autour de « ${q} »`,
+        excerpt:
+          "Discussions publiques : retours d'expérience, débats et sources partagées par la communauté.",
+        author: "reddit",
+        url: `https://www.reddit.com/search/?q=${encodeURIComponent(q)}`,
+        trustScore: 70,
+        engagement: 0,
+        postedAt: new Date().toISOString().slice(0, 10),
+      },
+      {
+        id: "cm-yt",
+        platform: "youtube",
+        title: `Vidéos et témoignages — ${q}`,
+        excerpt:
+          "Reportages, conférences et interventions publiques indexés sur YouTube.",
+        author: "youtube",
+        url: `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`,
+        trustScore: 72,
+        engagement: 0,
+        postedAt: new Date().toISOString().slice(0, 10),
+      },
+      {
+        id: "cm-x",
+        platform: "x",
+        title: `Conversation publique — ${q}`,
+        excerpt:
+          "Posts récents sur X : signaux faibles, réactions et annonces en temps réel.",
+        author: "x",
+        url: `https://x.com/search?q=${encodeURIComponent(q)}`,
+        trustScore: 60,
+        engagement: 0,
+        postedAt: new Date().toISOString().slice(0, 10),
+      },
+    ],
+    related: relatedFrom(q),
+    peopleAlsoAsk,
+    knowledge,
+    featuredSnippet,
+    aiSummary,
+    isSensitiveTopic,
+    opposingViews: isSensitiveTopic
+      ? [
+          {
+            title: `Point de vue A — ${q}`,
+            url: `https://duckduckgo.com/?q=${encodeURIComponent(q + " pour")}`,
+            stance: "Position A",
+            snippet: "Articles et tribunes favorables — à croiser.",
+          },
+          {
+            title: `Point de vue B — ${q}`,
+            url: `https://duckduckgo.com/?q=${encodeURIComponent(q + " contre")}`,
+            stance: "Position B",
+            snippet: "Articles et analyses critiques — pour sortir de la bulle.",
+          },
+        ]
+      : undefined,
+    canvas: [
+      {
+        id: "t1",
+        title: `Comparatif — ${q}`,
+        headers: ["Source", "Domaine", "Crédibilité", "Boost RDC"],
+        rows: results.slice(0, 6).map((r) => [
+          r.title.slice(0, 42),
+          r.domain,
+          String(r.trust.credibility),
+          r.congoRelevant ? "Oui" : "Non",
+        ]),
+      },
+    ],
+    code: /\b(calcul|math|fibonacci|code|javascript)\b/i.test(q)
+      ? {
+          language: "javascript",
+          code: `function fibonacci(n){\n  const o=[]; let a=0,b=1;\n  for(let i=0;i<n;i++){ o.push(a); [a,b]=[b,a+b]; }\n  return o;\n}\nconsole.log(fibonacci(12).join(", "));`,
+          output: "0, 1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89",
+          verified: true,
+        }
+      : undefined,
+    podcast: [
+      {
+        speaker: "A",
+        text: aiSummary.slice(0, 220) || `Recherche sur « ${q} ».`,
+      },
+      {
+        speaker: "B",
+        text: results[0]
+          ? `Pour approfondir, commencez par ${results[0].domain} — puis croisez avec les autres sources listées.`
+          : `Peu de sources solides pour l'instant. Reformulez la requête.`,
+      },
+    ],
+  };
+}

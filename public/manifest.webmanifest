@@ -1,0 +1,24 @@
+{
+  "name": "Ayeba",
+  "short_name": "Ayeba",
+  "description": "Moteur de recherche mondial · priorité RDC",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#050507",
+  "theme_color": "#ff3b4a",
+  "lang": "fr",
+  "icons": [
+    {
+      "src": "/brand/ayeba-mark.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/brand/ayeba-mark.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}
