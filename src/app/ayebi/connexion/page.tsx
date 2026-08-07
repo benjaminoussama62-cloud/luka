@@ -6,9 +6,11 @@ export const metadata = {
   description: "Créez un compte pour rédiger l'encyclopédie congolaise Ayebi.",
 };
 
+export const dynamic = "force-dynamic";
+
 export default function AyebiConnexionRoute() {
   return (
-    <Suspense>
+    <Suspense fallback={null}>
       <AyebiConnexionPage />
     </Suspense>
   );

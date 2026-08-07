@@ -44,7 +44,8 @@ export function getDbMode(): "turso" | "vercel-tmp" | "memory" | "local" {
 function createMemoryDb(): AyebaDatabase {
   const emptyStmt = {
     run: () => ({ changes: 0, lastInsertRowid: 0 }),
-    get: () => undefined,
+    // Return count zeros so `.c` / `.n` access during build never throws.
+    get: () => ({ c: 0, n: 0, id: undefined, samples: 0, role: "contributor" }),
     all: () => [],
   };
   return {

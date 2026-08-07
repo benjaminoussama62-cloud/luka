@@ -2,21 +2,29 @@ import { LoginModal } from "@/components/auth/AuthUI";
 import { AyebiWikiBar } from "@/components/ayebi/AyebiWikiBar";
 import { ayebiStats, bulkImportRdc } from "@/lib/ayebi/bulk-import";
 import { importSeedIfEmpty } from "@/lib/ayebi/db-sqlite";
-import { getDb } from "@/lib/storage/database";
+import { getDb, getDbMode } from "@/lib/storage/database";
 
 function maybeStartBulkImport() {
-  importSeedIfEmpty();
-  const stats = ayebiStats();
-  if (stats.total >= 400) return;
+  // Never run side-effects during `next build` static generation.
+  if (process.env.NEXT_PHASE === "phase-production-build") return;
+  if (getDbMode() === "memory") return;
 
-  const ran = getDb()
-    .prepare(
-      `SELECT id FROM job_runs WHERE job_type = 'ayebi_bulk_import' AND started_at > datetime('now', '-6 hours') LIMIT 1`,
-    )
-    .get();
-  if (ran) return;
+  try {
+    importSeedIfEmpty();
+    const stats = ayebiStats();
+    if (stats.total >= 400) return;
 
-  void bulkImportRdc({ maxPerCategory: 120, delayMs: 60 }).catch(() => {});
+    const ran = getDb()
+      .prepare(
+        `SELECT id FROM job_runs WHERE job_type = 'ayebi_bulk_import' AND started_at > datetime('now', '-6 hours') LIMIT 1`,
+      )
+      .get();
+    if (ran) return;
+
+    void bulkImportRdc({ maxPerCategory: 120, delayMs: 60 }).catch(() => {});
+  } catch {
+    /* DB optional on serverless */
+  }
 }
 
 export default function AyebiLayout({ children }: { children: React.ReactNode }) {

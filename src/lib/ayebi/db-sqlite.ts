@@ -1,5 +1,5 @@
 import type { AyebiArticle, AyebiCategory, AyebiSection } from "./types";
-import { getDb } from "../storage/database";
+import { getDb, getDbMode } from "../storage/database";
 import { AYEBI_ARTICLES } from "./index";
 
 export type AyebiRole = "reader" | "contributor" | "moderator" | "admin";
@@ -69,8 +69,9 @@ function indexAyebiFts(a: AyebiArticle) {
 
 export function importSeedIfEmpty() {
   const db = getDb();
-  const c = db.prepare("SELECT COUNT(*) as n FROM ayebi_articles").get() as { n: number };
-  if (c.n > 0) return;
+  const c = db.prepare("SELECT COUNT(*) as n FROM ayebi_articles").get() as { n?: number } | undefined;
+  if ((c?.n ?? 0) > 0) return;
+  if (getDbMode() === "memory") return;
 
   for (const a of AYEBI_ARTICLES) {
     const now = new Date().toISOString();
