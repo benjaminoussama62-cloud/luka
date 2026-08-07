@@ -1,5 +1,16 @@
 import { didYouMean, searchLocalIndex } from "./ayeba-index";
+import { searchAyebiLive, searchAyebiArticlesLive } from "./ayebi/server";
 import { searchCrawlIndex } from "./crawler";
+import { runCrawlBatch } from "./crawler/global-crawler";
+import { panelFromQuery } from "./knowledge-graph/graph";
+import { resolveInstantAnswers } from "./instant-answers";
+import { cacheGet, cacheSet } from "./cache/redis";
+import { indexStats, searchIndex, clickBoost } from "./search-index/fts";
+import { rankHits } from "./search-index/ranking";
+import { searchImagesNative } from "./verticals/images";
+import { searchVideosNative } from "./verticals/videos";
+import { searchMapsNative } from "./verticals/maps";
+import { buildNativeShopping } from "./verticals/shopping";
 import type {
   AlgorithmSliders,
   FeaturedSnippet,
@@ -37,10 +48,37 @@ function favicon(domain: string) {
   return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64`;
 }
 
+function queryTokens(query: string) {
+  return query
+    .toLowerCase()
+    .split(/[\s\-_/]+/)
+    .filter((t) => t.length >= 2);
+}
+
 function isCongoHint(q: string) {
   return /\b(rdc|congo|kinshasa|lubumbashi|katanga|goma|lingala|cobalt|coltan|bcc|unikin)\b/i.test(
     q,
   );
+}
+
+function relevanceScore(text: string, query: string): number {
+  const hay = text.toLowerCase();
+  const tokens = queryTokens(query);
+  if (!tokens.length) return 0;
+  let score = 0;
+  for (const t of tokens) {
+    if (hay.includes(t)) score += 12;
+  }
+  if (hay.includes(query.toLowerCase())) score += 25;
+  return score;
+}
+
+function isRelevantToQuery(hit: RawHit, query: string): boolean {
+  return relevanceScore(`${hit.title} ${hit.snippet} ${hit.url}`, query) > 0;
+}
+
+function isRelevantResult(r: SearchResult, query: string): boolean {
+  return relevanceScore(`${r.title} ${r.snippet} ${r.domain} ${r.url}`, query) > 0;
 }
 
 function credibilityFor(domain: string): number {
@@ -311,8 +349,10 @@ function rankAndFilter(
     })
     .map((r) => {
       let score = r.trust.credibility;
+      const rel = relevanceScore(`${r.title} ${r.snippet}`, query);
+      score += rel;
       if (r.title.toLowerCase().includes(q)) score += 20;
-      if (r.congoRelevant) score += 18 * boostRdc + (isCongoHint(query) ? 25 : 0);
+      if (r.congoRelevant && isCongoHint(query)) score += 22 * boostRdc;
       if (r.sourceType === "academic") score += opts.sliders.audience * 0.2;
       if (r.sourceType === "wiki" || r.sourceType === "gov") score += opts.sliders.authority * 0.15;
       score -= r.trust.clickbaitRisk * 0.2;
@@ -321,16 +361,39 @@ function rankAndFilter(
     .sort((a, b) => (b.rankScore ?? 0) - (a.rankScore ?? 0));
 }
 
-function relatedFrom(query: string): string[] {
+function relatedFrom(query: string, results: SearchResult[]): string[] {
   const base = query.trim();
-  return [
-    `${base} contexte`,
-    `${base} chronologie`,
-    `${base} sources officielles`,
-    `${base} Afrique`,
-    `${base} analyses`,
-    `${base} données`,
-  ];
+  if (!base) return [];
+  const out = new Set<string>();
+  out.add(`${base} actualité`);
+  out.add(`${base} 2026`);
+  if (results[0]?.domain) out.add(`site:${results[0].domain} ${base}`);
+  if (results[0]?.title) {
+    const words = results[0].title.split(/\s+/).slice(0, 3).join(" ");
+    if (words.length > 3) out.add(words);
+  }
+  out.add(`${base} définition`);
+  out.add(`${base} images`);
+  return [...out].slice(0, 6);
+}
+
+function tryMathSnippet(query: string): FeaturedSnippet | undefined {
+  const q = query.trim().replace(/,/g, ".");
+  if (!/^[\d\s+\-*/().^%]+$/.test(q) || q.length > 40) return undefined;
+  try {
+    const expr = q.replace(/\^/g, "**");
+    // eslint-disable-next-line no-new-func
+    const val = Function(`"use strict"; return (${expr})`)();
+    if (typeof val !== "number" || !Number.isFinite(val)) return undefined;
+    return {
+      title: q,
+      text: String(val),
+      url: "#calc",
+      domain: "ayeba",
+    };
+  } catch {
+    return undefined;
+  }
 }
 
 function buildSynthesis(
@@ -528,23 +591,90 @@ function buildShopping(query: string): ShopItem[] {
   ];
 }
 
+async function settled<T>(p: Promise<T>, fallback: T, ms = 12000): Promise<T> {
+  try {
+    return await Promise.race([
+      p,
+      new Promise<T>((_, reject) => setTimeout(() => reject(new Error("timeout")), ms)),
+    ]);
+  } catch {
+    return fallback;
+  }
+}
+
 export async function liveSearch(query: string, opts: FetchOpts): Promise<SearchResponse> {
   const rawQuery = query.trim() || "actualité mondiale";
-  const corrected = didYouMean(rawQuery);
-  const q = corrected && corrected !== rawQuery.toLowerCase() ? corrected : rawQuery;
+  const suggested = didYouMean(rawQuery);
+  const q = rawQuery;
 
-  const [wikiFr, wikiEn, ddg, ddgHtml, news, knowledge, openImages, maps] = await Promise.all([
-    fetchWikipedia(q, "fr"),
-    fetchWikipedia(q, "en"),
-    fetchDuckDuckGo(q),
-    fetchDuckDuckGoHtml(q),
-    fetchNewsRss(q),
-    fetchWikiSummary(q),
-    fetchOpenverseImages(q),
-    fetchNominatim(`${q} République démocratique du Congo`),
+  const [
+    wikiFr,
+    wikiEn,
+    ddg,
+    ddgHtml,
+    news,
+    knowledge,
+    nativeImages,
+    nativeVideos,
+    nativeMaps,
+    instantAnswers,
+  ] = await Promise.all([
+    settled(fetchWikipedia(q, "fr"), []),
+    settled(fetchWikipedia(q, "en"), []),
+    settled(fetchDuckDuckGo(q), []),
+    settled(fetchDuckDuckGoHtml(q), []),
+    settled(fetchNewsRss(q), []),
+    settled(fetchWikiSummary(q), undefined),
+    settled(searchImagesNative(q), []),
+    settled(searchVideosNative(q), []),
+    settled(searchMapsNative(isCongoHint(q) ? `${q} République démocratique du Congo` : q), []),
+    settled(resolveInstantAnswers(q), []),
   ]);
 
+  const ayebiPanel = await searchAyebiLive(q);
+  const ayebiHits = await searchAyebiArticlesLive(q, 5);
+
+  const idxStats = indexStats();
+  if (idxStats.documents < 5000 || idxStats.queuePending < 10000) {
+    runCrawlBatch(120).catch(() => {});
+  }
+
+  const cacheKey = `serp:${q}:${opts.sliders.locality}:${opts.sliders.authority}`;
+  let rankedFts = await cacheGet<Awaited<ReturnType<typeof rankHits>>>(cacheKey);
+  if (!rankedFts?.length) {
+    rankedFts = rankHits(searchIndex(q, 50), q, {
+      localityBoost: opts.sliders.locality,
+      authorityBoost: opts.sliders.authority,
+    });
+    await cacheSet(cacheKey, rankedFts, 180);
+  }
+
+  const ftsDocs = rankedFts.map((h) => ({
+    id: h.docId,
+    title: h.title,
+    url: h.url,
+    snippet: h.snippet,
+    domain: h.domain,
+    keywords: [] as string[],
+    congoRelevant: h.localRelevant,
+    sourceType: (h.sourceType as "web" | "gov" | "news" | "wiki" | "academic") ?? "web",
+    credibility: Math.round(h.credibility * 100),
+    rankScore: h.score,
+  }));
+
   const localDocs = [
+    ...ayebiHits.map((a) => ({
+      id: `ayebi-${a.slug}`,
+      title: `${a.title} — Ayebi`,
+      url: `/ayebi/${a.slug}`,
+      snippet: a.summary,
+      domain: "ayebi",
+      keywords: a.tags,
+      congoRelevant: true,
+      sourceType: "wiki" as const,
+      credibility: 98,
+    })),
+    ...ftsDocs,
     ...searchLocalIndex(q),
     ...(await searchCrawlIndex(q)).map((c) => ({
       id: c.id,
@@ -565,12 +695,13 @@ export async function liveSearch(query: string, opts: FetchOpts): Promise<Search
     source: "ayeba-index",
   }));
 
-  const raw = [...localAsRaw, ...ddgHtml, ...ddg, ...wikiFr, ...wikiEn, ...news];
+  const raw = [...ddgHtml, ...ddg, ...wikiFr, ...wikiEn, ...news, ...localAsRaw];
   const seen = new Set<string>();
   const unique = raw.filter((h) => {
     const key = h.url.split("#")[0];
     if (!key || seen.has(key)) return false;
     seen.add(key);
+    if (h.source === "ayeba-index" && !isRelevantToQuery(h, q)) return false;
     return true;
   });
 
@@ -589,14 +720,16 @@ export async function liveSearch(query: string, opts: FetchOpts): Promise<Search
           sourceType: local.sourceType,
           congoRelevant: local.congoRelevant,
           sitelinks: "sitelinks" in local ? local.sitelinks : undefined,
-          rankScore: (base.rankScore ?? 0) + 40,
+          rankScore: (base.rankScore ?? 0) + 15 + ("rankScore" in local ? Number(local.rankScore ?? 0) : 0),
         };
       }
       return base;
     }),
     q,
     opts,
-  ).sort((a, b) => (b.rankScore ?? 0) - (a.rankScore ?? 0));
+  )
+    .filter((r) => isRelevantResult(r, q) || r.sourceType === "news")
+    .sort((a, b) => (b.rankScore ?? 0) - (a.rankScore ?? 0));
 
   if (results.length < 3) {
     results = rankAndFilter(
@@ -649,60 +782,83 @@ export async function liveSearch(query: string, opts: FetchOpts): Promise<Search
     opts,
   );
 
-  const images: MediaResult[] =
-    openImages.length > 0
-      ? openImages
-      : results.slice(0, 9).map((r, i) => ({
-          id: `img-${i}`,
-          title: r.title,
-          url: r.url,
-          thumb: r.favicon || "",
-          source: r.domain,
-          type: "image" as const,
-        }));
+  const images: MediaResult[] = nativeImages.length
+    ? nativeImages
+    : results.slice(0, 9).map((r, i) => ({
+        id: `img-${i}`,
+        title: r.title,
+        url: r.url,
+        thumb: r.favicon || "",
+        source: r.domain,
+        type: "image" as const,
+      }));
 
-  const videos: MediaResult[] = [
-    {
-      id: "yt-1",
-      title: `${q} — vidéos YouTube`,
-      url: `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`,
-      thumb: "https://www.google.com/s2/favicons?domain=youtube.com&sz=64",
-      source: "YouTube",
-      type: "video",
-      duration: "SERP",
-    },
-    {
-      id: "yt-2",
-      title: `${q} — actualité vidéo`,
-      url: `https://news.google.com/search?q=${encodeURIComponent(q)}&hl=fr`,
-      thumb: "https://www.google.com/s2/favicons?domain=news.google.com&sz=64",
-      source: "Google News",
-      type: "video",
-    },
-  ];
+  const videos: MediaResult[] = nativeVideos.length
+    ? nativeVideos
+    : [
+        {
+          id: "yt-fallback",
+          title: `${q} — vidéos`,
+          url: `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`,
+          thumb: "https://www.google.com/s2/favicons?domain=youtube.com&sz=128",
+          source: "YouTube",
+          type: "video",
+        },
+      ];
 
-  const shopping = buildShopping(q);
+  const maps = nativeMaps;
+  const shopping = buildNativeShopping(q);
 
-  const featuredSnippet: FeaturedSnippet | undefined = knowledge
-    ? {
-        title: knowledge.title,
-        text: knowledge.summary.slice(0, 360),
-        url: knowledge.facts.find((f) => f.label === "Lien")?.value || results[0]?.url || "#",
-        domain: knowledge.sources[0] || "wikipedia.org",
+  const panel =
+    ayebiPanel ??
+    (() => {
+      const kg = panelFromQuery(q);
+      if (kg) {
+        return {
+          title: kg.entity.label,
+          subtitle: kg.entity.kind,
+          summary: kg.entity.summary,
+          facts: [
+            ...(kg.entity.ayebiSlug
+              ? [{ label: "Ayebi", value: `/ayebi/${kg.entity.ayebiSlug}` }]
+              : []),
+            ...kg.related.slice(0, 4).map((r) => ({
+              label: r.relation === "in_category" ? "Catégorie" : "Lié",
+              value: r.ayebiSlug ? `/ayebi/${r.ayebiSlug}` : r.label,
+            })),
+          ],
+          sources: ["ayebi-graph"],
+          image: undefined,
+        } satisfies KnowledgePanel;
       }
-    : results[0]
-      ? {
-          title: results[0].title,
-          text: results[0].snippet,
-          url: results[0].url,
-          domain: results[0].domain,
-        }
-      : undefined;
+      return undefined;
+    })() ??
+    (knowledge && relevanceScore(`${knowledge.title} ${knowledge.summary}`, q) > 0
+      ? knowledge
+      : undefined);
 
-  const aiSummary = buildSynthesis(q, knowledge, results, newsResults);
+  const featuredSnippet: FeaturedSnippet | undefined =
+    tryMathSnippet(q) ??
+    (panel
+      ? {
+          title: panel.title,
+          text: panel.summary.slice(0, 360),
+          url: panel.facts.find((f) => f.label === "Lien")?.value || results[0]?.url || "#",
+          domain: panel.sources[0] || "wikipedia.org",
+        }
+      : results[0] && isRelevantResult(results[0], q)
+        ? {
+            title: results[0].title,
+            text: results[0].snippet,
+            url: results[0].url,
+            domain: results[0].domain,
+          }
+        : undefined);
+
+  const aiSummary = buildSynthesis(q, panel, results, newsResults);
   const peopleAlsoAsk = buildQuestions(
     q,
-    knowledge,
+    panel,
     results,
     newsResults,
     isCongoHint(q),
@@ -714,8 +870,12 @@ export async function liveSearch(query: string, opts: FetchOpts): Promise<Search
   return {
     query: rawQuery,
     correctedQuery:
-      corrected && corrected.toLowerCase() !== rawQuery.toLowerCase() ? corrected : undefined,
-    approxResults: Math.max(unique.length * 185_000, results.length * 12_000),
+      suggested && suggested.toLowerCase() !== rawQuery.toLowerCase() ? suggested : undefined,
+    approxResults: Math.max(
+      idxStats.projectedBillionsScale,
+      unique.length * 285_000,
+      results.length * 18_000,
+    ),
     results,
     images,
     videos,
@@ -760,10 +920,12 @@ export async function liveSearch(query: string, opts: FetchOpts): Promise<Search
         postedAt: new Date().toISOString().slice(0, 10),
       },
     ],
-    related: relatedFrom(q),
+    related: relatedFrom(q, results),
     peopleAlsoAsk,
-    knowledge,
+    knowledge: panel,
     featuredSnippet,
+    instantAnswer: instantAnswers[0],
+    instantAnswers: instantAnswers.length ? instantAnswers : undefined,
     aiSummary,
     isSensitiveTopic,
     opposingViews: isSensitiveTopic

@@ -26,8 +26,7 @@ const DICT: Record<LangCode, Record<string, string>> = {
     didYouMean: "Essayez avec :",
     results: "résultats live",
     continue: "Continuer",
-    tagline:
-      "Ayeba agrège le web entier et fait remonter les voix locales — institutions, presse, savoir — sans étouffer le reste du monde.",
+    tagline: "Recherche mondiale. Résultats live. Priorité locale silencieuse.",
   },
   ln: {
     signIn: "Kota",

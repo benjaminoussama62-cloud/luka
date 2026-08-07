@@ -1,9 +1,11 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import { PwaRegister } from "@/components/PwaRegister";
+import { SearchFromUrlGate } from "@/components/search/SearchFromUrlGate";
 import { AuthProvider } from "@/lib/auth";
 import { I18nProvider } from "@/lib/i18n";
 import { AyebaProvider } from "@/lib/store";
+import { MarketProvider } from "@/lib/market-context";
 import "./globals.css";
 
 const brand = Inter({
@@ -36,6 +38,9 @@ export const metadata: Metadata = {
   applicationName: "Ayeba",
   manifest: "/manifest.webmanifest",
   icons: { icon: "/brand/ayeba-mark.svg", apple: "/brand/ayeba-mark.svg" },
+  other: {
+    "msapplication-TileColor": "#000000",
+  },
 };
 
 export const viewport: Viewport = {
@@ -51,12 +56,23 @@ export default function RootLayout({
       lang="fr"
       className={`${brand.variable} ${display.variable} ${body.variable} ${mono.variable} h-full antialiased`}
     >
+      <head>
+        <link
+          rel="search"
+          type="application/opensearchdescription+xml"
+          title="AYEBA"
+          href="/opensearch.xml"
+        />
+      </head>
       <body className="ayeba-shell min-h-full">
         <AuthProvider>
           <I18nProvider>
             <AyebaProvider>
-              {children}
-              <PwaRegister />
+              <MarketProvider>
+                <SearchFromUrlGate />
+                {children}
+                <PwaRegister />
+              </MarketProvider>
             </AyebaProvider>
           </I18nProvider>
         </AuthProvider>

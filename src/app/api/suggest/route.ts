@@ -31,5 +31,10 @@ export async function GET(req: Request) {
 
   const local = suggestQueries(q, history);
   const merged = [...new Set([...local.slice(0, 4), ...wiki, ...local.slice(4)])].slice(0, 10);
+
+  if (searchParams.get("format") === "opensearch") {
+    return NextResponse.json([q, merged]);
+  }
+
   return NextResponse.json({ suggestions: merged });
 }

@@ -47,23 +47,21 @@ export function InteractiveCanvas() {
   }
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-end bg-black/70 p-3 backdrop-blur-sm sm:place-items-center sm:p-6">
-      <div className="max-h-[92dvh] w-full max-w-5xl overflow-auto rounded-3xl border border-[var(--line)] bg-[#121216] shadow-[var(--shadow)]">
-        <header className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-[var(--line)] bg-[#121216]/95 px-5 py-4 backdrop-blur">
+    <div className="ayeba-overlay ayeba-overlay-bottom">
+      <div className="ayeba-modal max-w-5xl">
+        <header className="ayeba-modal-header">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--red-hot)]">
-              Canevas
-            </p>
+            <p className="ayeba-kicker ayeba-kicker-accent">Canevas</p>
             <h2 className="mt-1 font-[family-name:var(--font-display)] text-2xl font-semibold text-white">
               Espace de travail
             </h2>
           </div>
-          <button type="button" onClick={() => setCanvasOpen(false)} className="ayeba-chip px-3 py-1.5 text-sm">
+          <button type="button" onClick={() => setCanvasOpen(false)} className="ayeba-ghost px-3 py-1.5 text-sm">
             Fermer
           </button>
         </header>
 
-        <div className="space-y-6 p-5">
+        <div className="ayeba-modal-body space-y-6">
           {tables.length === 0 && (
             <p className="text-sm text-[var(--ink-muted)]">Aucun tableau pour cette requête.</p>
           )}
@@ -89,20 +87,20 @@ export function InteractiveCanvas() {
                         ),
                       )
                     }
-                    className="ayeba-chip px-3 py-1.5 text-sm"
+                    className="ayeba-ghost px-3 py-1.5 text-sm"
                   >
                     + Ligne
                   </button>
                   <button
                     type="button"
                     onClick={() => exportExcel(table)}
-                    className="rounded-full bg-gradient-to-r from-[var(--red)] to-[#6b7280] px-3 py-1.5 text-sm font-semibold text-white"
+                    className="ayeba-cta px-3 py-1.5 text-sm"
                   >
                     Exporter Excel
                   </button>
                 </div>
               </div>
-              <div className="overflow-x-auto rounded-2xl border border-[var(--line)]">
+              <div className="ayeba-panel overflow-x-auto">
                 <table className="min-w-full text-left text-sm text-white">
                   <thead className="bg-[rgba(255,255,255,0.04)]">
                     <tr>

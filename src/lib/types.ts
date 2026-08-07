@@ -153,6 +153,25 @@ export type FeaturedSnippet = {
   domain: string;
 };
 
+export type InstantAnswerKind =
+  | "fx"
+  | "fuel"
+  | "weather"
+  | "time"
+  | "unit"
+  | "calc"
+  | "definition"
+  | "population";
+
+export type InstantAnswer = {
+  kind: InstantAnswerKind;
+  title: string;
+  lines: { label: string; value: string }[];
+  footnote?: string;
+  marketQuoteId?: string;
+  defaultAmount?: string;
+};
+
 export type SearchResponse = {
   query: string;
   correctedQuery?: string;
@@ -168,6 +187,8 @@ export type SearchResponse = {
   peopleAlsoAsk: { q: string; a: string }[];
   knowledge?: KnowledgePanel;
   featuredSnippet?: FeaturedSnippet;
+  instantAnswer?: InstantAnswer;
+  instantAnswers?: InstantAnswer[];
   aiSummary: string;
   opposingViews?: { title: string; url: string; stance: string; snippet: string }[];
   isSensitiveTopic: boolean;

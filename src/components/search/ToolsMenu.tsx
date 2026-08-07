@@ -31,7 +31,7 @@ export function ToolsMenu() {
 
   return (
     <div className="relative" ref={ref}>
-      <button type="button" onClick={() => setOpen((v) => !v)} className="ayeba-ghost px-4 py-2 text-sm">
+      <button type="button" onClick={() => setOpen((v) => !v)} className="ayeba-ghost rounded-full px-4 py-2 text-sm">
         {t("tools")}
       </button>
       {open && (

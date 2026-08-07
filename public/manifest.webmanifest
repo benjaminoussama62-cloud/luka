@@ -1,12 +1,19 @@
 {
-  "name": "Ayeba",
-  "short_name": "Ayeba",
-  "description": "Moteur de recherche mondial · priorité RDC",
+  "name": "AYEBA — Recherche mondiale",
+  "short_name": "AYEBA",
+  "description": "Moteur de recherche mondial · Ayebi encyclopédie RDC · priorité Congo",
   "start_url": "/",
   "display": "standalone",
+  "orientation": "portrait-primary",
   "background_color": "#050507",
-  "theme_color": "#ff3b4a",
+  "theme_color": "#00b4ff",
   "lang": "fr",
+  "categories": ["search", "news", "education"],
+  "shortcuts": [
+    { "name": "Rechercher", "url": "/", "description": "Accueil recherche" },
+    { "name": "Ayebi", "url": "/ayebi", "description": "Encyclopédie RDC" },
+    { "name": "Marchés", "url": "/marches", "description": "Cours & devises" }
+  ],
   "icons": [
     {
       "src": "/brand/ayeba-mark.svg",

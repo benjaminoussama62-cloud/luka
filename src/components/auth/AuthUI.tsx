@@ -1,17 +1,52 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { AyebaWordmark } from "@/components/brand/AyebaIcon";
+import { OAuthButton } from "@/components/auth/OAuthLogos";
 import { useAuth } from "@/lib/auth";
 
+type Provider = {
+  id: string;
+  label: string;
+  authPath: string;
+  configured: boolean;
+  brandColor: string;
+};
+
+const OAUTH_UI: { id: string; label: string; variant?: "google" | "default" }[] = [
+  { id: "google", label: "Se connecter avec Google", variant: "google" },
+  { id: "github", label: "Continuer avec GitHub" },
+  { id: "microsoft", label: "Continuer avec Microsoft" },
+];
+
+const DEFAULT_PROVIDERS: Provider[] = OAUTH_UI.map((p) => ({
+  id: p.id,
+  label: p.label,
+  authPath: `/api/auth/${p.id}`,
+  configured: false,
+  brandColor: "#fff",
+}));
+
 export function LoginModal() {
-  const { loginOpen, setLoginOpen, loginWithEmail, loginWithGoogle } = useAuth();
+  const { loginOpen, setLoginOpen, loginWithEmail, loginWithProvider } = useAuth();
   const [mode, setMode] = useState<"login" | "register">("login");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [providers, setProviders] = useState<Provider[]>(DEFAULT_PROVIDERS);
+  const [showEmail, setShowEmail] = useState(false);
+
+  useEffect(() => {
+    if (!loginOpen) return;
+    fetch("/api/auth/providers")
+      .then((r) => r.json())
+      .then((d: { providers: Provider[] }) => {
+        if (d.providers?.length) setProviders(d.providers);
+      })
+      .catch(() => {});
+  }, [loginOpen]);
 
   if (!loginOpen) return null;
 
@@ -24,14 +59,25 @@ export function LoginModal() {
     if (err) setError(err);
   }
 
+  const configuredMap = Object.fromEntries(providers.map((p) => [p.id, p.configured]));
+
+  function onProvider(id: string) {
+    setError(null);
+    if (!configuredMap[id]) {
+      setError("Connexion OAuth indisponible — clés API manquantes côté serveur.");
+      return;
+    }
+    loginWithProvider(id);
+  }
+
   return (
-    <div className="fixed inset-0 z-[80] grid place-items-center bg-black/85 p-4 backdrop-blur-sm">
-      <div className="hud-frame w-full max-w-[400px] p-8 animate-rise">
-        <div className="mb-8 flex items-center justify-between">
+    <div className="ayeba-overlay z-[80]">
+      <div className="ayeba-modal max-w-[400px] p-6 sm:p-8 animate-rise">
+        <div className="mb-6 flex items-start justify-between gap-4">
           <div>
-            <AyebaWordmark size="md" accentLast />
-            <p className="mt-2 font-[family-name:var(--font-mono)] text-[11px] tracking-wider text-[var(--muted)]">
-              {mode === "login" ? "AUTH // SESSION" : "AUTH // REGISTER"}
+            <AyebaWordmark size="md" />
+            <p className="mt-2 font-[family-name:var(--font-mono)] text-[10px] tracking-[0.2em] text-[var(--muted)]">
+              SESSION
             </p>
           </div>
           <button type="button" onClick={() => setLoginOpen(false)} className="text-[var(--faint)] hover:text-white">
@@ -39,44 +85,61 @@ export function LoginModal() {
           </button>
         </div>
 
-        <button
-          type="button"
-          onClick={() => loginWithGoogle()}
-          className="ayeba-ghost mb-5 flex w-full items-center justify-center gap-2 py-3"
-        >
-          Google OAuth
-        </button>
-
-        <form onSubmit={onSubmit} className="space-y-3">
-          {mode === "register" && (
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Nom"
-              className="w-full border border-[var(--line)] bg-black/50 px-4 py-3 text-white outline-none focus:border-[var(--orange)]"
+        <div className="space-y-2">
+          {OAUTH_UI.map((p) => (
+            <OAuthButton
+              key={p.id}
+              id={p.id}
+              label={p.label}
+              variant={p.variant}
+              onClick={() => onProvider(p.id)}
             />
-          )}
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="Email"
-            required
-            className="w-full border border-[var(--line)] bg-black/50 px-4 py-3 text-white outline-none focus:border-[var(--orange)]"
-          />
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Mot de passe"
-            required
-            className="w-full border border-[var(--line)] bg-black/50 px-4 py-3 text-white outline-none focus:border-[var(--orange)]"
-          />
-          {error && <p className="text-sm text-[var(--bad)]">{error}</p>}
-          <button type="submit" disabled={loading} className="ayeba-cta w-full py-3">
-            {loading ? "…" : mode === "login" ? "Entrer" : "Créer"}
+          ))}
+          {error && !showEmail ? <p className="text-sm text-[var(--bad)]">{error}</p> : null}
+        </div>
+
+        <div className="my-5 flex items-center gap-3">
+          <div className="h-px flex-1 bg-[var(--line)]" />
+          <span className="font-[family-name:var(--font-mono)] text-[10px] text-[var(--faint)]">EMAIL</span>
+          <div className="h-px flex-1 bg-[var(--line)]" />
+        </div>
+
+        {!showEmail ? (
+          <button type="button" onClick={() => setShowEmail(true)} className="ayeba-ghost w-full py-3 text-sm">
+            Continuer avec email
           </button>
-        </form>
+        ) : (
+          <form onSubmit={onSubmit} className="space-y-3">
+            {mode === "register" && (
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Nom"
+                className="ayeba-glass w-full rounded-xl px-4 py-3 text-white outline-none focus:border-[var(--line-bright)]"
+              />
+            )}
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Email"
+              required
+              className="ayeba-glass w-full rounded-xl px-4 py-3 text-white outline-none focus:border-[var(--line-bright)]"
+            />
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Mot de passe"
+              required
+              className="ayeba-glass w-full rounded-xl px-4 py-3 text-white outline-none focus:border-[var(--line-bright)]"
+            />
+            {error && <p className="text-sm text-[var(--bad)]">{error}</p>}
+            <button type="submit" disabled={loading} className="ayeba-cta w-full py-3">
+              {loading ? "…" : mode === "login" ? "Entrer" : "Créer le compte"}
+            </button>
+          </form>
+        )}
 
         <p className="mt-5 text-center text-sm text-[var(--muted)]">
           {mode === "login" ? (
@@ -141,10 +204,13 @@ export function ProfileMenu() {
         {initial}
       </button>
       {open && (
-        <div className="hud-frame absolute right-0 z-50 mt-2 w-72 overflow-hidden">
+        <div className="ayeba-modal absolute right-0 z-50 mt-2 w-72 overflow-hidden">
           <div className="border-b border-[var(--line)] px-4 py-3">
             <p className="text-sm font-medium text-white">{user.name}</p>
             <p className="font-[family-name:var(--font-mono)] text-[11px] text-[var(--muted)]">{user.email}</p>
+            <p className="mt-1 font-[family-name:var(--font-mono)] text-[10px] uppercase text-[var(--faint)]">
+              via {user.provider}
+            </p>
           </div>
           {history.length > 0 && (
             <div className="max-h-40 overflow-y-auto border-b border-[var(--line)] px-4 py-2">

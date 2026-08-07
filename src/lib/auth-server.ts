@@ -3,6 +3,7 @@ import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import type { DbUser } from "./db";
 import { findUserByEmail, findUserById, getUsers, saveUsers } from "./db";
+import { migrateAllUsersFromJson, syncUserToSqlite } from "./users-sqlite";
 
 export const SESSION_COOKIE = "ayeba_session";
 const SESSION_DAYS = 30;
@@ -12,7 +13,7 @@ export type SessionUser = {
   name: string;
   email: string;
   avatarColor: string;
-  provider: "email" | "google";
+  provider: "email" | "google" | "github" | "microsoft" | "apple";
 };
 
 function secretKey() {
@@ -103,6 +104,7 @@ export async function registerUser(email: string, password: string, name?: strin
   };
   const users = await getUsers();
   await saveUsers([...users, user]);
+  syncUserToSqlite(user);
   return { user: toSessionUser(user) };
 }
 
@@ -111,27 +113,47 @@ export async function loginUser(email: string, password: string) {
   if (!user) return { error: "Identifiants invalides." as const };
   const ok = await verifyPassword(password, user.passwordHash);
   if (!ok) return { error: "Identifiants invalides." as const };
+  syncUserToSqlite(user);
   return { user: toSessionUser(user) };
 }
 
-export async function upsertGoogleUser(profile: {
+export async function upsertOAuthUser(profile: {
+  provider: DbUser["provider"];
   email: string;
   name: string;
   sub: string;
 }) {
   const users = await getUsers();
-  let user = users.find((u) => u.email === profile.email.toLowerCase());
+  const email = profile.email.toLowerCase();
+  let user = users.find((u) => u.email === email);
+  const brandColors: Partial<Record<DbUser["provider"], string>> = {
+    google: "#4285F4",
+    github: "#24292f",
+    microsoft: "#00A4EF",
+    apple: "#555555",
+  };
   if (!user) {
     user = {
       id: profile.sub || crypto.randomUUID(),
       name: profile.name,
-      email: profile.email.toLowerCase(),
+      email,
       passwordHash: "",
-      avatarColor: "#ea4335",
-      provider: "google",
+      avatarColor: brandColors[profile.provider] ?? "#e85d04",
+      provider: profile.provider,
       createdAt: new Date().toISOString(),
     };
     await saveUsers([...users, user]);
+  } else {
+    syncUserToSqlite(user);
   }
   return toSessionUser(user);
+}
+
+/** @deprecated use upsertOAuthUser */
+export async function upsertGoogleUser(profile: {
+  email: string;
+  name: string;
+  sub: string;
+}) {
+  return upsertOAuthUser({ ...profile, provider: "google" });
 }

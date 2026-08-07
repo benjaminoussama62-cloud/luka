@@ -2,11 +2,18 @@ import { NextResponse } from "next/server";
 import { getSessionFromCookies } from "@/lib/auth-server";
 import { pushSearchHistory } from "@/lib/db";
 import { synthesizeWithLlm } from "@/lib/llm";
+import { rateLimit } from "@/lib/rate-limit";
 import { liveSearch } from "@/lib/real-search";
+import { indexStats } from "@/lib/search-index/fts";
 import type { AlgorithmSliders } from "@/lib/types";
 
 export async function POST(req: Request) {
   try {
+    const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "local";
+    if (!rateLimit(`search:${ip}`, 90, 60_000)) {
+      return NextResponse.json({ error: "Trop de requêtes — réessayez dans une minute." }, { status: 429 });
+    }
+
     const body = (await req.json()) as {
       query?: string;
       sliders?: AlgorithmSliders;
@@ -45,8 +52,12 @@ export async function POST(req: Request) {
 
     const { getCrawlIndex } = await import("@/lib/db");
     const crawlDocs = await getCrawlIndex();
-    if (crawlDocs.length === 0) {
-      void import("@/lib/crawler").then(({ runLocalCrawl }) => runLocalCrawl(24)).catch(console.error);
+    const idx = indexStats();
+    if (idx.documents < 8000 || idx.queuePending < 20000) {
+      void import("@/lib/crawler/global-crawler").then(({ runCrawlBatch, seedQueue }) => {
+        seedQueue();
+        return runCrawlBatch(100);
+      }).catch(console.error);
     }
 
     return NextResponse.json(result);

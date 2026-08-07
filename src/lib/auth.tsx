@@ -15,7 +15,7 @@ export type AyebaUser = {
   name: string;
   email: string;
   avatarColor: string;
-  provider: "email" | "google";
+  provider: "email" | "google" | "github" | "microsoft" | "apple";
 };
 
 type AuthState = {
@@ -25,6 +25,7 @@ type AuthState = {
   setLoginOpen: (v: boolean) => void;
   loginWithEmail: (email: string, password: string, name?: string) => Promise<string | null>;
   loginWithGoogle: () => void;
+  loginWithProvider: (provider: string) => void;
   logout: () => Promise<void>;
   refreshSession: () => Promise<void>;
 };
@@ -38,7 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refreshSession = useCallback(async () => {
     try {
-      const res = await fetch("/api/auth/session");
+      const res = await fetch("/api/auth/session", { signal: AbortSignal.timeout(8000) });
       if (!res.ok) {
         setUser(null);
         return;
@@ -52,6 +53,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     void refreshSession().finally(() => setReady(true));
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has("auth")) return;
+    window.history.replaceState({}, "", window.location.pathname);
   }, [refreshSession]);
 
   const loginWithEmail = useCallback(
@@ -75,6 +80,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     window.location.href = "/api/auth/google";
   }, []);
 
+  const loginWithProvider = useCallback((provider: string) => {
+    window.location.href = `/api/auth/${provider}`;
+  }, []);
+
   const logout = useCallback(async () => {
     await fetch("/api/auth/logout", { method: "POST" });
     setUser(null);
@@ -88,10 +97,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoginOpen,
       loginWithEmail,
       loginWithGoogle,
+      loginWithProvider,
       logout,
       refreshSession,
     }),
-    [user, ready, loginOpen, loginWithEmail, loginWithGoogle, logout, refreshSession],
+    [user, ready, loginOpen, loginWithEmail, loginWithGoogle, loginWithProvider, logout, refreshSession],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

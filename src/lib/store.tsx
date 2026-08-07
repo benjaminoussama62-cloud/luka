@@ -87,7 +87,7 @@ export function AyebaProvider({ children }: { children: ReactNode }) {
       }
       try {
         const controller = new AbortController();
-        const timeout = window.setTimeout(() => controller.abort(), 90000);
+        const timeout = window.setTimeout(() => controller.abort(), 45000);
         const res = await fetch("/api/search", {
           method: "POST",
           headers: { "Content-Type": "application/json" },

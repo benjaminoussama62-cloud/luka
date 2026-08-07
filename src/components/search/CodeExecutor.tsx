@@ -40,35 +40,29 @@ export function CodeExecutor() {
   }
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-end bg-black/70 p-3 backdrop-blur-sm sm:place-items-center sm:p-6">
-      <div className="max-h-[92dvh] w-full max-w-4xl overflow-auto rounded-3xl border border-[var(--line)] bg-[#121216] shadow-[var(--shadow)]">
-        <header className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-[var(--line)] bg-[#121216]/95 px-5 py-4 backdrop-blur">
+    <div className="ayeba-overlay ayeba-overlay-bottom">
+      <div className="ayeba-modal max-w-4xl">
+        <header className="ayeba-modal-header">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--red-hot)]">
-              Code exécutable
-            </p>
+            <p className="ayeba-kicker ayeba-kicker-accent">Code exécutable</p>
             <h2 className="mt-1 font-[family-name:var(--font-display)] text-2xl font-semibold text-white">
               Réponse vérifiée
             </h2>
           </div>
-          <button type="button" onClick={() => setCodeOpen(false)} className="ayeba-chip px-3 py-1.5 text-sm">
+          <button type="button" onClick={() => setCodeOpen(false)} className="ayeba-ghost px-3 py-1.5 text-sm">
             Fermer
           </button>
         </header>
 
-        <div className="grid gap-4 p-5 lg:grid-cols-2">
+        <div className="ayeba-modal-body grid gap-4 lg:grid-cols-2">
           <div className="space-y-3">
             <textarea
               value={code}
               onChange={(e) => setCode(e.target.value)}
               spellCheck={false}
-              className="min-h-[280px] w-full rounded-2xl border border-[var(--line)] bg-black p-4 font-[family-name:var(--font-mono)] text-sm text-[#e4e4e7] outline-none focus:border-[var(--red)]"
+              className="ayeba-glass min-h-[280px] w-full rounded-xl p-4 font-[family-name:var(--font-mono)] text-sm text-[#e4e4e7] outline-none focus:border-[var(--line-bright)]"
             />
-            <button
-              type="button"
-              onClick={run}
-              className="rounded-full bg-gradient-to-r from-[var(--red)] to-[#6b7280] px-4 py-2 text-sm font-semibold text-white"
-            >
+            <button type="button" onClick={run} className="ayeba-cta px-4 py-2 text-sm">
               Exécuter
             </button>
           </div>
@@ -80,7 +74,7 @@ export function CodeExecutor() {
             >
               {verified ? "Vérifié" : "Non vérifié"}
             </span>
-            <pre className="min-h-[280px] overflow-auto rounded-2xl border border-[var(--line)] bg-[rgba(0,0,0,0.45)] p-4 text-sm leading-relaxed text-[var(--ink-muted)]">
+            <pre className="ayeba-glass min-h-[280px] overflow-auto rounded-xl p-4 text-sm leading-relaxed text-[var(--muted)]">
               {error ? `Erreur: ${error}` : output || "Lancez l'exécution."}
             </pre>
           </div>

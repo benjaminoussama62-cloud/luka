@@ -107,27 +107,21 @@ ${report.sections.map((s) => `<h2>${s.heading}</h2><p>${s.body}</p><p class="met
   }
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-end bg-black/70 p-3 backdrop-blur-sm sm:place-items-center sm:p-6">
-      <div className="max-h-[92dvh] w-full max-w-3xl overflow-auto rounded-3xl border border-[var(--line)] bg-[#121216] shadow-[var(--shadow)]">
-        <header className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-[var(--line)] bg-[#121216]/95 px-5 py-4 backdrop-blur">
+    <div className="ayeba-overlay ayeba-overlay-bottom">
+      <div className="ayeba-modal max-w-3xl">
+        <header className="ayeba-modal-header">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--red-hot)]">
-              Recherche Profonde
-            </p>
+            <p className="ayeba-kicker ayeba-kicker-accent">Recherche Profonde</p>
             <h2 className="mt-1 font-[family-name:var(--font-display)] text-2xl font-semibold text-white">
               Rapport autonome sourcé
             </h2>
           </div>
-          <button
-            type="button"
-            onClick={() => setDeepResearchOpen(false)}
-            className="ayeba-chip px-3 py-1.5 text-sm"
-          >
+          <button type="button" onClick={() => setDeepResearchOpen(false)} className="ayeba-ghost px-3 py-1.5 text-sm">
             Fermer
           </button>
         </header>
 
-        <div className="space-y-6 p-5">
+        <div className="ayeba-modal-body space-y-6">
           <div>
             <div className="mb-2 flex justify-between text-xs text-[var(--ink-faint)]">
               <span>{running ? "Exploration…" : "Terminé"}</span>
@@ -163,16 +157,12 @@ ${report.sections.map((s) => `<h2>${s.heading}</h2><p>${s.body}</p><p class="met
           </ol>
 
           {report && (
-            <article className="animate-rise space-y-5 rounded-2xl border border-[var(--line)] bg-[rgba(0,0,0,0.35)] p-5">
+            <article className="ayeba-panel animate-rise space-y-5 p-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <h3 className="font-[family-name:var(--font-display)] text-xl text-white">
                   {report.title}
                 </h3>
-                <button
-                  type="button"
-                  onClick={downloadReport}
-                  className="rounded-full bg-gradient-to-r from-[var(--red)] to-[#6b7280] px-4 py-2 text-sm font-semibold text-white"
-                >
+                <button type="button" onClick={downloadReport} className="ayeba-cta px-4 py-2 text-sm">
                   Télécharger PDF
                 </button>
               </div>

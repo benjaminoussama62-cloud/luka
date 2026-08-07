@@ -1,6 +1,7 @@
 "use client";
 
 import type { SearchResult } from "@/lib/types";
+import { useAyeba } from "@/lib/store";
 import { ConflictBadge } from "./TrustBadges";
 
 const TYPE_LABEL: Record<SearchResult["sourceType"], string> = {
@@ -16,6 +17,24 @@ const TYPE_LABEL: Record<SearchResult["sourceType"], string> = {
 };
 
 export function ResultCard({ result, dense = false }: { result: SearchResult; dense?: boolean }) {
+  const { response } = useAyeba();
+
+  function onClick() {
+    if (!response?.query) return;
+    void fetch("/api/search/click", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        query: response.query,
+        url: result.url,
+        domain: result.domain,
+        title: result.title,
+        snippet: result.snippet,
+        rankScore: result.rankScore,
+      }),
+    });
+  }
+
   return (
     <article className={`ayeba-result group animate-rise ${dense ? "!py-5" : ""}`}>
       <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-[var(--faint)]">
@@ -49,6 +68,7 @@ export function ResultCard({ result, dense = false }: { result: SearchResult; de
         href={result.url}
         target="_blank"
         rel="noreferrer"
+        onClick={onClick}
         className="font-[family-name:var(--font-display)] text-[20px] font-medium leading-[1.32] tracking-[-0.03em] text-[var(--ink)] transition-colors duration-300 group-hover:text-[var(--orange)] sm:text-[22px]"
       >
         {result.title}

@@ -1,13 +1,13 @@
 "use client";
 
-/** Wordmark Ayeba — typographie pure, accent rouge discret. */
+/** Wordmark AYEBA — même tailles, style Gargantua (majuscules + lueur cyan) */
 export function AyebaWordmark({
   size = "md",
   className = "",
-  accentLast = false,
 }: {
   size?: "sm" | "md" | "lg" | "hero";
   className?: string;
+  /** @deprecated conservé pour compat — ignoré */
   accentLast?: boolean;
 }) {
   const sizes = {
@@ -17,23 +17,12 @@ export function AyebaWordmark({
     hero: "text-[clamp(3.5rem,12vw,7.5rem)] leading-[0.92]",
   } as const;
 
-  if (accentLast) {
-    return (
-      <span
-        className={`ayeba-wordmark inline-block font-[family-name:var(--font-brand)] ${sizes[size]} ${className}`}
-        aria-label="Ayeba"
-      >
-        Aye<span className="accent">ba</span>
-      </span>
-    );
-  }
-
   return (
     <span
       className={`ayeba-wordmark inline-block font-[family-name:var(--font-brand)] ${sizes[size]} ${className}`}
       aria-label="Ayeba"
     >
-      Ayeba
+      AYEBA
     </span>
   );
 }
@@ -47,7 +36,7 @@ export function AyebaIcon({
 }) {
   return (
     <span
-      className={`inline-flex items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--surface)] font-[family-name:var(--font-brand)] font-bold text-[var(--red)] ${className}`}
+      className={`inline-flex items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--surface)] font-[family-name:var(--font-brand)] font-bold text-white ${className}`}
       style={{ width: size, height: size, fontSize: size * 0.4 }}
       aria-hidden
     >

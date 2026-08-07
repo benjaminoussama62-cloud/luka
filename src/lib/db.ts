@@ -9,7 +9,7 @@ export type DbUser = {
   email: string;
   passwordHash: string;
   avatarColor: string;
-  provider: "email" | "google";
+  provider: "email" | "google" | "github" | "microsoft" | "apple";
   createdAt: string;
 };
 

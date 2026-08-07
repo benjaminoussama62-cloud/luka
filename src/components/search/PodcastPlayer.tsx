@@ -36,13 +36,11 @@ export function PodcastPlayer() {
   if (!podcastOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-end bg-black/70 p-3 backdrop-blur-sm sm:place-items-center sm:p-6">
-      <div className="w-full max-w-2xl overflow-auto rounded-3xl border border-[var(--line)] bg-[#121216] shadow-[var(--shadow)]">
-        <header className="flex items-start justify-between gap-4 border-b border-[var(--line)] px-5 py-4">
+    <div className="ayeba-overlay ayeba-overlay-bottom">
+      <div className="ayeba-modal max-w-2xl">
+        <header className="ayeba-modal-header">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--red-hot)]">
-              Podcast
-            </p>
+            <p className="ayeba-kicker ayeba-kicker-accent">Podcast</p>
             <h2 className="mt-1 font-[family-name:var(--font-display)] text-2xl font-semibold text-white">
               Synthèse audio
             </h2>
@@ -53,19 +51,15 @@ export function PodcastPlayer() {
               setPlaying(false);
               setPodcastOpen(false);
             }}
-            className="ayeba-chip px-3 py-1.5 text-sm"
+            className="ayeba-ghost px-3 py-1.5 text-sm"
           >
             Fermer
           </button>
         </header>
 
-        <div className="space-y-4 p-5">
+        <div className="ayeba-modal-body space-y-4">
           <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => setPlaying(true)}
-              className="rounded-full bg-gradient-to-r from-[var(--red)] to-[#6b7280] px-4 py-2 text-sm font-semibold text-white"
-            >
+            <button type="button" onClick={() => setPlaying(true)} className="ayeba-cta px-4 py-2 text-sm">
               {playing ? "En lecture…" : "Écouter"}
             </button>
             <button
@@ -74,7 +68,7 @@ export function PodcastPlayer() {
                 window.speechSynthesis.cancel();
                 setPlaying(false);
               }}
-              className="ayeba-chip px-4 py-2 text-sm"
+              className="ayeba-ghost px-4 py-2 text-sm"
             >
               Pause
             </button>
@@ -84,10 +78,8 @@ export function PodcastPlayer() {
             {segments.map((seg, i) => (
               <li
                 key={i}
-                className={`rounded-2xl border px-4 py-3 text-sm leading-relaxed ${
-                  i === index && playing
-                    ? "border-[rgba(239,35,60,0.55)] bg-[rgba(239,35,60,0.1)] text-white"
-                    : "border-[var(--line)] text-[var(--ink-muted)]"
+                className={`ayeba-panel px-4 py-3 text-sm leading-relaxed ${
+                  i === index && playing ? "border-[var(--line-bright)]" : ""
                 }`}
               >
                 <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-[var(--ink-faint)]">

@@ -1,7 +1,8 @@
 "use client";
 
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useAyeba } from "@/lib/store";
+import { VoiceSearchButton } from "./VoiceSearchButton";
 
 export function SearchBar({ large = false }: { large?: boolean }) {
   const { query, setQuery, search, searching } = useAyeba();
@@ -43,6 +44,14 @@ export function SearchBar({ large = false }: { large?: boolean }) {
   }, [query]);
 
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const onVoice = useCallback(
+    (text: string) => {
+      setQuery(text);
+      search(text);
+    },
+    [search, setQuery],
+  );
 
   function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -131,6 +140,7 @@ export function SearchBar({ large = false }: { large?: boolean }) {
               ✕
             </button>
           ) : null}
+          <VoiceSearchButton onResult={onVoice} />
           </div>
           <button
             type="submit"
@@ -143,7 +153,7 @@ export function SearchBar({ large = false }: { large?: boolean }) {
       </form>
 
       {open && suggestions.length > 0 && (
-        <ul className="ayeba-panel absolute z-50 mt-2 w-full overflow-hidden py-1 animate-fade">
+        <ul className="ayeba-glass absolute z-50 mt-2 w-full overflow-hidden rounded-2xl py-1 animate-fade">
           {suggestions.map((s, i) => {
             const q = query.trim().toLowerCase();
             const idx = s.toLowerCase().indexOf(q);
