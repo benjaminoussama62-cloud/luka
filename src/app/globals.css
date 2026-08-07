@@ -1619,3 +1619,123 @@ select option {
     justify-content: center;
   }
 }
+
+/* ——— Tools dropdown (anchored, high contrast) ——— */
+.ayeba-tools-trigger {
+  height: 2.5rem;
+  border-radius: 9999px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 0 1rem;
+  font-size: 0.8125rem;
+  letter-spacing: 0.04em;
+  color: var(--ink);
+  transition: border-color 0.2s, background 0.2s, color 0.2s;
+}
+
+.ayeba-tools-trigger:hover,
+.ayeba-tools-trigger.is-open {
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.ayeba-tools-panel {
+  position: fixed;
+  z-index: 120;
+  width: min(18.5rem, calc(100vw - 1.5rem));
+  border-radius: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: #0c0c10;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.4),
+    0 24px 64px rgba(0, 0, 0, 0.65);
+  padding: 0.65rem 0.5rem 0.75rem;
+  animation: ayeba-tools-in 0.16s ease-out;
+}
+
+@keyframes ayeba-tools-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ayeba-tools-heading {
+  margin: 0.15rem 0.65rem 0.35rem;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.ayeba-tools-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.ayeba-tools-divider {
+  height: 1px;
+  margin: 0.55rem 0.5rem;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.ayeba-tools-item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-radius: 0.65rem;
+  border: 0;
+  background: transparent;
+  padding: 0.7rem 0.75rem;
+  text-align: left;
+  font-size: 0.875rem;
+  color: rgba(255, 255, 255, 0.92);
+  transition: background 0.15s;
+}
+
+.ayeba-tools-item:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.ayeba-tools-item:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.ayeba-tools-switch {
+  position: relative;
+  flex-shrink: 0;
+  width: 2.1rem;
+  height: 1.2rem;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.14);
+  transition: background 0.15s;
+}
+
+.ayeba-tools-switch-knob {
+  position: absolute;
+  top: 0.15rem;
+  left: 0.15rem;
+  width: 0.9rem;
+  height: 0.9rem;
+  border-radius: 9999px;
+  background: #fff;
+  transition: transform 0.15s;
+}
+
+.ayeba-tools-toggle.is-on .ayeba-tools-switch {
+  background: var(--orange, #e85d04);
+}
+
+.ayeba-tools-toggle.is-on .ayeba-tools-switch-knob {
+  transform: translateX(0.9rem);
+}
