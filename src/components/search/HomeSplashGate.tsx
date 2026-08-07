@@ -3,6 +3,7 @@
 import { type ReactNode } from "react";
 import Link from "next/link";
 import { SplashHero } from "./SplashHero";
+import { SiteFooter } from "./SiteFooter";
 
 export function HomeSplashGate({
   header,
@@ -25,6 +26,7 @@ export function HomeSplashGate({
           Marchés
         </Link>
       </nav>
+      <SiteFooter />
     </div>
   );
 }

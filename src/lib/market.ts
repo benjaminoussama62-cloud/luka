@@ -48,18 +48,28 @@ export const FUEL_BY_CITY: Record<string, FuelPrices> = {
   Kisangani: { essence: 3400, gasoil: 3320, gaz12kg: 19200 },
 };
 
+/** Stable FR formatting (ASCII space) — avoids SSR/client hydration #418 from NBSP. */
+function fmtFixed(n: number): string {
+  return Math.round(n)
+    .toString()
+    .replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+}
+
 /** Indicatif local — toujours utilisable même sans API live */
 const INDICATIVE_USD_CDF = 2850;
 
+/** Fixed timestamp so SSR HTML matches first client paint */
+const FALLBACK_UPDATED_AT = "2026-01-01T00:00:00.000Z";
+
 export const MARKET_FALLBACK: MarketPayload = {
-  updatedAt: new Date().toISOString(),
+  updatedAt: FALLBACK_UPDATED_AT,
   source: "indicatif local",
   cdfPerUsd: INDICATIVE_USD_CDF,
   quotes: [
     {
       id: "usd-cdf",
       label: "USD/CDF",
-      value: `${INDICATIVE_USD_CDF.toLocaleString("fr-FR")} FC`,
+      value: `${fmtFixed(INDICATIVE_USD_CDF)} FC`,
       changePct: null,
       unit: "FC",
       kind: "fx",
@@ -68,7 +78,7 @@ export const MARKET_FALLBACK: MarketPayload = {
     {
       id: "eur-cdf",
       label: "EUR/CDF",
-      value: `${Math.round(INDICATIVE_USD_CDF / 0.92).toLocaleString("fr-FR")} FC`,
+      value: `${fmtFixed(INDICATIVE_USD_CDF / 0.92)} FC`,
       changePct: null,
       unit: "FC",
       kind: "fx",
@@ -77,7 +87,7 @@ export const MARKET_FALLBACK: MarketPayload = {
     {
       id: "essence",
       label: "Essence KIN",
-      value: `${FUEL_INDICATIVE_FC.essence.toLocaleString("fr-FR")} FC/L`,
+      value: `${fmtFixed(FUEL_INDICATIVE_FC.essence)} FC/L`,
       changePct: null,
       unit: "FC/L",
       kind: "fuel",
@@ -86,7 +96,7 @@ export const MARKET_FALLBACK: MarketPayload = {
     {
       id: "gasoil",
       label: "Gasoil KIN",
-      value: `${FUEL_INDICATIVE_FC.gasoil.toLocaleString("fr-FR")} FC/L`,
+      value: `${fmtFixed(FUEL_INDICATIVE_FC.gasoil)} FC/L`,
       changePct: null,
       unit: "FC/L",
       kind: "fuel",
@@ -95,7 +105,7 @@ export const MARKET_FALLBACK: MarketPayload = {
     {
       id: "gaz",
       label: "Gaz 12 kg",
-      value: `${FUEL_INDICATIVE_FC.gaz12kg.toLocaleString("fr-FR")} FC`,
+      value: `${fmtFixed(FUEL_INDICATIVE_FC.gaz12kg)} FC`,
       changePct: null,
       unit: "FC",
       kind: "fuel",

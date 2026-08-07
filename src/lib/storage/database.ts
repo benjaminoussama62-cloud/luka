@@ -1,23 +1,72 @@
-import Database from "better-sqlite3";
+import BetterSqlite3 from "better-sqlite3";
+import Libsql from "libsql";
 import { mkdirSync } from "fs";
 import path from "path";
 
+/** Minimal surface shared by better-sqlite3 and libsql sync drivers. */
+export type AyebaDatabase = {
+  exec(sql: string): unknown;
+  prepare(sql: string): {
+    run(...params: unknown[]): unknown;
+    get(...params: unknown[]): unknown;
+    all(...params: unknown[]): unknown;
+  };
+  pragma?(sql: string): unknown;
+};
+
 const DATA_DIR = path.join(process.cwd(), "data");
-const DB_PATH = path.join(DATA_DIR, "ayeba.db");
+const LOCAL_DB_PATH = path.join(DATA_DIR, "ayeba.db");
 
-let _db: Database.Database | null = null;
+let _db: AyebaDatabase | null = null;
+let _dbMode: "turso" | "vercel-tmp" | "local" = "local";
 
-export function getDb(): Database.Database {
-  if (_db) return _db;
-  mkdirSync(DATA_DIR, { recursive: true });
-  _db = new Database(DB_PATH);
-  _db.pragma("journal_mode = WAL");
-  _db.pragma("foreign_keys = ON");
-  migrate(_db);
-  return _db;
+export function getDbMode(): "turso" | "vercel-tmp" | "local" {
+  if (process.env.TURSO_DATABASE_URL) return "turso";
+  if (process.env.VERCEL) return "vercel-tmp";
+  return "local";
 }
 
-function migrate(db: Database.Database) {
+export function getDb(): AyebaDatabase {
+  if (_db) return _db;
+
+  _dbMode = getDbMode();
+
+  try {
+    if (_dbMode === "turso") {
+      const url = process.env.TURSO_DATABASE_URL!;
+      const authToken = process.env.TURSO_AUTH_TOKEN;
+      const opts = authToken ? ({ authToken } as ConstructorParameters<typeof Libsql>[1]) : undefined;
+      _db = new Libsql(url, opts) as unknown as AyebaDatabase;
+    } else if (_dbMode === "vercel-tmp") {
+      // Ephemeral fallback until Turso is configured — survives one warm instance only.
+      _db = new BetterSqlite3(path.join("/tmp", "ayeba.db")) as unknown as AyebaDatabase;
+      try {
+        _db.pragma?.("journal_mode = WAL");
+        _db.pragma?.("foreign_keys = ON");
+      } catch {
+        /* ignore pragma failures on constrained FS */
+      }
+    } else {
+      mkdirSync(DATA_DIR, { recursive: true });
+      _db = new BetterSqlite3(LOCAL_DB_PATH) as unknown as AyebaDatabase;
+      _db.pragma?.("journal_mode = WAL");
+      _db.pragma?.("foreign_keys = ON");
+    }
+
+    migrate(_db);
+    return _db;
+  } catch (e) {
+    console.error("[db] open failed", _dbMode, e);
+    _db = null;
+    throw e;
+  }
+}
+
+export function currentDbMode() {
+  return _dbMode || getDbMode();
+}
+
+function migrate(db: AyebaDatabase) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
@@ -259,13 +308,22 @@ function migrate(db: Database.Database) {
       url_count INTEGER NOT NULL DEFAULT 0,
       last_flush TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS search_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id TEXT NOT NULL,
+      query TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_history_user ON search_history(user_id, created_at DESC);
   `);
 
   seedCategories(db);
   seedMlWeights(db);
 }
 
-function seedMlWeights(db: Database.Database) {
+function seedMlWeights(db: AyebaDatabase) {
   const row = db.prepare("SELECT id FROM ml_rank_weights WHERE id = 1").get();
   if (row) return;
   const defaultWeights = {
@@ -291,12 +349,12 @@ function seedMlWeights(db: Database.Database) {
   ).run(JSON.stringify(defaultWeights), new Date().toISOString());
 }
 
-function seedCategories(db: Database.Database) {
+function seedCategories(db: AyebaDatabase) {
   const count = db.prepare("SELECT COUNT(*) as c FROM ayebi_categories").get() as { c: number };
   if (count.c > 0) return;
 
   const cats = [
-    { id: "rdc", label: "République démocratique du Congo", parent: null },
+    { id: "rdc", label: "République démocratique du Congo", parent: null as string | null },
     { id: "personnalites", label: "Personnalités", parent: "rdc" },
     { id: "lieux", label: "Lieux & monuments", parent: "rdc" },
     { id: "institutions", label: "Institutions", parent: "rdc" },

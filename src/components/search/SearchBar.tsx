@@ -22,7 +22,15 @@ export function SearchBar({ large = false }: { large?: boolean }) {
   }, []);
 
   useEffect(() => {
+    if (searching) {
+      setOpen(false);
+      setSuggestions([]);
+    }
+  }, [searching]);
+
+  useEffect(() => {
     if (timer.current) window.clearTimeout(timer.current);
+    if (searching) return;
     timer.current = window.setTimeout(async () => {
       try {
         const history = JSON.parse(sessionStorage.getItem("ayeba-history") || "[]") as string[];
@@ -32,7 +40,7 @@ export function SearchBar({ large = false }: { large?: boolean }) {
         if (!res.ok) return;
         const data = (await res.json()) as { suggestions: string[] };
         setSuggestions(data.suggestions ?? []);
-        setOpen((data.suggestions?.length ?? 0) > 0 && query.trim().length > 0);
+        setOpen((data.suggestions?.length ?? 0) > 0 && query.trim().length > 0 && !searching);
         setActive(-1);
       } catch {
         /* ignore */
@@ -41,7 +49,7 @@ export function SearchBar({ large = false }: { large?: boolean }) {
     return () => {
       if (timer.current) window.clearTimeout(timer.current);
     };
-  }, [query]);
+  }, [query, searching]);
 
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -66,6 +74,7 @@ export function SearchBar({ large = false }: { large?: boolean }) {
       return;
     }
     setOpen(false);
+    setSuggestions([]);
     search(pick);
   }
 

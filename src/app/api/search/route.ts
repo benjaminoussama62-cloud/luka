@@ -45,19 +45,28 @@ export async function POST(req: Request) {
       result.aiSummary = llmSummary;
     }
 
-    const session = await getSessionFromCookies();
-    if (session && !body.privateMode && query.trim()) {
-      await pushSearchHistory(session.id, query.trim());
+    // Side-effects must never fail the search response (serverless FS / DB edges).
+    try {
+      const session = await getSessionFromCookies();
+      if (session && !body.privateMode && query.trim()) {
+        await pushSearchHistory(session.id, query.trim());
+      }
+    } catch (e) {
+      console.warn("[search] history skipped", e);
     }
 
-    const { getCrawlIndex } = await import("@/lib/db");
-    const crawlDocs = await getCrawlIndex();
-    const idx = indexStats();
-    if (idx.documents < 8000 || idx.queuePending < 20000) {
-      void import("@/lib/crawler/global-crawler").then(({ runCrawlBatch, seedQueue }) => {
-        seedQueue();
-        return runCrawlBatch(100);
-      }).catch(console.error);
+    try {
+      const idx = indexStats();
+      if (idx.documents < 8000 || idx.queuePending < 20000) {
+        void import("@/lib/crawler/global-crawler")
+          .then(({ runCrawlBatch, seedQueue }) => {
+            seedQueue();
+            return runCrawlBatch(40);
+          })
+          .catch(console.error);
+      }
+    } catch (e) {
+      console.warn("[search] crawl kick skipped", e);
     }
 
     return NextResponse.json(result);

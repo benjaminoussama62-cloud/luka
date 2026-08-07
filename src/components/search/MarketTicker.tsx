@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { MARKET_FALLBACK, type MarketPayload, type MarketQuote } from "@/lib/market";
+import { type MarketPayload, type MarketQuote } from "@/lib/market";
 import { useMarket } from "@/lib/market-context";
 
 function QuoteChip({ q, onClick }: { q: MarketQuote; onClick: () => void }) {
@@ -31,16 +31,24 @@ export function MarketTicker({
 }) {
   const { openQuote, payload, loading } = useMarket();
   const [data, setData] = useState<MarketPayload>(payload);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     setData(payload);
   }, [payload]);
 
   const row = [...data.quotes, ...data.quotes];
-  const updated = new Date(data.updatedAt).toLocaleTimeString("fr-FR", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  const updated =
+    mounted
+      ? new Date(data.updatedAt).toLocaleTimeString("fr-FR", {
+          hour: "2-digit",
+          minute: "2-digit",
+        })
+      : "--:--";
 
   return (
     <div
@@ -53,8 +61,8 @@ export function MarketTicker({
           <QuoteChip key={`${q.id}-${i}`} q={q} onClick={() => void openQuote(q.id)} />
         ))}
       </div>
-      <p className="ayeba-ticker-meta">
-        {loading ? "MAJ…" : "LIVE"} · {updated} · clic = convertir
+      <p className="ayeba-ticker-meta" suppressHydrationWarning>
+        {mounted && loading ? "MAJ…" : "LIVE"} · {updated} · clic = convertir
       </p>
     </div>
   );

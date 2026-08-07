@@ -19,6 +19,7 @@ export type SessionUser = {
 function secretKey() {
   const secret =
     process.env.AUTH_SECRET ||
+    process.env.JWT_SECRET ||
     (process.env.NODE_ENV === "development" ? "ayeba-dev-secret-min-32-chars!!" : undefined);
   if (!secret || secret.length < 16) {
     throw new Error("AUTH_SECRET manquant. Copie .env.example vers .env.local");

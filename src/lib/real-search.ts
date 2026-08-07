@@ -634,19 +634,30 @@ export async function liveSearch(query: string, opts: FetchOpts): Promise<Search
   const ayebiPanel = await searchAyebiLive(q);
   const ayebiHits = await searchAyebiArticlesLive(q, 5);
 
-  const idxStats = indexStats();
-  if (idxStats.documents < 5000 || idxStats.queuePending < 10000) {
-    runCrawlBatch(120).catch(() => {});
+  let projectedScale = 0;
+  try {
+    const idxStats = indexStats();
+    projectedScale = idxStats.projectedBillionsScale;
+    if (idxStats.documents < 5000 || idxStats.queuePending < 10000) {
+      runCrawlBatch(40).catch(() => {});
+    }
+  } catch {
+    /* index optional on cold serverless */
   }
 
   const cacheKey = `serp:${q}:${opts.sliders.locality}:${opts.sliders.authority}`;
-  let rankedFts = await cacheGet<Awaited<ReturnType<typeof rankHits>>>(cacheKey);
-  if (!rankedFts?.length) {
-    rankedFts = rankHits(searchIndex(q, 50), q, {
-      localityBoost: opts.sliders.locality,
-      authorityBoost: opts.sliders.authority,
-    });
-    await cacheSet(cacheKey, rankedFts, 180);
+  let rankedFts: Awaited<ReturnType<typeof rankHits>> = [];
+  try {
+    rankedFts = (await cacheGet<Awaited<ReturnType<typeof rankHits>>>(cacheKey)) ?? [];
+    if (!rankedFts.length) {
+      rankedFts = rankHits(searchIndex(q, 50), q, {
+        localityBoost: opts.sliders.locality,
+        authorityBoost: opts.sliders.authority,
+      });
+      await cacheSet(cacheKey, rankedFts, 180);
+    }
+  } catch {
+    rankedFts = [];
   }
 
   const ftsDocs = rankedFts.map((h) => ({
@@ -662,6 +673,13 @@ export async function liveSearch(query: string, opts: FetchOpts): Promise<Search
     rankScore: h.score,
   }));
 
+  let crawlHits: Awaited<ReturnType<typeof searchCrawlIndex>> = [];
+  try {
+    crawlHits = await searchCrawlIndex(q);
+  } catch {
+    crawlHits = [];
+  }
+
   const localDocs = [
     ...ayebiHits.map((a) => ({
       id: `ayebi-${a.slug}`,
@@ -676,7 +694,7 @@ export async function liveSearch(query: string, opts: FetchOpts): Promise<Search
     })),
     ...ftsDocs,
     ...searchLocalIndex(q),
-    ...(await searchCrawlIndex(q)).map((c) => ({
+    ...crawlHits.map((c) => ({
       id: c.id,
       title: c.title,
       url: c.url,
@@ -872,7 +890,7 @@ export async function liveSearch(query: string, opts: FetchOpts): Promise<Search
     correctedQuery:
       suggested && suggested.toLowerCase() !== rawQuery.toLowerCase() ? suggested : undefined,
     approxResults: Math.max(
-      idxStats.projectedBillionsScale,
+      projectedScale,
       unique.length * 285_000,
       results.length * 18_000,
     ),

@@ -222,9 +222,24 @@ function SerpMeta() {
   const { response, searching, searchError, search } = useAyeba();
   const { t } = useI18n();
   if (searching && !response) {
-    return <p className="ayeba-serp-meta">Ayeba agrège les sources live…</p>;
+    return <p className="ayeba-serp-meta">Ayeba agrège les sources…</p>;
   }
-  if (!response) return searchError ? <p className="ayeba-serp-meta ayeba-serp-meta-error">{searchError}</p> : null;
+  if (!response) {
+    if (!searchError) return null;
+    return (
+      <div className="ayeba-panel mb-6 p-5">
+        <p className="ayeba-kicker ayeba-kicker-accent mb-2">Recherche</p>
+        <p className="text-sm text-[var(--muted)]">{searchError}</p>
+        <button
+          type="button"
+          className="ayeba-ghost mt-3 px-3 py-1.5 text-xs"
+          onClick={() => search()}
+        >
+          Réessayer
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="ayeba-serp-meta">
@@ -235,6 +250,14 @@ function SerpMeta() {
         <span className="mx-2 text-[var(--faint)]">·</span>
         <span className="text-[var(--faint)]">ML rank · index FTS</span>
       </p>
+      {searchError ? (
+        <p className="mt-1 text-[13px] text-[var(--muted)]">
+          Mise à jour partielle — {searchError}{" "}
+          <button type="button" className="text-[var(--link)] hover:underline" onClick={() => search()}>
+            réessayer
+          </button>
+        </p>
+      ) : null}
       {response.correctedQuery ? (
         <p className="mt-1 text-[13px] text-[var(--muted)]">
           Vouliez-vous dire{" "}

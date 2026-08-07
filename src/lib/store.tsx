@@ -99,9 +99,19 @@ export function AyebaProvider({ children }: { children: ReactNode }) {
           signal: controller.signal,
         });
         window.clearTimeout(timeout);
-        if (!res.ok) throw new Error("Échec de la recherche live");
+        if (!res.ok) {
+          let detail = "La recherche n’a pas abouti. Réessayez.";
+          try {
+            const errBody = (await res.json()) as { message?: string; error?: string };
+            if (errBody.error) detail = errBody.error;
+          } catch {
+            /* ignore */
+          }
+          throw new Error(detail);
+        }
         const data = (await res.json()) as SearchResponse;
         setResponse(data);
+        setSearchError(null);
         if (data.code) setCodeOpen(true);
         if (!nextOpts.privateMode) {
           try {
@@ -126,6 +136,7 @@ export function AyebaProvider({ children }: { children: ReactNode }) {
           sessionStorage.removeItem("ayeba-history");
         }
       } catch (e) {
+        // Keep previous results if any — never leave a broken empty SERP with a harsh banner.
         setSearchError(
           e instanceof Error && e.name === "AbortError"
             ? "Recherche trop longue — réessayez"
