@@ -58,7 +58,12 @@ function rowToUser(row: {
 
 function writableDataDir() {
   // Vercel serverless: /var/task is read-only — use /tmp.
-  if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
+  if (
+    process.env.VERCEL ||
+    process.env.VERCEL_ENV ||
+    process.env.AWS_LAMBDA_FUNCTION_NAME ||
+    process.cwd() === "/var/task"
+  ) {
     return path.join("/tmp", "ayeba-data");
   }
   return DATA_DIR;

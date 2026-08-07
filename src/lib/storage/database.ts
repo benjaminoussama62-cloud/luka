@@ -14,7 +14,18 @@ export type AyebaDatabase = {
   pragma?(sql: string): unknown;
 };
 
-const DATA_DIR = path.join(process.cwd(), "data");
+function isServerlessRuntime() {
+  return Boolean(
+    process.env.VERCEL ||
+      process.env.VERCEL_ENV ||
+      process.env.AWS_LAMBDA_FUNCTION_NAME ||
+      process.cwd() === "/var/task",
+  );
+}
+
+const DATA_DIR = isServerlessRuntime()
+  ? path.join("/tmp", "ayeba-data")
+  : path.join(process.cwd(), "data");
 const LOCAL_DB_PATH = path.join(DATA_DIR, "ayeba.db");
 
 let _db: AyebaDatabase | null = null;
@@ -22,7 +33,7 @@ let _dbMode: "turso" | "vercel-tmp" | "local" = "local";
 
 export function getDbMode(): "turso" | "vercel-tmp" | "local" {
   if (process.env.TURSO_DATABASE_URL) return "turso";
-  if (process.env.VERCEL) return "vercel-tmp";
+  if (isServerlessRuntime()) return "vercel-tmp";
   return "local";
 }
 
@@ -37,20 +48,16 @@ export function getDb(): AyebaDatabase {
       const authToken = process.env.TURSO_AUTH_TOKEN;
       const opts = authToken ? ({ authToken } as ConstructorParameters<typeof Libsql>[1]) : undefined;
       _db = new Libsql(url, opts) as unknown as AyebaDatabase;
-    } else if (_dbMode === "vercel-tmp") {
-      // Ephemeral fallback until Turso is configured — survives one warm instance only.
-      _db = new BetterSqlite3(path.join("/tmp", "ayeba.db")) as unknown as AyebaDatabase;
+    } else {
+      mkdirSync(DATA_DIR, { recursive: true });
+      const dbPath = _dbMode === "vercel-tmp" ? path.join("/tmp", "ayeba.db") : LOCAL_DB_PATH;
+      _db = new BetterSqlite3(dbPath) as unknown as AyebaDatabase;
       try {
         _db.pragma?.("journal_mode = WAL");
         _db.pragma?.("foreign_keys = ON");
       } catch {
         /* ignore pragma failures on constrained FS */
       }
-    } else {
-      mkdirSync(DATA_DIR, { recursive: true });
-      _db = new BetterSqlite3(LOCAL_DB_PATH) as unknown as AyebaDatabase;
-      _db.pragma?.("journal_mode = WAL");
-      _db.pragma?.("foreign_keys = ON");
     }
 
     migrate(_db);

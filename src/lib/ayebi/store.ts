@@ -3,9 +3,15 @@ import path from "path";
 import { AYEBI_CATEGORIES, slugifyTitle } from "./constants";
 import type { AyebiArticle } from "./types";
 
-export { slugifyTitle, AYEBI_CATEGORIES };
+const AYEBI_DIR =
+  process.env.VERCEL ||
+  process.env.VERCEL_ENV ||
+  process.env.AWS_LAMBDA_FUNCTION_NAME ||
+  process.cwd() === "/var/task"
+    ? path.join("/tmp", "ayeba-data", "ayebi")
+    : path.join(process.cwd(), "data", "ayebi");
 
-const AYEBI_DIR = path.join(process.cwd(), "data", "ayebi");
+export { slugifyTitle, AYEBI_CATEGORIES };
 
 export type AyebiArticleMeta = {
   revision: number;
@@ -33,7 +39,11 @@ type ArticlesFile = { articles: Record<string, StoredAyebiArticle> };
 type RevisionsFile = { bySlug: Record<string, AyebiRevision[]> };
 
 async function ensureAyebiDir() {
-  await mkdir(AYEBI_DIR, { recursive: true });
+  try {
+    await mkdir(AYEBI_DIR, { recursive: true });
+  } catch (e) {
+    console.warn("[ayebi] ensureDir skipped", e);
+  }
 }
 
 async function readAyebiJson<T>(file: string, fallback: T): Promise<T> {

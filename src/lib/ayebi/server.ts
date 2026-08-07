@@ -70,19 +70,29 @@ export async function getAyebiArticleEnriched(slug: string): Promise<AyebiArticl
 }
 
 export async function searchAyebiArticlesLive(query: string, limit = 8): Promise<AyebiArticle[]> {
-  importSeedIfEmpty();
-  const fts = searchAyebiFts(query, limit);
-  if (fts.length) return fts;
+  try {
+    importSeedIfEmpty();
+    const fts = searchAyebiFts(query, limit);
+    if (fts.length) return fts;
+  } catch {
+    /* SQLite optional on cold serverless */
+  }
 
-  const all = await getAllArticlesMerged();
-  const q = query.trim();
-  if (!q) return all.slice(0, limit);
-  return all
-    .map((a) => ({ a, s: scoreArticle(a, q) }))
-    .filter((x) => x.s >= 8)
-    .sort((x, y) => y.s - x.s)
-    .slice(0, limit)
-    .map((x) => x.a);
+  try {
+    const all = await getAllArticlesMerged();
+    const q = query.trim();
+    if (!q) return all.slice(0, limit);
+    return all
+      .map((a) => ({ a, s: scoreArticle(a, q) }))
+      .filter((x) => x.s >= 8)
+      .sort((x, y) => y.s - x.s)
+      .slice(0, limit)
+      .map((x) => x.a);
+  } catch {
+    return AYEBI_ARTICLES.filter((a) => scoreArticle(a, query) >= 8)
+      .sort((a, b) => scoreArticle(b, query) - scoreArticle(a, query))
+      .slice(0, limit);
+  }
 }
 
 export async function searchAyebiLive(query: string): Promise<KnowledgePanel | undefined> {
