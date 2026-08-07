@@ -74,7 +74,9 @@ export function ResultCard({ result, dense = false }: { result: SearchResult; de
         {result.title}
       </a>
 
-      <p className="mt-2 max-w-2xl text-[15px] leading-[1.72] text-[var(--muted)]">{result.snippet}</p>
+      <p className="ayeba-result-snippet mt-2 max-w-2xl text-[15px] leading-[1.72] text-[var(--muted)]">
+        {result.snippet}
+      </p>
 
       {result.sitelinks && result.sitelinks.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1">

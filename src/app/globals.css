@@ -443,6 +443,20 @@ body {
   position: relative;
   padding: 1.5rem 0 1.5rem 1rem;
   border-bottom: 1px solid var(--line);
+  min-width: 0;
+  overflow: hidden;
+}
+
+.ayeba-result a {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.ayeba-result-snippet {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  overflow: hidden;
 }
 
 .ayeba-result::before {

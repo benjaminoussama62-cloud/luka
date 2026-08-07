@@ -44,6 +44,29 @@ function domainOf(url: string) {
   }
 }
 
+/** Decode entities then strip tags — prevents `&lt;a href=…&gt;` from flooding the SERP. */
+export function cleanSnippet(raw: string, max = 280): string {
+  let s = raw ?? "";
+  s = s
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&amp;/gi, "&")
+    .replace(/&#(\d+);/g, (_, n) => {
+      const code = Number(n);
+      return Number.isFinite(code) ? String.fromCharCode(code) : "";
+    });
+  // Prefer visible link text over raw href dumps
+  s = s.replace(/<a\b[^>]*>([\s\S]*?)<\/a>/gi, "$1");
+  s = s.replace(/<[^>]+>/g, " ");
+  s = s.replace(/https?:\/\/\S+/gi, " ");
+  s = s.replace(/\s+/g, " ").trim();
+  if (s.length > max) s = `${s.slice(0, max - 1).trim()}…`;
+  return s;
+}
+
 function favicon(domain: string) {
   return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64`;
 }
@@ -116,7 +139,7 @@ function toResult(hit: RawHit, i: number, query: string): SearchResult {
     title: hit.title,
     url: hit.url,
     domain,
-    snippet: hit.snippet || `Résultat pour « ${query} » — ${domain}`,
+    snippet: cleanSnippet(hit.snippet || `Résultat pour « ${query} » — ${domain}`),
     favicon: favicon(domain),
     publishedAt: new Date().toISOString().slice(0, 10),
     lang: /[àâçéèêëîïôùûü]/i.test(hit.title + hit.snippet) ? "fr" : "en",
@@ -321,12 +344,13 @@ async function fetchNewsRss(query: string): Promise<RawHit[]> {
         ?? block.match(/<title>(.*?)<\/title>/)?.[1]
         ?? "Article";
       const link = block.match(/<link>(.*?)<\/link>/)?.[1] ?? "#";
-      const desc = (block.match(/<description><!\[CDATA\[(.*?)\]\]><\/description>/)?.[1]
-        ?? block.match(/<description>(.*?)<\/description>/)?.[1]
-        ?? "")
-        .replace(/<[^>]+>/g, "")
-        .slice(0, 220);
-      return { title, url: link, snippet: desc, source: "google-news" };
+      const desc = cleanSnippet(
+        block.match(/<description><!\[CDATA\[(.*?)\]\]><\/description>/)?.[1]
+          ?? block.match(/<description>(.*?)<\/description>/)?.[1]
+          ?? "",
+        220,
+      );
+      return { title: cleanSnippet(title, 160), url: link, snippet: desc, source: "google-news" };
     });
   } catch {
     return [];
