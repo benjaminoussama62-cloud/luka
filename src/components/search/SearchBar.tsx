@@ -10,8 +10,18 @@ export function SearchBar({ large = false }: { large?: boolean }) {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
   const [focused, setFocused] = useState(false);
+  /** After a launched search, hide suggestions until the user types again. */
+  const [typing, setTyping] = useState(false);
   const boxRef = useRef<HTMLDivElement>(null);
   const timer = useRef<number | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const closeSuggest = useCallback(() => {
+    setOpen(false);
+    setSuggestions([]);
+    setActive(-1);
+    setTyping(false);
+  }, []);
 
   useEffect(() => {
     function onDoc(e: MouseEvent) {
@@ -22,15 +32,17 @@ export function SearchBar({ large = false }: { large?: boolean }) {
   }, []);
 
   useEffect(() => {
-    if (searching) {
-      setOpen(false);
-      setSuggestions([]);
-    }
-  }, [searching]);
+    if (searching) closeSuggest();
+  }, [searching, closeSuggest]);
 
   useEffect(() => {
     if (timer.current) window.clearTimeout(timer.current);
-    if (searching) return;
+    // Never overlay SERP with suggestions after a search unless user is actively typing.
+    if (searching || !focused || !typing || !query.trim()) {
+      if (!typing) setOpen(false);
+      return;
+    }
+
     timer.current = window.setTimeout(async () => {
       try {
         const history = JSON.parse(sessionStorage.getItem("ayeba-history") || "[]") as string[];
@@ -39,26 +51,34 @@ export function SearchBar({ large = false }: { large?: boolean }) {
         );
         if (!res.ok) return;
         const data = (await res.json()) as { suggestions: string[] };
-        setSuggestions(data.suggestions ?? []);
-        setOpen((data.suggestions?.length ?? 0) > 0 && query.trim().length > 0 && !searching);
+        const list = data.suggestions ?? [];
+        setSuggestions(list);
+        setOpen(list.length > 0);
         setActive(-1);
       } catch {
         /* ignore */
       }
     }, 120);
+
     return () => {
       if (timer.current) window.clearTimeout(timer.current);
     };
-  }, [query, searching]);
+  }, [query, searching, focused, typing]);
 
-  const inputRef = useRef<HTMLInputElement>(null);
+  const launch = useCallback(
+    (q: string) => {
+      closeSuggest();
+      search(q);
+    },
+    [closeSuggest, search],
+  );
 
   const onVoice = useCallback(
     (text: string) => {
       setQuery(text);
-      search(text);
+      launch(text);
     },
-    [search, setQuery],
+    [launch, setQuery],
   );
 
   function onSubmit(e: FormEvent) {
@@ -73,10 +93,11 @@ export function SearchBar({ large = false }: { large?: boolean }) {
       );
       return;
     }
-    setOpen(false);
-    setSuggestions([]);
-    search(pick);
+    launch(pick);
   }
+
+  const showDropdown =
+    open && suggestions.length > 0 && typing && focused && !searching;
 
   return (
     <div className="relative w-full" ref={boxRef}>
@@ -91,65 +112,64 @@ export function SearchBar({ large = false }: { large?: boolean }) {
           }`}
         >
           <div className={`flex min-w-0 flex-1 items-center gap-2 ${large ? "px-1 sm:px-0" : ""}`}>
-          <svg
-            width="17"
-            height="17"
-            viewBox="0 0 24 24"
-            className={`shrink-0 transition-colors duration-300 ${focused ? "text-[var(--ink)]" : "text-[var(--faint)]"}`}
-            aria-hidden
-          >
-            <path
-              fill="currentColor"
-              d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"
-            />
-          </svg>
-          <input
-            ref={inputRef}
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onFocus={() => {
-              setFocused(true);
-              if (suggestions.length) setOpen(true);
-            }}
-            onBlur={() => setFocused(false)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                onSubmit(e as unknown as FormEvent);
-                return;
-              }
-              if (!open || !suggestions.length) return;
-              if (e.key === "ArrowDown") {
-                e.preventDefault();
-                setActive((i) => Math.min(i + 1, suggestions.length - 1));
-              } else if (e.key === "ArrowUp") {
-                e.preventDefault();
-                setActive((i) => Math.max(i - 1, 0));
-              } else if (e.key === "Escape") setOpen(false);
-            }}
-            placeholder={large ? "Rechercher le monde entier…" : "Rechercher"}
-            className={`w-full bg-transparent text-[var(--ink)] outline-none placeholder:text-[var(--faint)] ${
-              large ? "text-[16px] tracking-[-0.01em]" : "text-[14px]"
-            }`}
-            aria-label="Recherche Ayeba"
-            aria-autocomplete="list"
-            autoComplete="off"
-          />
-          {query ? (
-            <button
-              type="button"
-              onClick={() => {
-                setQuery("");
-                setSuggestions([]);
-                setOpen(false);
-              }}
-              className="text-[var(--faint)] transition-colors duration-300 hover:text-[var(--ink)]"
-              aria-label="Effacer"
+            <svg
+              width="17"
+              height="17"
+              viewBox="0 0 24 24"
+              className={`shrink-0 transition-colors duration-300 ${focused ? "text-[var(--ink)]" : "text-[var(--faint)]"}`}
+              aria-hidden
             >
-              ✕
-            </button>
-          ) : null}
-          <VoiceSearchButton onResult={onVoice} />
+              <path
+                fill="currentColor"
+                d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"
+              />
+            </svg>
+            <input
+              ref={inputRef}
+              value={query}
+              onChange={(e) => {
+                setTyping(true);
+                setQuery(e.target.value);
+              }}
+              onFocus={() => setFocused(true)}
+              onBlur={() => setFocused(false)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  onSubmit(e as unknown as FormEvent);
+                  return;
+                }
+                if (!open || !suggestions.length) return;
+                if (e.key === "ArrowDown") {
+                  e.preventDefault();
+                  setActive((i) => Math.min(i + 1, suggestions.length - 1));
+                } else if (e.key === "ArrowUp") {
+                  e.preventDefault();
+                  setActive((i) => Math.max(i - 1, 0));
+                } else if (e.key === "Escape") setOpen(false);
+              }}
+              placeholder={large ? "Rechercher le monde entier…" : "Rechercher"}
+              className={`w-full bg-transparent text-[var(--ink)] outline-none placeholder:text-[var(--faint)] ${
+                large ? "text-[16px] tracking-[-0.01em]" : "text-[14px]"
+              }`}
+              aria-label="Recherche Ayeba"
+              aria-autocomplete="list"
+              autoComplete="off"
+            />
+            {query ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setQuery("");
+                  closeSuggest();
+                }}
+                className="text-[var(--faint)] transition-colors duration-300 hover:text-[var(--ink)]"
+                aria-label="Effacer"
+              >
+                ✕
+              </button>
+            ) : null}
+            <VoiceSearchButton onResult={onVoice} />
           </div>
           <button
             type="submit"
@@ -161,7 +181,7 @@ export function SearchBar({ large = false }: { large?: boolean }) {
         </div>
       </form>
 
-      {open && suggestions.length > 0 && (
+      {showDropdown ? (
         <ul className="ayeba-glass absolute z-50 mt-2 w-full overflow-hidden rounded-2xl py-1 animate-fade">
           {suggestions.map((s, i) => {
             const q = query.trim().toLowerCase();
@@ -176,10 +196,10 @@ export function SearchBar({ large = false }: { large?: boolean }) {
                       : "text-[var(--muted)] hover:bg-white/[0.02] hover:text-[var(--ink)]"
                   }`}
                   onMouseEnter={() => setActive(i)}
+                  onMouseDown={(e) => e.preventDefault()}
                   onClick={() => {
                     setQuery(s);
-                    setOpen(false);
-                    search(s);
+                    launch(s);
                   }}
                 >
                   <span className="text-[var(--faint)]">→</span>
@@ -199,7 +219,7 @@ export function SearchBar({ large = false }: { large?: boolean }) {
             );
           })}
         </ul>
-      )}
+      ) : null}
     </div>
   );
 }
