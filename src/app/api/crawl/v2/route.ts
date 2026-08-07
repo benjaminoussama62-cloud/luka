@@ -17,10 +17,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const body = (await req.json().catch(() => ({}))) as { batch?: number };
-  const batch = Math.min(Math.max(body.batch ?? 8, 2), 20);
+  const batch = Math.min(Math.max(body.batch ?? 4, 1), 10);
 
   seedQueue();
-  const result = await runCrawlBatch(batch, { timeBudgetMs: 20_000 });
+  // Turso remote round-trips make larger batches miss Hobby limits.
+  const result = await runCrawlBatch(batch, { timeBudgetMs: 18_000 });
 
   getDb()
     .prepare(

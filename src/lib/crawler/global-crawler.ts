@@ -1,11 +1,10 @@
-import * as cheerio from "cheerio";
-import { getDb } from "../storage/database";
+import { MEGA_SEEDS } from "./mega-seeds";
+import { canFetch, canonicalUrl } from "./robots";
 import { indexDocument } from "../search-index/fts";
 import { indexImage } from "../verticals/images";
 import { indexProduct } from "../verticals/shopping";
-import { canFetch, canonicalUrl } from "./robots";
-import { MEGA_SEEDS } from "./mega-seeds";
-import { seedFromSitemaps } from "./sitemap";
+import { getDb } from "../storage/database";
+import * as cheerio from "cheerio";
 
 /** Graines mondiales + RDC — file extensible vers milliards via queue */
 export const GLOBAL_SEEDS = MEGA_SEEDS;
@@ -23,7 +22,6 @@ export function enqueueUrl(url: string, priority = 0) {
 
 export function seedQueue() {
   for (const u of GLOBAL_SEEDS) enqueueUrl(u, 10);
-  void seedFromSitemaps(400).catch(() => {});
 }
 
 export function queueStats() {
@@ -77,14 +75,14 @@ export async function runCrawlBatch(
 
       indexDocument(doc);
 
-      for (const link of doc.outLinks.slice(0, 80)) {
+      for (const link of doc.outLinks.slice(0, 20)) {
         enqueueUrl(link, link.includes(".cd") ? 9 : link.includes("wikipedia") ? 6 : 2);
       }
 
-      for (const img of doc.images.slice(0, 15)) {
+      for (const img of doc.images.slice(0, 6)) {
         indexImage(img);
       }
-      for (const prod of doc.products.slice(0, 8)) {
+      for (const prod of doc.products.slice(0, 4)) {
         indexProduct(prod);
       }
 
