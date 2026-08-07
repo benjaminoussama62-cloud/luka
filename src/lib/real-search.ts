@@ -34,6 +34,9 @@ type RawHit = {
   url: string;
   snippet: string;
   source: string;
+  /** Visible publisher label (never news.google.com for aggregated news). */
+  publisher?: string;
+  publisherUrl?: string;
 };
 
 function domainOf(url: string) {
@@ -126,7 +129,28 @@ function credibilityFor(domain: string): number {
 }
 
 function toResult(hit: RawHit, i: number, query: string): SearchResult {
-  const domain = domainOf(hit.url);
+  const rawDomain = domainOf(hit.url);
+  const publisherHost = hit.publisherUrl ? domainOf(hit.publisherUrl) : "";
+  const isGoogleNews =
+    hit.source === "google-news" || rawDomain.includes("news.google");
+  const domain =
+    publisherHost && !publisherHost.includes("news.google")
+      ? publisherHost
+      : hit.publisher?.trim()
+        ? hit.publisher.trim()
+        : isGoogleNews
+          ? "média"
+          : rawDomain;
+  const displayUrl =
+    hit.publisherUrl && !hit.publisherUrl.includes("news.google")
+      ? hit.publisherUrl
+      : hit.url;
+  const favDomain =
+    publisherHost && !publisherHost.includes("news.google")
+      ? publisherHost
+      : domain.includes(".")
+        ? domain
+        : "google.com";
   const congo =
     isCongoHint(query) ||
     domain.endsWith(".cd") ||
@@ -137,25 +161,27 @@ function toResult(hit: RawHit, i: number, query: string): SearchResult {
   return {
     id: `live-${i}-${domain}`,
     title: hit.title,
-    url: hit.url,
+    url: displayUrl,
     domain,
     snippet: cleanSnippet(hit.snippet || `Résultat pour « ${query} » — ${domain}`),
-    favicon: favicon(domain),
+    favicon: favicon(favDomain),
     publishedAt: new Date().toISOString().slice(0, 10),
     lang: /[àâçéèêëîïôùûü]/i.test(hit.title + hit.snippet) ? "fr" : "en",
-    sourceType: domain.includes("wikipedia")
-      ? "wiki"
-      : domain.includes("arxiv") || domain.includes("nature")
-        ? "academic"
-        : domain.includes("gov") || domain.endsWith(".cd")
-          ? "gov"
-          : "web",
+    sourceType: isGoogleNews
+      ? "news"
+      : domain.includes("wikipedia")
+        ? "wiki"
+        : domain.includes("arxiv") || domain.includes("nature")
+          ? "academic"
+          : domain.includes("gov") || domain.endsWith(".cd")
+            ? "gov"
+            : "web",
     suspectedAiSpam: spammy,
     congoRelevant: congo,
     region: congo ? "rdc" : domain.endsWith(".cd") ? "rdc" : "global",
     keywords: query.toLowerCase().split(/\s+/),
     trust: {
-      credibility: spammy ? 28 : credibilityFor(domain),
+      credibility: spammy ? 28 : credibilityFor(publisherHost || (domain.includes(".") ? domain : rawDomain)),
       clickbaitRisk: spammy ? 90 : 12,
       independentVerification: spammy ? 10 : 70,
       humanAuthoredLikelihood: spammy ? 20 : 85,
@@ -340,17 +366,47 @@ async function fetchNewsRss(query: string): Promise<RawHit[]> {
     const items = [...xml.matchAll(/<item>([\s\S]*?)<\/item>/gi)].slice(0, 8);
     return items.map((item) => {
       const block = item[1];
-      const title = block.match(/<title><!\[CDATA\[(.*?)\]\]><\/title>/)?.[1]
+      let title = block.match(/<title><!\[CDATA\[(.*?)\]\]><\/title>/)?.[1]
         ?? block.match(/<title>(.*?)<\/title>/)?.[1]
         ?? "Article";
-      const link = block.match(/<link>(.*?)<\/link>/)?.[1] ?? "#";
-      const desc = cleanSnippet(
+      const link = (block.match(/<link>(.*?)<\/link>/)?.[1] ?? "#").trim();
+      const sourceUrl = block.match(/<source[^>]*url="([^"]+)"/i)?.[1]?.trim();
+      let publisher =
+        block.match(/<source[^>]*>([\s\S]*?)<\/source>/i)?.[1]?.trim()
+        ?? "";
+      // Titles often end with " - Publisher"
+      const dash = title.match(/^(.*?)\s+[-–—]\s+(.+)$/);
+      if (dash) {
+        if (!publisher) publisher = dash[2].trim();
+        title = dash[1].trim();
+      }
+      const rawDesc =
         block.match(/<description><!\[CDATA\[(.*?)\]\]><\/description>/)?.[1]
-          ?? block.match(/<description>(.*?)<\/description>/)?.[1]
-          ?? "",
-        220,
-      );
-      return { title: cleanSnippet(title, 160), url: link, snippet: desc, source: "google-news" };
+        ?? block.match(/<description>(.*?)<\/description>/)?.[1]
+        ?? "";
+      // Prefer a real publisher URL from the description, not news.google.com
+      const hrefs = [...rawDesc.matchAll(/href=["']([^"']+)["']/gi)].map((m) => m[1]);
+      const publisherUrl =
+        sourceUrl ||
+        hrefs.find((h) => /^https?:\/\//i.test(h) && !h.includes("news.google.")) ||
+        undefined;
+      const desc = cleanSnippet(rawDesc, 220);
+      // Avoid duplicate title-as-snippet
+      const snippet =
+        desc && !desc.toLowerCase().startsWith(title.slice(0, 40).toLowerCase())
+          ? desc
+          : publisher
+            ? `Article · ${publisher}`
+            : `Actualité — ${cleanSnippet(title, 80)}`;
+
+      return {
+        title: cleanSnippet(title, 160),
+        url: link,
+        snippet,
+        source: "google-news",
+        publisher: publisher || undefined,
+        publisherUrl,
+      };
     });
   } catch {
     return [];
