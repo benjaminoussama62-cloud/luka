@@ -14,10 +14,10 @@ function siteOrigin(req: Request): string {
 export async function GET(req: Request) {
   const origin = siteOrigin(req);
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
-<OpenSearchDescription xmlns="http://a9.com/-/spec/opensearch/1.1/">
+<OpenSearchDescription xmlns="http://a9.com/-/spec/opensearch/1.1/" xmlns:moz="http://www.mozilla.org/2006/browser/search/">
   <ShortName>AYEBA</ShortName>
   <LongName>AYEBA — Recherche mondiale</LongName>
-  <Description>Moteur de recherche AYEBA · priorité RDC · zéro pub</Description>
+  <Description>Moteur de recherche AYEBA · priorité RDC · zéro pub · résultats rapides</Description>
   <Tags>search congo rdc kinshasa ayebi</Tags>
   <Contact>contact@ayeba.app</Contact>
   <InputEncoding>UTF-8</InputEncoding>
@@ -27,6 +27,7 @@ export async function GET(req: Request) {
   <Image height="16" width="16" type="image/svg+xml">${origin}/brand/ayeba-mark.svg</Image>
   <Url type="text/html" method="get" template="${origin}/?q={searchTerms}"/>
   <Url type="application/x-suggestions+json" method="get" template="${origin}/api/suggest?q={searchTerms}&amp;format=opensearch"/>
+  <moz:SearchForm>${origin}/</moz:SearchForm>
   <Query role="example" searchTerms="Kinshasa" />
   <Query role="example" searchTerms="actualité RDC" />
   <AdultContent>false</AdultContent>

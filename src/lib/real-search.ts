@@ -1,7 +1,6 @@
 import { didYouMean, searchLocalIndex } from "./ayeba-index";
 import { searchAyebiLive, searchAyebiArticlesLive } from "./ayebi/server";
 import { searchCrawlIndex } from "./crawler";
-import { runCrawlBatch } from "./crawler/global-crawler";
 import { panelFromQuery } from "./knowledge-graph/graph";
 import { resolveInstantAnswers } from "./instant-answers";
 import { cacheGet, cacheSet } from "./cache/redis";
@@ -21,6 +20,10 @@ import type {
   SearchResult,
   ShopItem,
 } from "./types";
+
+/** Hard ceiling for any single upstream — users leave engines that feel slow. */
+const UPSTREAM_MS = 3200;
+const UPSTREAM_FAST_MS = 2200;
 
 type FetchOpts = {
   zeroAi: boolean;
@@ -191,12 +194,10 @@ function toResult(hit: RawHit, i: number, query: string): SearchResult {
 }
 
 async function fetchWikipedia(query: string, lang: "fr" | "en"): Promise<RawHit[]> {
-  const controller = new AbortController();
-  const t = setTimeout(() => controller.abort(), 8000);
   try {
     const open = await fetch(
       `https://${lang}.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(query)}&limit=8&namespace=0&format=json&origin=*`,
-      { signal: controller.signal, next: { revalidate: 0 } },
+      { signal: AbortSignal.timeout(UPSTREAM_MS), next: { revalidate: 0 } },
     );
     if (!open.ok) return [];
     const data = (await open.json()) as [string, string[], string[], string[]];
@@ -211,8 +212,6 @@ async function fetchWikipedia(query: string, lang: "fr" | "en"): Promise<RawHit[
     }));
   } catch {
     return [];
-  } finally {
-    clearTimeout(t);
   }
 }
 
@@ -221,7 +220,7 @@ async function fetchWikiSummary(query: string): Promise<KnowledgePanel | undefin
     try {
       const res = await fetch(
         `https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(query)}`,
-        { next: { revalidate: 0 } },
+        { signal: AbortSignal.timeout(UPSTREAM_FAST_MS), next: { revalidate: 0 } },
       );
       if (!res.ok) continue;
       const data = (await res.json()) as {
@@ -258,7 +257,7 @@ async function fetchDuckDuckGo(query: string): Promise<RawHit[]> {
   try {
     const res = await fetch(
       `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`,
-      { next: { revalidate: 0 } },
+      { signal: AbortSignal.timeout(UPSTREAM_MS), next: { revalidate: 0 } },
     );
     if (!res.ok) return [];
     const data = (await res.json()) as {
@@ -309,6 +308,7 @@ async function fetchDuckDuckGoHtml(query: string): Promise<RawHit[]> {
         "User-Agent": "AyebaSearch/1.0",
       },
       body: `q=${encodeURIComponent(query)}`,
+      signal: AbortSignal.timeout(UPSTREAM_MS),
       next: { revalidate: 0 },
     });
     if (!res.ok) return [];
@@ -358,6 +358,7 @@ async function fetchNewsRss(query: string): Promise<RawHit[]> {
       `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=fr&gl=FR&ceid=FR:fr`,
       {
         headers: { "User-Agent": "AyebaSearch/1.0" },
+        signal: AbortSignal.timeout(UPSTREAM_MS),
         next: { revalidate: 0 },
       },
     );
@@ -671,7 +672,7 @@ function buildShopping(query: string): ShopItem[] {
   ];
 }
 
-async function settled<T>(p: Promise<T>, fallback: T, ms = 12000): Promise<T> {
+async function settled<T>(p: Promise<T>, fallback: T, ms = UPSTREAM_MS): Promise<T> {
   try {
     return await Promise.race([
       p,
@@ -687,44 +688,7 @@ export async function liveSearch(query: string, opts: FetchOpts): Promise<Search
   const suggested = didYouMean(rawQuery);
   const q = rawQuery;
 
-  const [
-    wikiFr,
-    wikiEn,
-    ddg,
-    ddgHtml,
-    news,
-    knowledge,
-    nativeImages,
-    nativeVideos,
-    nativeMaps,
-    instantAnswers,
-  ] = await Promise.all([
-    settled(fetchWikipedia(q, "fr"), []),
-    settled(fetchWikipedia(q, "en"), []),
-    settled(fetchDuckDuckGo(q), []),
-    settled(fetchDuckDuckGoHtml(q), []),
-    settled(fetchNewsRss(q), []),
-    settled(fetchWikiSummary(q), undefined),
-    settled(searchImagesNative(q), []),
-    settled(searchVideosNative(q), []),
-    settled(searchMapsNative(isCongoHint(q) ? `${q} République démocratique du Congo` : q), []),
-    settled(resolveInstantAnswers(q), []),
-  ]);
-
-  const ayebiPanel = await searchAyebiLive(q);
-  const ayebiHits = await searchAyebiArticlesLive(q, 5);
-
-  let projectedScale = 0;
-  try {
-    const idxStats = indexStats();
-    projectedScale = idxStats.projectedBillionsScale;
-    if (idxStats.documents < 5000 || idxStats.queuePending < 10000) {
-      runCrawlBatch(40).catch(() => {});
-    }
-  } catch {
-    /* index optional on cold serverless */
-  }
-
+  // Local index first — never wait on crawl. Users switch engines for speed + relevance.
   const cacheKey = `serp:${q}:${opts.sliders.locality}:${opts.sliders.authority}`;
   let rankedFts: Awaited<ReturnType<typeof rankHits>> = [];
   try {
@@ -740,6 +704,18 @@ export async function liveSearch(query: string, opts: FetchOpts): Promise<Search
     rankedFts = [];
   }
 
+  const [ayebiPanel, ayebiHits, crawlHits] = await Promise.all([
+    Promise.resolve().then(() => searchAyebiLive(q)),
+    Promise.resolve().then(() => searchAyebiArticlesLive(q, 5)),
+    Promise.resolve().then(() => {
+      try {
+        return searchCrawlIndex(q);
+      } catch {
+        return [] as Awaited<ReturnType<typeof searchCrawlIndex>>;
+      }
+    }),
+  ]);
+
   const ftsDocs = rankedFts.map((h) => ({
     id: h.docId,
     title: h.title,
@@ -753,11 +729,40 @@ export async function liveSearch(query: string, opts: FetchOpts): Promise<Search
     rankScore: h.score,
   }));
 
-  let crawlHits: Awaited<ReturnType<typeof searchCrawlIndex>> = [];
+  const localCount = ftsDocs.length + ayebiHits.length + crawlHits.length;
+  const richLocal = localCount >= 8;
+  const upstreamMs = richLocal ? UPSTREAM_FAST_MS : UPSTREAM_MS;
+
+  const [
+    wikiFr,
+    wikiEn,
+    ddg,
+    ddgHtml,
+    news,
+    knowledge,
+    nativeImages,
+    nativeVideos,
+    nativeMaps,
+    instantAnswers,
+  ] = await Promise.all([
+    settled(fetchWikipedia(q, "fr"), [], upstreamMs),
+    settled(fetchWikipedia(q, "en"), [], upstreamMs),
+    settled(fetchDuckDuckGo(q), [], upstreamMs),
+    // HTML scrape is slow/flaky — skip when native index already feeds the SERP.
+    richLocal ? Promise.resolve([] as RawHit[]) : settled(fetchDuckDuckGoHtml(q), [], upstreamMs),
+    settled(fetchNewsRss(q), [], upstreamMs),
+    settled(fetchWikiSummary(q), undefined, upstreamMs),
+    settled(searchImagesNative(q), [], upstreamMs),
+    richLocal ? Promise.resolve([] as MediaResult[]) : settled(searchVideosNative(q), [], upstreamMs),
+    settled(searchMapsNative(isCongoHint(q) ? `${q} République démocratique du Congo` : q), [], upstreamMs),
+    settled(resolveInstantAnswers(q), [], upstreamMs),
+  ]);
+
+  let projectedScale = 0;
   try {
-    crawlHits = await searchCrawlIndex(q);
+    projectedScale = indexStats().projectedBillionsScale;
   } catch {
-    crawlHits = [];
+    /* index optional on cold serverless */
   }
 
   const localDocs = [
@@ -793,7 +798,8 @@ export async function liveSearch(query: string, opts: FetchOpts): Promise<Search
     source: "ayeba-index",
   }));
 
-  const raw = [...ddgHtml, ...ddg, ...wikiFr, ...wikiEn, ...news, ...localAsRaw];
+  // Native / Ayebi first — switching engines requires local hits to feel owned, not scraped.
+  const raw = [...localAsRaw, ...ddgHtml, ...ddg, ...wikiFr, ...wikiEn, ...news];
   const seen = new Set<string>();
   const unique = raw.filter((h) => {
     const key = h.url.split("#")[0];

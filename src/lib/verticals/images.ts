@@ -57,7 +57,11 @@ export async function fetchOpenverse(query: string): Promise<MediaResult[]> {
   try {
     const res = await fetch(
       `https://api.openverse.org/v1/images/?q=${encodeURIComponent(query)}&page_size=20`,
-      { headers: { "User-Agent": "AyebaSearch/2.0" }, next: { revalidate: 300 } },
+      {
+        headers: { "User-Agent": "AyebaSearch/2.0" },
+        signal: AbortSignal.timeout(2800),
+        next: { revalidate: 300 },
+      },
     );
     if (!res.ok) return [];
     const data = (await res.json()) as {

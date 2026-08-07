@@ -1,11 +1,12 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { getSessionFromCookies } from "@/lib/auth-server";
 import { pushSearchHistory } from "@/lib/db";
 import { synthesizeWithLlm } from "@/lib/llm";
 import { rateLimit } from "@/lib/rate-limit";
 import { liveSearch } from "@/lib/real-search";
-import { indexStats } from "@/lib/search-index/fts";
 import type { AlgorithmSliders } from "@/lib/types";
+
+export const maxDuration = 15;
 
 export async function POST(req: Request) {
   try {
@@ -29,45 +30,33 @@ export async function POST(req: Request) {
     };
 
     const query = body.query ?? "actualité";
+    const zeroAi = Boolean(body.zeroAi);
     const result = await liveSearch(query, {
       sliders,
-      zeroAi: Boolean(body.zeroAi),
+      zeroAi,
       zeroAds: Boolean(body.zeroAds),
       privateMode: Boolean(body.privateMode),
     });
 
-    const llmSummary = await synthesizeWithLlm(
-      query,
-      result.results,
-      result.knowledge?.summary,
-    );
-    if (llmSummary) {
-      result.aiSummary = llmSummary;
+    // Never block SERP on LLM — race hard; fallback keeps buildSynthesis.
+    if (!zeroAi) {
+      const llmSummary = await Promise.race([
+        synthesizeWithLlm(query, result.results, result.knowledge?.summary),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 1800)),
+      ]);
+      if (llmSummary) result.aiSummary = llmSummary;
     }
 
-    // Side-effects must never fail the search response (serverless FS / DB edges).
-    try {
-      const session = await getSessionFromCookies();
-      if (session && !body.privateMode && query.trim()) {
-        await pushSearchHistory(session.id, query.trim());
+    // History off the critical path (Next.js after).
+    after(async () => {
+      try {
+        if (body.privateMode || !query.trim()) return;
+        const session = await getSessionFromCookies();
+        if (session) await pushSearchHistory(session.id, query.trim());
+      } catch (e) {
+        console.warn("[search] history skipped", e);
       }
-    } catch (e) {
-      console.warn("[search] history skipped", e);
-    }
-
-    try {
-      const idx = indexStats();
-      if (idx.documents < 8000 || idx.queuePending < 20000) {
-        void import("@/lib/crawler/global-crawler")
-          .then(({ runCrawlBatch, seedQueue }) => {
-            seedQueue();
-            return runCrawlBatch(12, { timeBudgetMs: 12_000 });
-          })
-          .catch(console.error);
-      }
-    } catch (e) {
-      console.warn("[search] crawl kick skipped", e);
-    }
+    });
 
     return NextResponse.json(result);
   } catch (e) {

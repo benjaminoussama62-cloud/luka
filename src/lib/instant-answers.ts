@@ -368,25 +368,30 @@ export async function resolveInstantAnswers(query: string): Promise<InstantAnswe
     if (w) out.push(w);
   }
 
-  const rates = await fetchFxRates();
-  const fx = tryFx(q, rates);
-  if (fx) out.push(fx);
+  const wantsFx =
+    /\b(change|devise|taux|exchange|franc congolais|cdf|usd|eur|dollar|euro|gbp|bureau de change)\b/i.test(q) ||
+    /\b\d+[\s,]*(usd|eur|cdf|fc|\$|€)\b/i.test(q);
+  if (wantsFx) {
+    const rates = await fetchFxRates();
+    const fx = tryFx(q, rates);
+    if (fx) out.push(fx);
 
-  if (/\b(change|devise|taux|exchange|franc congolais|cdf|bureau de change)\b/i.test(q) && rates && !fx) {
-    out.push({
-      kind: "fx",
-      title: "Tableau de change · RDC",
-      lines: [
-        { label: "1 USD", value: `${fmt(rates.cdf, 2)} FC` },
-        { label: "1 EUR", value: rates.eur ? `${fmt(rates.cdf / rates.eur, 2)} FC` : "—" },
-        { label: "1 GBP", value: rates.gbp ? `${fmt(rates.cdf / rates.gbp, 2)} FC` : "—" },
-        { label: "1 ZAR", value: rates.zar ? `${fmt(rates.cdf / rates.zar, 2)} FC` : "—" },
-        { label: "1 CNY", value: rates.cny ? `${fmt(rates.cdf / rates.cny, 2)} FC` : "—" },
-      ],
-      footnote: "Taux live · clic pour convertir un montant",
-      marketQuoteId: "usd-cdf",
-      defaultAmount: "100",
-    });
+    if (/\b(change|devise|taux|exchange|franc congolais|cdf|bureau de change)\b/i.test(q) && rates && !fx) {
+      out.push({
+        kind: "fx",
+        title: "Tableau de change · RDC",
+        lines: [
+          { label: "1 USD", value: `${fmt(rates.cdf, 2)} FC` },
+          { label: "1 EUR", value: rates.eur ? `${fmt(rates.cdf / rates.eur, 2)} FC` : "—" },
+          { label: "1 GBP", value: rates.gbp ? `${fmt(rates.cdf / rates.gbp, 2)} FC` : "—" },
+          { label: "1 ZAR", value: rates.zar ? `${fmt(rates.cdf / rates.zar, 2)} FC` : "—" },
+          { label: "1 CNY", value: rates.cny ? `${fmt(rates.cdf / rates.cny, 2)} FC` : "—" },
+        ],
+        footnote: "Taux live · clic pour convertir un montant",
+        marketQuoteId: "usd-cdf",
+        defaultAmount: "100",
+      });
+    }
   }
 
   if (/\b(prix|carburant|essence|gasoil|station)\b/i.test(q) && !fuel) {

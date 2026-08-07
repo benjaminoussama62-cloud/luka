@@ -64,7 +64,7 @@ export async function synthesizeWithLlm(
           },
         ],
       }),
-      signal: AbortSignal.timeout(6000),
+      signal: AbortSignal.timeout(2800),
     });
 
     if (!res.ok) {

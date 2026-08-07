@@ -13,6 +13,7 @@ export async function fetchNominatimDeep(query: string, limit = 16): Promise<Map
       `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=${limit}&addressdetails=1&extratags=1`,
       {
         headers: { "User-Agent": "AyebaSearch/2.0 (maps; contact@ayeba.app)" },
+        signal: AbortSignal.timeout(2800),
         next: { revalidate: 3600 },
       },
     );
