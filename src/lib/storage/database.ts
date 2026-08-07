@@ -1,5 +1,3 @@
-import BetterSqlite3 from "better-sqlite3";
-import Libsql from "libsql";
 import { mkdirSync } from "fs";
 import path from "path";
 
@@ -23,18 +21,37 @@ function isServerlessRuntime() {
   );
 }
 
-const DATA_DIR = isServerlessRuntime()
-  ? path.join("/tmp", "ayeba-data")
-  : path.join(process.cwd(), "data");
+const DATA_DIR = path.join(
+  isServerlessRuntime() ? "/tmp" : process.cwd(),
+  isServerlessRuntime() ? "ayeba-data" : "data",
+);
 const LOCAL_DB_PATH = path.join(DATA_DIR, "ayeba.db");
 
 let _db: AyebaDatabase | null = null;
-let _dbMode: "turso" | "vercel-tmp" | "local" = "local";
+let _dbMode: "turso" | "vercel-tmp" | "memory" | "local" = "local";
 
-export function getDbMode(): "turso" | "vercel-tmp" | "local" {
+export function getDbMode(): "turso" | "vercel-tmp" | "memory" | "local" {
   if (process.env.TURSO_DATABASE_URL) return "turso";
-  if (isServerlessRuntime()) return "vercel-tmp";
+  if (isServerlessRuntime()) {
+    // Native better-sqlite3 is unreliable on Vercel Hobby without Turso.
+    // Prefer an in-memory stub so search (DDG/Wikipedia) still works.
+    return process.env.AYEBA_FORCE_SQLITE_TMP === "1" ? "vercel-tmp" : "memory";
+  }
   return "local";
+}
+
+/** No-op SQL surface — enough for callers that tolerate empty results. */
+function createMemoryDb(): AyebaDatabase {
+  const emptyStmt = {
+    run: () => ({ changes: 0, lastInsertRowid: 0 }),
+    get: () => undefined,
+    all: () => [],
+  };
+  return {
+    exec: () => undefined,
+    prepare: () => emptyStmt,
+    pragma: () => undefined,
+  };
 }
 
 export function getDb(): AyebaDatabase {
@@ -43,29 +60,42 @@ export function getDb(): AyebaDatabase {
   _dbMode = getDbMode();
 
   try {
-    if (_dbMode === "turso") {
-      const url = process.env.TURSO_DATABASE_URL!;
-      const authToken = process.env.TURSO_AUTH_TOKEN;
-      const opts = authToken ? ({ authToken } as ConstructorParameters<typeof Libsql>[1]) : undefined;
-      _db = new Libsql(url, opts) as unknown as AyebaDatabase;
-    } else {
-      mkdirSync(DATA_DIR, { recursive: true });
-      const dbPath = _dbMode === "vercel-tmp" ? path.join("/tmp", "ayeba.db") : LOCAL_DB_PATH;
-      _db = new BetterSqlite3(dbPath) as unknown as AyebaDatabase;
-      try {
-        _db.pragma?.("journal_mode = WAL");
-        _db.pragma?.("foreign_keys = ON");
-      } catch {
-        /* ignore pragma failures on constrained FS */
-      }
+    if (_dbMode === "memory") {
+      _db = createMemoryDb();
+      return _db;
     }
 
+    if (_dbMode === "turso") {
+      // Dynamic require — avoid loading native bindings unless Turso is configured.
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const Libsql = require("libsql") as typeof import("libsql");
+      const url = process.env.TURSO_DATABASE_URL!;
+      const authToken = process.env.TURSO_AUTH_TOKEN;
+      const opts = authToken ? { authToken } : undefined;
+      _db = new Libsql(url, opts as never) as unknown as AyebaDatabase;
+      migrate(_db);
+      return _db;
+    }
+
+    // Local / optional vercel-tmp
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const BetterSqlite3 = require("better-sqlite3") as typeof import("better-sqlite3");
+    mkdirSync(DATA_DIR, { recursive: true });
+    const dbPath = _dbMode === "vercel-tmp" ? path.join("/tmp", "ayeba.db") : LOCAL_DB_PATH;
+    _db = new BetterSqlite3(dbPath) as unknown as AyebaDatabase;
+    try {
+      _db.pragma?.("journal_mode = WAL");
+      _db.pragma?.("foreign_keys = ON");
+    } catch {
+      /* ignore */
+    }
     migrate(_db);
     return _db;
   } catch (e) {
-    console.error("[db] open failed", _dbMode, e);
-    _db = null;
-    throw e;
+    console.error("[db] open failed, falling back to memory", _dbMode, e);
+    _dbMode = "memory";
+    _db = createMemoryDb();
+    return _db;
   }
 }
 
@@ -357,8 +387,8 @@ function seedMlWeights(db: AyebaDatabase) {
 }
 
 function seedCategories(db: AyebaDatabase) {
-  const count = db.prepare("SELECT COUNT(*) as c FROM ayebi_categories").get() as { c: number };
-  if (count.c > 0) return;
+  const count = db.prepare("SELECT COUNT(*) as c FROM ayebi_categories").get() as { c: number } | undefined;
+  if (count && count.c > 0) return;
 
   const cats = [
     { id: "rdc", label: "République démocratique du Congo", parent: null as string | null },

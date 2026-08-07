@@ -42,7 +42,13 @@ export default function StatusPage() {
 
   const mode = currentDbMode();
   const modeLabel =
-    mode === "turso" ? "Turso (durable)" : mode === "vercel-tmp" ? "Vercel /tmp (éphémère)" : "SQLite local";
+    mode === "turso"
+      ? "Turso (durable)"
+      : mode === "memory"
+        ? "Mémoire (Vercel Hobby)"
+        : mode === "vercel-tmp"
+          ? "Vercel /tmp (éphémère)"
+          : "SQLite local";
 
   return (
     <>
