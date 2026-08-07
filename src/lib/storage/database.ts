@@ -28,10 +28,20 @@ const DATA_DIR = path.join(
 const LOCAL_DB_PATH = path.join(DATA_DIR, "ayeba.db");
 
 let _db: AyebaDatabase | null = null;
-let _dbMode: "turso" | "vercel-tmp" | "memory" | "local" = "local";
+let _dbMode: "turso" | "vercel-tmp" | "memory" | "local" | null = null;
+
+function tursoUrl() {
+  const raw = process.env.TURSO_DATABASE_URL?.trim();
+  if (!raw) return "";
+  // vercel env pull may wrap values in quotes
+  const url = raw.replace(/^['"]|['"]$/g, "");
+  // Guard against redacted / placeholder values becoming local SQLite files.
+  if (!/^libsql:\/\//i.test(url) && !/^https:\/\//i.test(url)) return "";
+  return url;
+}
 
 export function getDbMode(): "turso" | "vercel-tmp" | "memory" | "local" {
-  if (process.env.TURSO_DATABASE_URL) return "turso";
+  if (tursoUrl()) return "turso";
   if (isServerlessRuntime()) {
     // Native better-sqlite3 is unreliable on Vercel Hobby without Turso.
     // Prefer an in-memory stub so search (DDG/Wikipedia) still works.
@@ -70,8 +80,8 @@ export function getDb(): AyebaDatabase {
       // Dynamic require — avoid loading native bindings unless Turso is configured.
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const Libsql = require("libsql") as typeof import("libsql");
-      const url = process.env.TURSO_DATABASE_URL!;
-      const authToken = process.env.TURSO_AUTH_TOKEN;
+      const url = tursoUrl();
+      const authToken = process.env.TURSO_AUTH_TOKEN?.trim().replace(/^['"]|['"]$/g, "");
       const opts = authToken ? { authToken } : undefined;
       _db = new Libsql(url, opts as never) as unknown as AyebaDatabase;
       migrate(_db);
@@ -101,7 +111,7 @@ export function getDb(): AyebaDatabase {
 }
 
 export function currentDbMode() {
-  return _dbMode || getDbMode();
+  return _dbMode ?? getDbMode();
 }
 
 function migrate(db: AyebaDatabase) {

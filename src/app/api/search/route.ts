@@ -61,7 +61,7 @@ export async function POST(req: Request) {
         void import("@/lib/crawler/global-crawler")
           .then(({ runCrawlBatch, seedQueue }) => {
             seedQueue();
-            return runCrawlBatch(40);
+            return runCrawlBatch(12, { timeBudgetMs: 12_000 });
           })
           .catch(console.error);
       }

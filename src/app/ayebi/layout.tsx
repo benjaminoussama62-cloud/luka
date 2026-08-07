@@ -21,7 +21,7 @@ function maybeStartBulkImport() {
       .get();
     if (ran) return;
 
-    void bulkImportRdc({ maxPerCategory: 120, delayMs: 60 }).catch(() => {});
+    void bulkImportRdc({ maxPerCategory: 80, maxImport: 40, delayMs: 40 }).catch(() => {});
   } catch {
     /* DB optional on serverless */
   }

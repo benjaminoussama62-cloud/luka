@@ -37,6 +37,12 @@ Manual trigger:
 curl -H "Authorization: Bearer $CRON_SECRET" https://ayeba.app/api/cron/crawl
 ```
 
+First fill (local machine → Turso, after `vercel env pull .env.local`):
+```bash
+npm run jobs:quick   # small batch
+npm run jobs         # larger crawl + Ayebi chunk
+```
+
 ## Checks
 
 - https://ayeba.app
@@ -44,3 +50,4 @@ curl -H "Authorization: Bearer $CRON_SECRET" https://ayeba.app/api/cron/crawl
 - https://ayeba.app/opensearch
 - https://ayeba.app/status
 - https://ayeba.app/privacy
+- https://ayeba.app/api/index/stats

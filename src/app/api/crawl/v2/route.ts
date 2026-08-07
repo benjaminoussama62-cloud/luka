@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { indexStats, searchIndex } from "@/lib/search-index/fts";
 import { queueStats, runCrawlBatch, seedQueue } from "@/lib/crawler/global-crawler";
 import { getDb } from "@/lib/storage/database";
+import { isCronAuthorized } from "@/lib/cron-auth";
+
+export const maxDuration = 60;
 
 export async function GET() {
   const stats = indexStats();
@@ -10,11 +13,14 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  if (!isCronAuthorized(req)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   const body = (await req.json().catch(() => ({}))) as { batch?: number };
-  const batch = Math.min(Math.max(body.batch ?? 80, 10), 200);
+  const batch = Math.min(Math.max(body.batch ?? 8, 2), 20);
 
   seedQueue();
-  const result = await runCrawlBatch(batch);
+  const result = await runCrawlBatch(batch, { timeBudgetMs: 20_000 });
 
   getDb()
     .prepare(

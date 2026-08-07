@@ -223,9 +223,15 @@ export type BulkImportResult = {
   titlesDiscovered: number;
 };
 
-export async function bulkImportRdc(opts?: { maxPerCategory?: number; delayMs?: number }): Promise<BulkImportResult> {
+export async function bulkImportRdc(opts?: {
+  maxPerCategory?: number;
+  delayMs?: number;
+  /** Cap articles imported this run (serverless / first fill). */
+  maxImport?: number;
+}): Promise<BulkImportResult> {
   const maxPer = opts?.maxPerCategory ?? 250;
   const delay = opts?.delayMs ?? 80;
+  const maxImport = opts?.maxImport ?? Number.POSITIVE_INFINITY;
   let imported = 0;
   let skipped = 0;
   let errors = 0;
@@ -237,19 +243,32 @@ export async function bulkImportRdc(opts?: { maxPerCategory?: number; delayMs?: 
 
   const allTitles = new Map<string, AyebiCategory>();
 
-  for (const cat of RDC_CATEGORIES) {
+  // Chunked serverless runs: discover less, import sooner.
+  const cats =
+    Number.isFinite(maxImport) && maxImport <= 80
+      ? RDC_CATEGORIES.slice(0, 6)
+      : RDC_CATEGORIES;
+
+  for (const cat of cats) {
     categoriesProcessed++;
-    const limit = Math.min(cat.maxArticles, maxPer);
+    const limit = Math.min(
+      cat.maxArticles,
+      maxPer,
+      Number.isFinite(maxImport) ? Math.max(20, Math.ceil(maxImport / 2)) : maxPer,
+    );
     const titles = await listCategoryMembers(cat.wikiCategory, limit);
     for (const t of titles) allTitles.set(t, cat.ayebiCategory);
+    if (Number.isFinite(maxImport) && allTitles.size >= maxImport * 3) break;
   }
 
-  const linkTitles = await listRdcArticleLinks(400);
-  for (const t of linkTitles) {
-    if (!allTitles.has(t)) allTitles.set(t, guessCategory(t));
+  if (!(Number.isFinite(maxImport) && maxImport <= 40)) {
+    const linkTitles = await listRdcArticleLinks(400);
+    for (const t of linkTitles) {
+      if (!allTitles.has(t)) allTitles.set(t, guessCategory(t));
+    }
   }
 
-  for (const q of SEARCH_QUERIES) {
+  for (const q of SEARCH_QUERIES.slice(0, Number.isFinite(maxImport) && maxImport <= 40 ? 8 : SEARCH_QUERIES.length)) {
     const found = await searchWikiTitles(q, 30);
     for (const t of found) {
       if (!allTitles.has(t)) allTitles.set(t, guessCategory(t));
@@ -257,6 +276,7 @@ export async function bulkImportRdc(opts?: { maxPerCategory?: number; delayMs?: 
   }
 
   for (const [title, category] of allTitles) {
+    if (imported >= maxImport) break;
     const result = await importTitle(title, category, "wikipedia-fr", existingSlugs, delay);
     if (result === "imported") imported++;
     else if (result === "skipped") skipped++;

@@ -37,11 +37,16 @@ export function queueStats() {
 
 type CrawlResult = { indexed: number; errors: number; remaining: number };
 
-export async function runCrawlBatch(maxPages = 80): Promise<CrawlResult> {
+export async function runCrawlBatch(
+  maxPages = 80,
+  opts?: { timeBudgetMs?: number },
+): Promise<CrawlResult> {
   seedQueue();
   const db = getDb();
   let indexed = 0;
   let errors = 0;
+  const budgetMs = opts?.timeBudgetMs ?? 0;
+  const deadline = budgetMs > 0 ? Date.now() + budgetMs : 0;
 
   const pending = db
     .prepare(
@@ -50,6 +55,8 @@ export async function runCrawlBatch(maxPages = 80): Promise<CrawlResult> {
     .all(maxPages) as { id: number; url: string }[];
 
   for (const item of pending) {
+    if (deadline && Date.now() >= deadline) break;
+
     db.prepare("UPDATE crawl_queue SET status='processing' WHERE id=?").run(item.id);
     try {
       const ok = await canFetch(item.url, USER_AGENT);
@@ -59,7 +66,7 @@ export async function runCrawlBatch(maxPages = 80): Promise<CrawlResult> {
       }
 
       const res = await fetch(item.url, {
-        signal: AbortSignal.timeout(12000),
+        signal: AbortSignal.timeout(10000),
         headers: { "User-Agent": USER_AGENT, Accept: "text/html" },
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);

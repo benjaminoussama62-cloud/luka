@@ -2,13 +2,7 @@ import { NextResponse } from "next/server";
 import { queueStats } from "@/lib/crawler/global-crawler";
 import { indexStats } from "@/lib/search-index/fts";
 import { currentDbMode, getDb } from "@/lib/storage/database";
-
-function isAuthorized(req: Request): boolean {
-  if (req.headers.get("x-vercel-cron") === "1") return true;
-  const secret = process.env.CRON_SECRET;
-  if (!secret) return false;
-  return req.headers.get("authorization") === `Bearer ${secret}`;
-}
+import { isCronAuthorized } from "@/lib/cron-auth";
 
 function healthPayload() {
   getDb();
@@ -23,14 +17,14 @@ function healthPayload() {
 }
 
 export async function GET(req: Request) {
-  if (!isAuthorized(req)) {
+  if (!isCronAuthorized(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   return NextResponse.json(healthPayload());
 }
 
 export async function POST(req: Request) {
-  if (!isAuthorized(req)) {
+  if (!isCronAuthorized(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   return NextResponse.json(healthPayload());

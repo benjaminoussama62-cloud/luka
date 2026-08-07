@@ -3,22 +3,17 @@ import { runCrawlBatch, seedQueue, queueStats } from "@/lib/crawler/global-crawl
 import { seedFromSitemaps } from "@/lib/crawler/sitemap";
 import { indexStats } from "@/lib/search-index/fts";
 import { getDb } from "@/lib/storage/database";
+import { isCronAuthorized } from "@/lib/cron-auth";
 
-export const maxDuration = 300;
-
-function isAuthorized(req: Request): boolean {
-  if (req.headers.get("x-vercel-cron") === "1") return true;
-  const secret = process.env.CRON_SECRET;
-  if (!secret) return false;
-  return req.headers.get("authorization") === `Bearer ${secret}`;
-}
+export const maxDuration = 60;
 
 async function runCronCrawl() {
   const startedAt = new Date().toISOString();
 
   seedQueue();
-  const sitemapUrls = await seedFromSitemaps(200);
-  const result = await runCrawlBatch(80);
+  const sitemapUrls = await seedFromSitemaps(120);
+  // Hobby functions ≈60s — time-budgeted batch keeps responses reliable.
+  const result = await runCrawlBatch(25, { timeBudgetMs: 25_000 });
 
   getDb()
     .prepare(
@@ -44,7 +39,7 @@ async function runCronCrawl() {
 }
 
 export async function GET(req: Request) {
-  if (!isAuthorized(req)) {
+  if (!isCronAuthorized(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   try {
@@ -56,7 +51,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  if (!isAuthorized(req)) {
+  if (!isCronAuthorized(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   try {

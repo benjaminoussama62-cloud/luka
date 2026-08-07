@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "jobs": "npx tsx scripts/run-jobs.ts",
+    "jobs": "node --env-file=.env.local --import tsx scripts/run-jobs.ts",
+    "jobs:quick": "node --env-file=.env.local --import tsx scripts/run-jobs.ts --quick",
     "verify": "npx tsx scripts/verify-http.ts"
   },
   "dependencies": {
@@ -38,6 +39,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.12",
     "tailwindcss": "^4",
+    "tsx": "^4.23.11",
     "typescript": "^5"
   }
 }
