@@ -31,7 +31,9 @@ export function PwaRegister() {
       if ("caches" in window) {
         const keys = await caches.keys();
         await Promise.all(
-          keys.filter((k) => k === "ayeba-v1" || k === "ayeba-v2").map((k) => caches.delete(k)),
+          keys
+            .filter((k) => k === "ayeba-v1" || k === "ayeba-v2" || k === "ayeba-v3")
+            .map((k) => caches.delete(k)),
         );
       }
 

@@ -1,5 +1,5 @@
 /* Ayeba PWA — assets only. Never intercept page navigations (breaks Google in-app browsers). */
-const CACHE = "ayeba-v3";
+const CACHE = "ayeba-v4";
 const PRECACHE = ["/manifest.webmanifest", "/brand/ayeba-mark.svg"];
 
 self.addEventListener("install", (event) => {

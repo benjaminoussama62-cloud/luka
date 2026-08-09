@@ -26,6 +26,7 @@ import { ResultCard } from "./ResultCard";
 import { SearchBar } from "./SearchBar";
 import { ToolsMenu } from "./ToolsMenu";
 import { TrustMeters } from "./TrustBadges";
+import { NewWindowButton } from "@/components/shell/NewWindowButton";
 
 const TAB_KEYS: SearchTab[] = ["web", "images", "videos", "news", "maps", "shopping", "community"];
 
@@ -341,6 +342,7 @@ export function AyebaApp() {
               header={
                 <>
                   <LangSwitch />
+                  <NewWindowButton />
                   <ProfileMenu />
                 </>
               }
@@ -369,6 +371,7 @@ export function AyebaApp() {
               <div className="ayeba-serp-lang">
                 <LangSwitch />
               </div>
+              <NewWindowButton />
               <ToolsMenu />
               <ProfileMenu />
             </div>

@@ -3,8 +3,20 @@
   "short_name": "AYEBA",
   "description": "Moteur de recherche mondial · Ayebi encyclopédie RDC · priorité Congo",
   "start_url": "/",
+  "scope": "/",
+  "id": "/",
   "display": "standalone",
-  "orientation": "portrait-primary",
+  "display_override": ["tabbed", "standalone", "minimal-ui"],
+  "tab_strip": {
+    "home_tab": {
+      "url": "/",
+      "icons": [{ "src": "/brand/ayeba-mark.svg", "sizes": "any" }]
+    },
+    "new_tab_button": {
+      "url": "/"
+    }
+  },
+  "orientation": "any",
   "background_color": "#050507",
   "theme_color": "#00b4ff",
   "lang": "fr",
@@ -12,7 +24,8 @@
   "shortcuts": [
     { "name": "Rechercher", "url": "/", "description": "Accueil recherche" },
     { "name": "Ayebi", "url": "/ayebi", "description": "Encyclopédie RDC" },
-    { "name": "Marchés", "url": "/marches", "description": "Cours & devises" }
+    { "name": "Marchés", "url": "/marches", "description": "Cours & devises" },
+    { "name": "Nouvel onglet", "url": "/", "description": "Ouvrir une nouvelle recherche" }
   ],
   "icons": [
     {

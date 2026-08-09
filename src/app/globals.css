@@ -302,6 +302,43 @@ body {
   outline: none;
 }
 
+.ayeba-new-window {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  height: 2.5rem;
+  padding: 0 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(12px);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: border-color 0.3s, color 0.3s, background 0.3s;
+}
+
+.ayeba-new-window:hover {
+  border-color: var(--line-bright);
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+@media (max-width: 639px) {
+  .ayeba-new-window-label {
+    display: none;
+  }
+
+  .ayeba-new-window {
+    width: 2.5rem;
+    padding: 0;
+    justify-content: center;
+  }
+}
+
 .hud-corner {
   position: fixed;
   z-index: 5;
