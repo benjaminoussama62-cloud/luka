@@ -1011,13 +1011,13 @@ select option {
 
 .ayeba-home-header {
   position: fixed;
-  top: 0;
+  top: 2.45rem;
   right: 0;
   z-index: 40;
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 1rem 1.25rem;
+  padding: 0.75rem 1.25rem;
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.6s var(--ease-out);
@@ -1658,23 +1658,14 @@ select option {
   display: block;
 }
 
-.ayeba-shortcut-meta {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.12rem;
-  width: 100%;
-  min-width: 0;
-}
-
 .ayeba-shortcut-label {
   width: 100%;
   color: #0f172a;
   font-family: var(--font-brand), system-ui, sans-serif;
-  font-size: 0.62rem;
+  font-size: 0.68rem;
   font-weight: 800;
   letter-spacing: 0.01em;
-  line-height: 1.2;
+  line-height: 1.15;
   text-align: center;
   text-transform: uppercase;
   white-space: normal;
@@ -1683,16 +1674,288 @@ select option {
   hyphens: auto;
 }
 
-.ayeba-shortcut-hint {
-  color: #64748b;
-  font-size: 0.55rem;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  text-align: center;
-  white-space: nowrap;
+.ayeba-shortcut-slot {
+  position: relative;
+}
+
+.ayeba-shortcut-tile {
+  width: 100%;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+}
+
+.ayeba-shortcut-add {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.06) 100%);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.14) inset;
+}
+
+.ayeba-shortcut-add .ayeba-shortcut-label {
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.ayeba-shortcut-add-mark {
+  display: grid;
+  place-items: center;
+  width: 3.15rem;
+  height: 3.15rem;
+  border-radius: 0.9rem;
+  border: 1px dashed rgba(255, 255, 255, 0.35);
+  color: #fff;
+  font-size: 1.6rem;
+  font-weight: 300;
+  line-height: 1;
+}
+
+.ayeba-shortcut-remove {
+  position: absolute;
+  top: 0.2rem;
+  right: 0.2rem;
+  width: 1.2rem;
+  height: 1.2rem;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.75);
+  color: #fff;
+  font-size: 0.85rem;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.ayeba-shortcut-slot:hover .ayeba-shortcut-remove {
+  opacity: 1;
+}
+
+.ayeba-shortcut-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(8px);
+}
+
+.ayeba-shortcut-dialog {
+  width: min(100%, 22rem);
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  padding: 1.25rem;
+  border-radius: 1.1rem;
+  background: #111827;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
+}
+
+.ayeba-shortcut-dialog h3 {
+  margin: 0;
+  color: #fff;
+  font-size: 1.05rem;
+}
+
+.ayeba-shortcut-dialog label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  color: #94a3b8;
+  font-size: 0.75rem;
+}
+
+.ayeba-shortcut-dialog input {
+  height: 2.5rem;
+  padding: 0 0.75rem;
+  border-radius: 0.7rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: #fff;
+  outline: none;
+}
+
+.ayeba-shortcut-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.ayeba-shortcut-error {
+  margin: 0;
+  color: #f87171;
+  font-size: 0.75rem;
+}
+
+/* Edge-like in-app tab bar */
+.ayeba-tabbar {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 2.4rem;
+  padding: 0.35rem 0.45rem 0;
+  background: linear-gradient(180deg, #1a1b22 0%, #12131a 100%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.ayeba-tabbar-scroll {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  gap: 0.25rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.ayeba-tabbar-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.ayeba-app-tab {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 7rem;
+  max-width: 14rem;
+  height: 2rem;
+  padding: 0 0.55rem 0 0.7rem;
+  border-radius: 0.55rem 0.55rem 0 0;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.65);
+  cursor: pointer;
+  user-select: none;
+}
+
+.ayeba-app-tab.active {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.ayeba-app-tab-title {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 100%;
+  white-space: nowrap;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.ayeba-app-tab-close {
+  width: 1.1rem;
+  height: 1.1rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.55;
+  line-height: 1;
+}
+
+.ayeba-app-tab-close:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.ayeba-tabbar-new {
+  flex-shrink: 0;
+  width: 1.85rem;
+  height: 1.85rem;
+  margin-bottom: 0.15rem;
+  border: 0;
+  border-radius: 0.45rem;
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  font-size: 1.15rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.ayeba-tabbar-new:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.ayeba-inapp-browser {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  height: calc(100dvh - 2.4rem);
+  background: #0a0a0c;
+}
+
+.ayeba-inapp-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.65rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.ayeba-inapp-title {
+  flex-shrink: 0;
+  max-width: 8rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.ayeba-inapp-url {
+  flex: 1;
+  min-width: 0;
+  height: 1.9rem;
+  padding: 0 0.7rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 0.72rem;
+}
+
+.ayeba-inapp-reload {
+  flex-shrink: 0;
+  height: 1.9rem;
+  padding: 0 0.7rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  font-size: 0.68rem;
+  cursor: pointer;
+}
+
+.ayeba-inapp-frame-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+.ayeba-inapp-frame {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #fff;
+}
+
+.ayeba-inapp-hint {
+  position: absolute;
+  left: 0.75rem;
+  right: 0.75rem;
+  bottom: 0.75rem;
+  z-index: 2;
+  padding: 0.55rem 0.75rem;
+  border-radius: 0.7rem;
+  background: rgba(15, 23, 42, 0.92);
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 0.72rem;
+  pointer-events: none;
 }
 
 @media (min-width: 480px) {

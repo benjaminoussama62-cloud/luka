@@ -27,6 +27,9 @@ import { SearchBar } from "./SearchBar";
 import { ToolsMenu } from "./ToolsMenu";
 import { TrustMeters } from "./TrustBadges";
 import { NewWindowButton } from "@/components/shell/NewWindowButton";
+import { AppTabBar } from "@/components/shell/AppTabBar";
+import { InAppBrowser } from "@/components/shell/InAppBrowser";
+import { BrowserShellProvider, useBrowserShell } from "@/lib/browser-shell";
 
 const TAB_KEYS: SearchTab[] = ["web", "images", "videos", "news", "maps", "shopping", "community"];
 
@@ -101,6 +104,7 @@ function KnowledgeCard() {
 
 function FeaturedSnippetCard() {
   const { response } = useAyeba();
+  const { openWebTab } = useBrowserShell();
   const sn = response?.featuredSnippet;
   if (!sn) return null;
   const isCalc = sn.url === "#calc";
@@ -115,9 +119,13 @@ function FeaturedSnippetCard() {
     return <div className="ayeba-snippet mb-8 block animate-rise p-5 sm:p-7">{inner}</div>;
   }
   return (
-    <a href={sn.url} target="_blank" rel="noreferrer" className="ayeba-snippet mb-8 block animate-rise p-5 sm:p-7">
+    <button
+      type="button"
+      onClick={() => openWebTab(sn.url, sn.title)}
+      className="ayeba-snippet mb-8 block w-full animate-rise p-5 text-left sm:p-7"
+    >
       {inner}
-    </a>
+    </button>
   );
 }
 
@@ -139,6 +147,7 @@ function LocalPack({ places }: { places: MapPlace[] }) {
 
 function ImageRail({ items }: { items: MediaResult[] }) {
   const { setTab } = useAyeba();
+  const { openWebTab } = useBrowserShell();
   const pics = items.filter((m) => m.thumb.startsWith("http")).slice(0, 8);
   if (!pics.length) return null;
   return (
@@ -149,10 +158,15 @@ function ImageRail({ items }: { items: MediaResult[] }) {
       </div>
       <div className="ayeba-image-rail">
         {pics.map((m) => (
-          <a key={m.id} href={m.url} target="_blank" rel="noreferrer" className="ayeba-panel overflow-hidden">
+          <button
+            key={m.id}
+            type="button"
+            onClick={() => openWebTab(m.url, m.title)}
+            className="ayeba-panel overflow-hidden text-left"
+          >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={m.thumb} alt="" className="h-28 w-full object-cover" />
-          </a>
+          </button>
         ))}
       </div>
     </section>
@@ -329,14 +343,37 @@ function Modals() {
 }
 
 export function AyebaApp() {
+  return (
+    <BrowserShellProvider>
+      <AyebaAppBody />
+    </BrowserShellProvider>
+  );
+}
+
+function AyebaAppBody() {
   const { hasSearched, response, searching, searchError, search, tab, setTab, splitScreen, resetHome, setDeepResearchOpen } = useAyeba();
   const { t } = useI18n();
+  const { activeTab } = useBrowserShell();
+
+  if (activeTab.kind === "web") {
+    return (
+      <>
+        <Stage />
+        <div className="relative z-10 flex min-h-dvh flex-col">
+          <AppTabBar />
+          <InAppBrowser url={activeTab.url} title={activeTab.title} />
+        </div>
+        <Modals />
+      </>
+    );
+  }
 
   if (!hasSearched) {
     return (
       <>
         <Stage home />
         <div className="relative z-10 flex min-h-dvh flex-col">
+          <AppTabBar />
           <main className="ayeba-home-shell mx-auto flex w-full max-w-xl flex-1 flex-col px-4 pb-12">
             <HomeSplashGate
               header={
@@ -359,6 +396,7 @@ export function AyebaApp() {
     <>
       <Stage />
       <div className="relative z-10 min-h-dvh pb-12">
+        <AppTabBar />
         <header className="ayeba-chrome-header ayeba-serp-header">
           <div className="ayeba-serp-header-inner">
             <button type="button" onClick={resetHome} className="ayeba-serp-brand shrink-0" aria-label="Accueil">

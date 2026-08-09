@@ -1,56 +1,47 @@
 "use client";
 
-import { useEffect } from "react";
-
-function isInstalledAyebaShell() {
-  if (typeof window === "undefined") return false;
-  const nav = window.navigator as Navigator & { standalone?: boolean };
-  return (
-    nav.standalone === true ||
-    window.matchMedia("(display-mode: standalone)").matches ||
-    window.matchMedia("(display-mode: tabbed)").matches ||
-    window.matchMedia("(display-mode: minimal-ui)").matches
-  );
-}
-
-/** Ouvre une nouvelle fenêtre / onglet Ayeba (comportement type navigateur). */
-export function openAyebaWindow(path = "/") {
-  const url = new URL(path, window.location.origin).toString();
-  window.open(url, "_blank", "noopener,noreferrer");
-}
+import { useCallback, useEffect } from "react";
+import { useBrowserShell } from "@/lib/browser-shell";
+import { useAyeba } from "@/lib/store";
 
 /**
- * Bouton + raccourcis Ctrl/Cmd+T et Ctrl/Cmd+N (app installée)
- * pour ouvrir plusieurs fenêtres comme Edge / Chrome / Yandex.
+ * Nouvel onglet DANS Ayeba (pas une fenêtre navigateur externe).
+ * Ctrl/Cmd+T aussi.
  */
 export function NewWindowButton({ className = "" }: { className?: string }) {
+  const { openHomeTab } = useBrowserShell();
+  const { resetHome } = useAyeba();
+
+  const newTab = useCallback(() => {
+    resetHome();
+    openHomeTab();
+  }, [resetHome, openHomeTab]);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!(e.ctrlKey || e.metaKey)) return;
-      if (e.key !== "t" && e.key !== "n" && e.key !== "T" && e.key !== "N") return;
-      if (!isInstalledAyebaShell()) return;
+      if (e.key !== "t" && e.key !== "T") return;
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
       e.preventDefault();
-      openAyebaWindow("/");
+      newTab();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [newTab]);
 
   return (
     <button
       type="button"
       className={`ayeba-new-window ${className}`.trim()}
-      title="Nouvelle fenêtre (Ctrl+T)"
-      aria-label="Ouvrir une nouvelle fenêtre Ayeba"
-      onClick={() => openAyebaWindow("/")}
+      title="Nouvel onglet (Ctrl+T)"
+      aria-label="Ouvrir un nouvel onglet Ayeba"
+      onClick={newTab}
     >
       <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden>
-        <path
-          fill="currentColor"
-          d="M4 4h10v2H6v8H4V4zm6 4h10v12H10V8zm2 2v8h6v-8h-6z"
-        />
+        <path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
       </svg>
-      <span className="ayeba-new-window-label">Nouveau</span>
+      <span className="ayeba-new-window-label">Nouvel onglet</span>
     </button>
   );
 }

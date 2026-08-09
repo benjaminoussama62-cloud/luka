@@ -2,6 +2,7 @@
 
 import type { SearchResult } from "@/lib/types";
 import { useAyeba } from "@/lib/store";
+import { useBrowserShell } from "@/lib/browser-shell";
 import { ConflictBadge } from "./TrustBadges";
 
 const TYPE_LABEL: Record<SearchResult["sourceType"], string> = {
@@ -18,8 +19,9 @@ const TYPE_LABEL: Record<SearchResult["sourceType"], string> = {
 
 export function ResultCard({ result, dense = false }: { result: SearchResult; dense?: boolean }) {
   const { response } = useAyeba();
+  const { openWebTab } = useBrowserShell();
 
-  function onClick() {
+  function trackClick() {
     if (!response?.query) return;
     void fetch("/api/search/click", {
       method: "POST",
@@ -33,6 +35,11 @@ export function ResultCard({ result, dense = false }: { result: SearchResult; de
         rankScore: result.rankScore,
       }),
     });
+  }
+
+  function openResult(url: string, title: string) {
+    trackClick();
+    openWebTab(url, title);
   }
 
   return (
@@ -64,15 +71,13 @@ export function ResultCard({ result, dense = false }: { result: SearchResult; de
         ) : null}
       </div>
 
-      <a
-        href={result.url}
-        target="_blank"
-        rel="noreferrer"
-        onClick={onClick}
-        className="font-[family-name:var(--font-display)] text-[20px] font-medium leading-[1.32] tracking-[-0.03em] text-[var(--ink)] transition-colors duration-300 group-hover:text-[var(--orange)] sm:text-[22px]"
+      <button
+        type="button"
+        onClick={() => openResult(result.url, result.title)}
+        className="block w-full text-left font-[family-name:var(--font-display)] text-[20px] font-medium leading-[1.32] tracking-[-0.03em] text-[var(--ink)] transition-colors duration-300 group-hover:text-[var(--orange)] sm:text-[22px]"
       >
         {result.title}
-      </a>
+      </button>
 
       <p className="ayeba-result-snippet mt-2 max-w-2xl text-[15px] leading-[1.72] text-[var(--muted)]">
         {result.snippet}
@@ -81,15 +86,14 @@ export function ResultCard({ result, dense = false }: { result: SearchResult; de
       {result.sitelinks && result.sitelinks.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1">
           {result.sitelinks.map((s) => (
-            <a
+            <button
               key={s.url + s.title}
-              href={s.url}
-              target="_blank"
-              rel="noreferrer"
+              type="button"
+              onClick={() => openResult(s.url, s.title)}
               className="text-[13px] text-[var(--link)] transition-opacity duration-300 hover:opacity-70"
             >
               {s.title}
-            </a>
+            </button>
           ))}
         </div>
       )}
