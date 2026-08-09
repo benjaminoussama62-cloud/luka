@@ -6,7 +6,7 @@ import { rateLimit } from "@/lib/rate-limit";
 import { liveSearch } from "@/lib/real-search";
 import type { AlgorithmSliders } from "@/lib/types";
 
-export const maxDuration = 15;
+export const maxDuration = 12;
 
 export async function POST(req: Request) {
   try {
@@ -31,18 +31,29 @@ export async function POST(req: Request) {
 
     const query = body.query ?? "actualité";
     const zeroAi = Boolean(body.zeroAi);
-    const result = await liveSearch(query, {
-      sliders,
-      zeroAi,
-      zeroAds: Boolean(body.zeroAds),
-      privateMode: Boolean(body.privateMode),
-    });
+
+    const result = await Promise.race([
+      liveSearch(query, {
+        sliders,
+        zeroAi,
+        zeroAds: Boolean(body.zeroAds),
+        privateMode: Boolean(body.privateMode),
+      }),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 7000)),
+    ]);
+
+    if (!result) {
+      return NextResponse.json(
+        { error: "Recherche trop longue — réessayez", message: "deadline" },
+        { status: 504 },
+      );
+    }
 
     // Never block SERP on LLM — race hard; fallback keeps buildSynthesis.
     if (!zeroAi) {
       const llmSummary = await Promise.race([
         synthesizeWithLlm(query, result.results, result.knowledge?.summary),
-        new Promise<null>((resolve) => setTimeout(() => resolve(null), 1800)),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 1200)),
       ]);
       if (llmSummary) result.aiSummary = llmSummary;
     }

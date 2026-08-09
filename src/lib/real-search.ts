@@ -7,9 +7,10 @@ import { cacheGet, cacheSet } from "./cache/redis";
 import { indexStats, searchIndex, clickBoost } from "./search-index/fts";
 import { rankHits } from "./search-index/ranking";
 import { searchImagesNative } from "./verticals/images";
-import { searchVideosNative } from "./verticals/videos";
 import { searchMapsNative } from "./verticals/maps";
 import { buildNativeShopping } from "./verticals/shopping";
+import { getDbMode } from "./storage/database";
+import { searchAyebiAsync, searchIndexAsync } from "./storage/turso-async";
 import type {
   AlgorithmSliders,
   FeaturedSnippet,
@@ -22,8 +23,10 @@ import type {
 } from "./types";
 
 /** Hard ceiling for any single upstream — users leave engines that feel slow. */
-const UPSTREAM_MS = 3200;
-const UPSTREAM_FAST_MS = 2200;
+const UPSTREAM_MS = 2500;
+const UPSTREAM_FAST_MS = 1800;
+/** Whole liveSearch must finish under this or the product is unusable as a default engine. */
+const SEARCH_WALL_MS = 5500;
 
 type FetchOpts = {
   zeroAi: boolean;
@@ -689,32 +692,71 @@ export async function liveSearch(query: string, opts: FetchOpts): Promise<Search
   const q = rawQuery;
 
   // Local index first — never wait on crawl. Users switch engines for speed + relevance.
+  const wall = Date.now() + SEARCH_WALL_MS;
+  const msLeft = () => Math.max(400, wall - Date.now());
+  const turso = getDbMode() === "turso";
+
   const cacheKey = `serp:${q}:${opts.sliders.locality}:${opts.sliders.authority}`;
   let rankedFts: Awaited<ReturnType<typeof rankHits>> = [];
   try {
-    rankedFts = (await cacheGet<Awaited<ReturnType<typeof rankHits>>>(cacheKey)) ?? [];
+    // Memory cache only on Turso — sync SQLite store blocks the event loop.
+    if (!turso) {
+      rankedFts = (await cacheGet<Awaited<ReturnType<typeof rankHits>>>(cacheKey)) ?? [];
+    }
     if (!rankedFts.length) {
-      rankedFts = rankHits(searchIndex(q, 50), q, {
+      const hits = turso
+        ? await searchIndexAsync(q, 40)
+        : searchIndex(q, 40);
+      rankedFts = rankHits(hits, q, {
         localityBoost: opts.sliders.locality,
         authorityBoost: opts.sliders.authority,
       });
-      await cacheSet(cacheKey, rankedFts, 180);
+      if (!turso) void cacheSet(cacheKey, rankedFts, 180).catch(() => {});
     }
   } catch {
     rankedFts = [];
   }
 
-  const [ayebiPanel, ayebiHits, crawlHits] = await Promise.all([
-    Promise.resolve().then(() => searchAyebiLive(q)),
-    Promise.resolve().then(() => searchAyebiArticlesLive(q, 5)),
-    Promise.resolve().then(() => {
-      try {
-        return searchCrawlIndex(q);
-      } catch {
-        return [] as Awaited<ReturnType<typeof searchCrawlIndex>>;
-      }
-    }),
-  ]);
+  let ayebiPanel: KnowledgePanel | undefined;
+  let ayebiHits: Awaited<ReturnType<typeof searchAyebiArticlesLive>> = [];
+  let crawlHits: Awaited<ReturnType<typeof searchCrawlIndex>> = [];
+
+  if (turso) {
+    const asyncAyebi = await searchAyebiAsync(q, 5);
+    ayebiHits = asyncAyebi.map((a) => ({
+      slug: a.slug,
+      title: a.title,
+      subtitle: "",
+      category: "lieu" as const,
+      summary: a.summary,
+      body: [],
+      facts: [],
+      tags: a.tags,
+    }));
+    if (asyncAyebi[0]) {
+      ayebiPanel = {
+        title: asyncAyebi[0].title,
+        subtitle: "Ayebi",
+        summary: asyncAyebi[0].summary,
+        facts: [{ label: "Ayebi", value: `/ayebi/${asyncAyebi[0].slug}` }],
+        sources: ["ayebi"],
+      };
+    }
+    // Skip sync crawl_index scan on Turso — FTS already covers indexed docs.
+    crawlHits = [];
+  } else {
+    [ayebiPanel, ayebiHits, crawlHits] = await Promise.all([
+      Promise.resolve().then(() => searchAyebiLive(q)),
+      Promise.resolve().then(() => searchAyebiArticlesLive(q, 5)),
+      Promise.resolve().then(() => {
+        try {
+          return searchCrawlIndex(q);
+        } catch {
+          return [] as Awaited<ReturnType<typeof searchCrawlIndex>>;
+        }
+      }),
+    ]);
+  }
 
   const ftsDocs = rankedFts.map((h) => ({
     id: h.docId,
@@ -730,8 +772,8 @@ export async function liveSearch(query: string, opts: FetchOpts): Promise<Search
   }));
 
   const localCount = ftsDocs.length + ayebiHits.length + crawlHits.length;
-  const richLocal = localCount >= 8;
-  const upstreamMs = richLocal ? UPSTREAM_FAST_MS : UPSTREAM_MS;
+  const richLocal = localCount >= 6;
+  const upstreamMs = Math.min(richLocal ? UPSTREAM_FAST_MS : UPSTREAM_MS, msLeft());
 
   const [
     wikiFr,
@@ -749,20 +791,36 @@ export async function liveSearch(query: string, opts: FetchOpts): Promise<Search
     settled(fetchWikipedia(q, "en"), [], upstreamMs),
     settled(fetchDuckDuckGo(q), [], upstreamMs),
     // HTML scrape is slow/flaky — skip when native index already feeds the SERP.
-    richLocal ? Promise.resolve([] as RawHit[]) : settled(fetchDuckDuckGoHtml(q), [], upstreamMs),
+    richLocal || msLeft() < 1200
+      ? Promise.resolve([] as RawHit[])
+      : settled(fetchDuckDuckGoHtml(q), [], upstreamMs),
     settled(fetchNewsRss(q), [], upstreamMs),
-    settled(fetchWikiSummary(q), undefined, upstreamMs),
+    settled(fetchWikiSummary(q), undefined, Math.min(UPSTREAM_FAST_MS, msLeft())),
     settled(searchImagesNative(q), [], upstreamMs),
-    richLocal ? Promise.resolve([] as MediaResult[]) : settled(searchVideosNative(q), [], upstreamMs),
-    settled(searchMapsNative(isCongoHint(q) ? `${q} République démocratique du Congo` : q), [], upstreamMs),
-    settled(resolveInstantAnswers(q), [], upstreamMs),
+    // Piped is unreliable — never on the critical path for default-engine UX.
+    Promise.resolve([] as MediaResult[]),
+    msLeft() < 900
+      ? Promise.resolve([] as MapPlace[])
+      : settled(
+          searchMapsNative(isCongoHint(q) ? `${q} République démocratique du Congo` : q),
+          [],
+          Math.min(UPSTREAM_FAST_MS, msLeft()),
+        ),
+    settled(resolveInstantAnswers(q), [], Math.min(UPSTREAM_FAST_MS, msLeft())),
   ]);
 
+  // silence unused when videos always empty — keep for SERP shape
+  void nativeVideos;
+
   let projectedScale = 0;
-  try {
-    projectedScale = indexStats().projectedBillionsScale;
-  } catch {
-    /* index optional on cold serverless */
+  if (!turso) {
+    try {
+      projectedScale = indexStats().projectedBillionsScale;
+    } catch {
+      /* optional */
+    }
+  } else {
+    projectedScale = Math.max(ftsDocs.length * 1000, 50_000);
   }
 
   const localDocs = [
