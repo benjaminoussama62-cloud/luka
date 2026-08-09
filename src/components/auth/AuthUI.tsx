@@ -48,6 +48,14 @@ export function LoginModal() {
       .catch(() => {});
   }, [loginOpen]);
 
+  useEffect(() => {
+    if (!loginOpen || typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const auth = params.get("auth");
+    if (auth === "failed") setError("Connexion sociale refusée. Réessayez ou utilisez l’email.");
+    if (auth === "config") setError("OAuth mal configuré (clés / redirect URI).");
+  }, [loginOpen]);
+
   if (!loginOpen) return null;
 
   async function onSubmit(e: FormEvent) {
@@ -64,7 +72,9 @@ export function LoginModal() {
   function onProvider(id: string) {
     setError(null);
     if (!configuredMap[id]) {
-      setError("Connexion OAuth indisponible — clés API manquantes côté serveur.");
+      setError(
+        "OAuth non branché sur le serveur. Ajoutez GOOGLE_CLIENT_ID/SECRET, GITHUB_* et MICROSOFT_* sur Vercel, avec les callbacks https://ayeba.app/api/auth/{google|github|microsoft}/callback — ou utilisez l’email ci-dessous.",
+      );
       return;
     }
     loginWithProvider(id);

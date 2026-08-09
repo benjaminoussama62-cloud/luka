@@ -8,12 +8,16 @@ export type OAuthProviderMeta = {
   brandColor: string;
 };
 
-function appBase() {
+export function appBaseUrl() {
   return (
     process.env.NEXT_PUBLIC_APP_URL ||
     process.env.NEXT_PUBLIC_SITE_URL ||
     "http://localhost:3000"
   ).replace(/\/$/, "");
+}
+
+function appBase() {
+  return appBaseUrl();
 }
 
 export function getOAuthProviders(): OAuthProviderMeta[] {
@@ -50,8 +54,7 @@ export function getOAuthProviders(): OAuthProviderMeta[] {
 }
 
 export function oauthRedirectUri(provider: OAuthProviderId) {
-  const base = appBase();
-  return `${base}/api/auth/${provider}/callback`;
+  return `${appBase()}/api/auth/${provider}/callback`;
 }
 
 export function providerStartUrl(provider: OAuthProviderId) {

@@ -1464,6 +1464,143 @@ select option {
   padding: 0.85rem 1.25rem;
 }
 
+.ayeba-serp-actions {
+  max-width: 100%;
+}
+
+@media (max-width: 720px) {
+  .ayeba-serp-header-inner {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 0.55rem 0.75rem 0.65rem;
+  }
+
+  .ayeba-serp-brand {
+    order: 1;
+  }
+
+  .ayeba-serp-actions {
+    order: 2;
+    margin-left: auto;
+  }
+
+  .ayeba-serp-search {
+    order: 3;
+    flex: 1 1 100%;
+    min-width: 100%;
+  }
+
+  .ayeba-serp-lang {
+    display: none;
+  }
+
+  .ayeba-serp-header .ayeba-tools-trigger {
+    display: none;
+  }
+
+  .ayeba-serp-header .ayeba-cta {
+    height: 2.15rem;
+    padding: 0 0.7rem;
+    font-size: 0.65rem;
+    letter-spacing: 0.08em;
+  }
+
+  .ayeba-serp-header .ayeba-glass {
+    height: 44px;
+    padding-left: 0.85rem;
+    padding-right: 0.5rem;
+  }
+
+  .ayeba-serp-tabs-wrap {
+    padding: 0 0.75rem;
+  }
+
+  .ayeba-ticker-compact {
+    font-size: 0.65rem;
+  }
+}
+
+/* ——— Yandex-style home shortcuts ——— */
+.ayeba-shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.65rem;
+  margin-top: 1.1rem;
+  width: 100%;
+}
+
+.ayeba-shortcut-tile {
+  display: flex;
+  width: 4.75rem;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.55rem 0.3rem 0.5rem;
+  border-radius: 0.95rem;
+  background: #ffffff;
+  text-decoration: none;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.ayeba-shortcut-tile:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.3);
+}
+
+.ayeba-shortcut-tile:active {
+  transform: translateY(0);
+}
+
+.ayeba-shortcut-mark {
+  display: grid;
+  place-items: center;
+  width: 2.35rem;
+  height: 2.35rem;
+  border-radius: 0.65rem;
+  color: #fff;
+  font-family: var(--font-brand), system-ui, sans-serif;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.ayeba-shortcut-label {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #111827;
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+@media (min-width: 640px) {
+  .ayeba-shortcuts {
+    gap: 0.85rem;
+    margin-top: 1.25rem;
+  }
+
+  .ayeba-shortcut-tile {
+    width: 5.5rem;
+    padding: 0.7rem 0.35rem 0.6rem;
+  }
+
+  .ayeba-shortcut-mark {
+    width: 2.6rem;
+    height: 2.6rem;
+    font-size: 1.1rem;
+  }
+
+  .ayeba-shortcut-label {
+    font-size: 0.64rem;
+  }
+}
+
 .ayeba-serp-tabs-wrap {
   max-width: 48rem;
   margin: 0 auto;

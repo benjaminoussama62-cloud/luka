@@ -1,10 +1,6 @@
-/* Ayeba PWA — cache minimal (ne jamais intercepter _next ni API) */
-const CACHE = "ayeba-v2";
+/* Ayeba PWA — assets only. Never intercept page navigations (breaks Google in-app browsers). */
+const CACHE = "ayeba-v3";
 const PRECACHE = ["/manifest.webmanifest", "/brand/ayeba-mark.svg"];
-
-function passthrough() {
-  return;
-}
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -28,8 +24,9 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
 
-  /* CRITIQUE : laisser Next.js, HMR et API passer sans interception */
+  // Never touch HTML navigations, Next runtime, or APIs.
   if (
+    req.mode === "navigate" ||
     url.pathname.startsWith("/api/") ||
     url.pathname.startsWith("/_next/") ||
     url.pathname.startsWith("/__nextjs")
@@ -37,19 +34,15 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  /* Cache uniquement assets brand + navigation document */
-  const cacheable = url.pathname.startsWith("/brand/") || req.mode === "navigate";
-  if (!cacheable) return;
+  if (!url.pathname.startsWith("/brand/")) return;
 
   event.respondWith(
-    fetch(req)
-      .then((res) => {
-        if (res.ok && url.pathname.startsWith("/brand/")) {
-          const copy = res.clone();
-          void caches.open(CACHE).then((c) => c.put(req, copy));
-        }
-        return res;
-      })
-      .catch(() => caches.match(req).then((c) => c || caches.match("/"))),
+    caches.open(CACHE).then(async (cache) => {
+      const hit = await cache.match(req);
+      if (hit) return hit;
+      const res = await fetch(req);
+      if (res.ok) void cache.put(req, res.clone());
+      return res;
+    }),
   );
 });

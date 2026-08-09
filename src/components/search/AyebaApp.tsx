@@ -359,12 +359,16 @@ export function AyebaApp() {
       <div className="relative z-10 min-h-dvh pb-12">
         <header className="ayeba-chrome-header ayeba-serp-header">
           <div className="ayeba-serp-header-inner">
-            <button type="button" onClick={resetHome} className="shrink-0" aria-label="Accueil">
+            <button type="button" onClick={resetHome} className="ayeba-serp-brand shrink-0" aria-label="Accueil">
               <AyebaWordmark size="sm" />
             </button>
-            <div className="min-w-0 flex-1"><SearchBar /></div>
-            <div className="flex shrink-0 items-center gap-2">
-              <LangSwitch />
+            <div className="ayeba-serp-search min-w-0 flex-1">
+              <SearchBar />
+            </div>
+            <div className="ayeba-serp-actions flex shrink-0 items-center gap-1.5 sm:gap-2">
+              <div className="ayeba-serp-lang">
+                <LangSwitch />
+              </div>
               <ToolsMenu />
               <ProfileMenu />
             </div>

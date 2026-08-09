@@ -74,12 +74,16 @@ export async function getSessionFromCookies(): Promise<SessionUser | null> {
 
 export async function setSessionCookie(token: string) {
   const jar = await cookies();
+  const secure =
+    process.env.VERCEL === "1" ||
+    process.env.NODE_ENV === "production" ||
+    process.env.NEXT_PUBLIC_SITE_URL?.startsWith("https://") === true;
   jar.set(SESSION_COOKIE, token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure,
     sameSite: "lax",
     path: "/",
-    maxAge: SESSION_DAYS * 86400,
+    maxAge: SESSION_DAYS * 24 * 60 * 60,
   });
 }
 

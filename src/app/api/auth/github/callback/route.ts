@@ -4,12 +4,12 @@ import {
   setSessionCookie,
   upsertOAuthUser,
 } from "@/lib/auth-server";
-import { oauthRedirectUri } from "@/lib/oauth";
+import { oauthRedirectUri, appBaseUrl } from "@/lib/oauth";
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const code = searchParams.get("code");
-  const base = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const base = appBaseUrl();
 
   if (!code) return NextResponse.redirect(`${base}/?auth=failed`);
 

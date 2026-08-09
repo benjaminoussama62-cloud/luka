@@ -2,12 +2,14 @@
 
 import { SearchBar } from "./SearchBar";
 import { MarketTicker } from "./MarketTicker";
+import { HomeShortcuts } from "./HomeShortcuts";
 
-/** Accueil épuré — design AYEBA, recherche au centre, marchés discrets en dessous */
+/** Accueil — recherche + raccourcis type Yandex + marchés */
 export function HomeSearchPanel() {
   return (
     <div className="ayeba-home-search-stack w-full">
       <SearchBar large />
+      <HomeShortcuts />
       <MarketTicker belowSearch compact />
     </div>
   );

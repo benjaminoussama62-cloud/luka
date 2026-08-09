@@ -55,8 +55,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void refreshSession().finally(() => setReady(true));
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
-    if (!params.has("auth")) return;
-    window.history.replaceState({}, "", window.location.pathname);
+    const auth = params.get("auth");
+    if (!auth) return;
+    window.history.replaceState({}, "", window.location.pathname + window.location.hash);
+    if (auth === "ok") {
+      void refreshSession();
+      setLoginOpen(false);
+    } else if (auth === "failed" || auth === "config") {
+      setLoginOpen(true);
+    }
   }, [refreshSession]);
 
   const loginWithEmail = useCallback(

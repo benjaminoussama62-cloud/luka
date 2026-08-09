@@ -14,12 +14,24 @@ Durable DB (required for real index / users / Ayebi):
 2. `TURSO_DATABASE_URL=libsql://….turso.io`
 3. `TURSO_AUTH_TOKEN=…`
 
-OAuth (optional until Connexion sociale):
-- Google / GitHub / Microsoft client IDs + secrets
-- Authorized redirect URIs:
-  - `https://ayeba.app/api/auth/google/callback`
-  - `https://ayeba.app/api/auth/github/callback`
-  - `https://ayeba.app/api/auth/microsoft/callback`
+OAuth (**obligatoire** pour Google / GitHub / Microsoft) :
+1. Créer les apps OAuth (Google Cloud, GitHub OAuth App, Azure AD)
+2. Redirect URIs **exactes** :
+   - `https://ayeba.app/api/auth/google/callback`
+   - `https://ayeba.app/api/auth/github/callback`
+   - `https://ayeba.app/api/auth/microsoft/callback`
+3. Vercel → Environment Variables (Production + Preview) :
+   - `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` (**ne pas** fixer `GOOGLE_REDIRECT_URI`)
+   - `GITHUB_CLIENT_ID` + `GITHUB_CLIENT_SECRET`
+   - `MICROSOFT_CLIENT_ID` + `MICROSOFT_CLIENT_SECRET` (+ optionnel `MICROSOFT_TENANT_ID=common`)
+4. Redeploy après ajout des variables
+5. Vérifier : `https://ayeba.app/api/auth/providers` → chaque `configured: true`
+
+Raccourcis accueil (optionnel) :
+- `NEXT_PUBLIC_SHORTCUT_JEMSA`
+- `NEXT_PUBLIC_SHORTCUT_SOMBATEKA`
+- `NEXT_PUBLIC_SHORTCUT_DEVALPHA1`
+- `NEXT_PUBLIC_SHORTCUT_TALA`
 
 ## DNS
 

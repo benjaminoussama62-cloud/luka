@@ -4,13 +4,13 @@ import {
   setSessionCookie,
   upsertGoogleUser,
 } from "@/lib/auth-server";
+import { appBaseUrl, oauthRedirectUri } from "@/lib/oauth";
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const code = searchParams.get("code");
   const error = searchParams.get("error");
-
-  const base = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const base = appBaseUrl();
 
   if (error || !code) {
     return NextResponse.redirect(`${base}/?auth=failed`);
@@ -18,8 +18,7 @@ export async function GET(req: Request) {
 
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-  const redirectUri =
-    process.env.GOOGLE_REDIRECT_URI || `${base}/api/auth/google/callback`;
+  const redirectUri = oauthRedirectUri("google");
 
   if (!clientId || !clientSecret) {
     return NextResponse.redirect(`${base}/?auth=config`);
@@ -38,7 +37,7 @@ export async function GET(req: Request) {
       }),
     });
 
-    if (!tokenRes.ok) throw new Error("Token exchange failed");
+    if (!tokenRes.ok) throw new Error(`Token exchange failed ${tokenRes.status}`);
     const tokens = (await tokenRes.json()) as { access_token?: string };
     if (!tokens.access_token) throw new Error("No access token");
 
@@ -59,7 +58,7 @@ export async function GET(req: Request) {
 
     return NextResponse.redirect(`${base}/?auth=ok`);
   } catch (e) {
-    console.error(e);
+    console.error("[google/callback]", e);
     return NextResponse.redirect(`${base}/?auth=failed`);
   }
 }
