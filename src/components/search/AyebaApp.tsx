@@ -1,9 +1,13 @@
 "use client";
 
+import { useEffect } from "react";
 import { CursorGradient } from "@/components/effects/CursorGradient";
 import { GradientStage } from "@/components/effects/GradientStage";
 import { LoginModal, ProfileMenu } from "@/components/auth/AuthUI";
 import { AyebaWordmark } from "@/components/brand/AyebaIcon";
+import { AppTabBar } from "@/components/shell/AppTabBar";
+import { InAppBrowser } from "@/components/shell/InAppBrowser";
+import { BrowserShellProvider, useBrowserShell } from "@/lib/browser-shell";
 import { useI18n } from "@/lib/i18n";
 import { useAyeba } from "@/lib/store";
 import type { MapPlace, MediaResult, SearchTab, ShopItem } from "@/lib/types";
@@ -26,10 +30,6 @@ import { ResultCard } from "./ResultCard";
 import { SearchBar } from "./SearchBar";
 import { ToolsMenu } from "./ToolsMenu";
 import { TrustMeters } from "./TrustBadges";
-import { NewWindowButton } from "@/components/shell/NewWindowButton";
-import { AppTabBar } from "@/components/shell/AppTabBar";
-import { InAppBrowser } from "@/components/shell/InAppBrowser";
-import { BrowserShellProvider, useBrowserShell } from "@/lib/browser-shell";
 
 const TAB_KEYS: SearchTab[] = ["web", "images", "videos", "news", "maps", "shopping", "community"];
 
@@ -353,7 +353,20 @@ export function AyebaApp() {
 function AyebaAppBody() {
   const { hasSearched, response, searching, searchError, search, tab, setTab, splitScreen, resetHome, setDeepResearchOpen } = useAyeba();
   const { t } = useI18n();
-  const { activeTab } = useBrowserShell();
+  const { activeTab, openHomeTab } = useBrowserShell();
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || (e.key !== "t" && e.key !== "T")) return;
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      e.preventDefault();
+      resetHome();
+      openHomeTab();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [resetHome, openHomeTab]);
 
   if (activeTab.kind === "web") {
     return (
@@ -379,7 +392,6 @@ function AyebaAppBody() {
               header={
                 <>
                   <LangSwitch />
-                  <NewWindowButton />
                   <ProfileMenu />
                 </>
               }
@@ -409,7 +421,6 @@ function AyebaAppBody() {
               <div className="ayeba-serp-lang">
                 <LangSwitch />
               </div>
-              <NewWindowButton />
               <ToolsMenu />
               <ProfileMenu />
             </div>

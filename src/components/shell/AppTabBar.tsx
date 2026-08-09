@@ -27,6 +27,9 @@ export function AppTabBar() {
               }}
               tabIndex={0}
             >
+              <span className="ayeba-app-tab-favicon" aria-hidden>
+                {tab.kind === "web" ? tab.title.slice(0, 1).toUpperCase() : "A"}
+              </span>
               <span className="ayeba-app-tab-title">{tab.title}</span>
               {tabs.length > 1 ? (
                 <button
@@ -44,19 +47,19 @@ export function AppTabBar() {
             </div>
           );
         })}
+        <button
+          type="button"
+          className="ayeba-tabbar-new"
+          aria-label="Nouvel onglet"
+          title="Nouvel onglet"
+          onClick={() => {
+            resetHome();
+            openHomeTab();
+          }}
+        >
+          +
+        </button>
       </div>
-      <button
-        type="button"
-        className="ayeba-tabbar-new"
-        aria-label="Nouvel onglet"
-        title="Nouvel onglet"
-        onClick={() => {
-          resetHome();
-          openHomeTab();
-        }}
-      >
-        +
-      </button>
     </div>
   );
 }
