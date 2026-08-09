@@ -27,11 +27,11 @@ OAuth (**obligatoire** pour Google / GitHub / Microsoft) :
 4. Redeploy après ajout des variables
 5. Vérifier : `https://ayeba.app/api/auth/providers` → chaque `configured: true`
 
-Raccourcis accueil (optionnel) :
-- `NEXT_PUBLIC_SHORTCUT_JEMSA`
-- `NEXT_PUBLIC_SHORTCUT_SOMBATEKA`
-- `NEXT_PUBLIC_SHORTCUT_DEVALPHA1`
-- `NEXT_PUBLIC_SHORTCUT_TALA`
+Raccourcis accueil (optionnel — défauts = domaines prod DevAlpha) :
+- `NEXT_PUBLIC_SHORTCUT_JEMSA` → défaut `https://jemsa.net`
+- `NEXT_PUBLIC_SHORTCUT_SOMBATEKA` → défaut `https://sombatekaonline.com`
+- `NEXT_PUBLIC_SHORTCUT_DEVALPHA1` → défaut `https://devalpha1.com`
+- `NEXT_PUBLIC_SHORTCUT_TALA` → défaut `https://to-tala.com`
 
 ## DNS
 

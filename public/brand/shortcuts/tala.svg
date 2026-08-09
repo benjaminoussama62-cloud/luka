@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="TALA">
+  <rect width="64" height="64" rx="14" fill="#030305"/>
+  <path fill="#FFD700" d="M14 16h36v8H38v28h-12V24H14z"/>
+  <rect x="18" y="50" width="28" height="3" rx="1.5" fill="#FFD700" opacity="0.85"/>
+</svg>
