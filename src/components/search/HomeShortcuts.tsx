@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, type CSSProperties, type FormEvent } from "react";
-import { useBrowserShell } from "@/lib/browser-shell";
 
 export type HomeShortcut = {
   id: string;
@@ -9,7 +8,6 @@ export type HomeShortcut = {
   href: string;
   logo: string;
   tint: string;
-  glow: string;
   custom?: boolean;
 };
 
@@ -18,39 +16,35 @@ const STORAGE_KEY = "ayeba.shortcuts.custom.v1";
 export const HOME_SHORTCUTS: HomeShortcut[] = [
   {
     id: "jemsa",
-    name: "JEMSA",
+    name: "Jemsa",
     href: process.env.NEXT_PUBLIC_SHORTCUT_JEMSA || "https://jemsa.net",
     logo: "/brand/shortcuts/jemsa.svg",
-    tint: "#2563eb",
-    glow: "rgba(37, 99, 235, 0.45)",
+    tint: "#3b82f6",
   },
   {
     id: "sombateka",
-    name: "SOMBATEKAONLE",
+    name: "Sombateka",
     href: process.env.NEXT_PUBLIC_SHORTCUT_SOMBATEKA || "https://sombatekaonline.com",
     logo: "/brand/shortcuts/sombateka.png",
-    tint: "#0f766e",
-    glow: "rgba(15, 118, 110, 0.45)",
+    tint: "#14b8a6",
   },
   {
     id: "devalpha1",
-    name: "DEVALPHA1",
+    name: "DevAlpha",
     href: process.env.NEXT_PUBLIC_SHORTCUT_DEVALPHA1 || "https://devalpha1.com",
     logo: "/brand/shortcuts/devalpha1.svg",
-    tint: "#dc2626",
-    glow: "rgba(220, 38, 38, 0.4)",
+    tint: "#f43f5e",
   },
   {
     id: "tala",
-    name: "TALA",
+    name: "Tala",
     href: process.env.NEXT_PUBLIC_SHORTCUT_TALA || "https://to-tala.com",
     logo: "/brand/shortcuts/tala.svg",
-    tint: "#ca8a04",
-    glow: "rgba(234, 179, 8, 0.4)",
+    tint: "#eab308",
   },
 ];
 
-const TINTS = ["#2563eb", "#059669", "#dc2626", "#ca8a04", "#7c3aed", "#0891b2"];
+const TINTS = ["#3b82f6", "#14b8a6", "#f43f5e", "#eab308", "#a78bfa", "#22d3ee"];
 
 function faviconFor(href: string) {
   try {
@@ -80,8 +74,12 @@ function loadCustom(): HomeShortcut[] {
   }
 }
 
+function openShortcut(href: string) {
+  // Vrai navigateur (comme Yandex) — pas de fausse barre d’onglets dans la page
+  window.open(href, "_blank", "noopener,noreferrer");
+}
+
 export function HomeShortcuts() {
-  const { openWebTab } = useBrowserShell();
   const [custom, setCustom] = useState<HomeShortcut[]>([]);
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState("");
@@ -119,11 +117,10 @@ export function HomeShortcuts() {
     const tint = TINTS[custom.length % TINTS.length];
     const item: HomeShortcut = {
       id: `custom_${Date.now()}`,
-      name: label.slice(0, 24),
+      name: label.slice(0, 18),
       href,
       logo: faviconFor(href),
       tint,
-      glow: `${tint}73`,
       custom: true,
     };
     persist([...custom, item]);
@@ -149,12 +146,11 @@ export function HomeShortcuts() {
               style={
                 {
                   "--sc-tint": s.tint,
-                  "--sc-glow": s.glow,
-                  "--sc-delay": `${i * 45}ms`,
+                  "--sc-delay": `${i * 40}ms`,
                 } as CSSProperties
               }
               title={s.name}
-              onClick={() => openWebTab(s.href, s.name)}
+              onClick={() => openShortcut(s.href)}
             >
               <span className="ayeba-shortcut-logo-wrap" aria-hidden>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -162,8 +158,8 @@ export function HomeShortcuts() {
                   className="ayeba-shortcut-logo"
                   src={s.logo}
                   alt=""
-                  width={56}
-                  height={56}
+                  width={40}
+                  height={40}
                   loading="lazy"
                   decoding="async"
                 />
@@ -207,7 +203,7 @@ export function HomeShortcuts() {
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Ex. YouTube"
                 autoFocus
-                maxLength={24}
+                maxLength={18}
               />
             </label>
             <label>

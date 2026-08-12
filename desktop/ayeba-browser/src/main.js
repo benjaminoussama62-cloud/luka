@@ -16,9 +16,50 @@ const { pathToFileURL } = require("url");
 // Must run before app ready — avoid cache lock / multi-instance GPU errors on Windows
 app.setName("AYEBA");
 app.setPath("userData", path.join(app.getPath("appData"), "AyebaBrowser"));
+if (process.platform === "win32") {
+  app.setAppUserModelId("app.ayeba.browser");
+  // 360 / anciens pilotes GPU : Electron peut mourir sans fenêtre — forcer le mode logiciel
+  app.disableHardwareAcceleration();
+  app.commandLine.appendSwitch("disable-gpu");
+  app.commandLine.appendSwitch("disable-gpu-compositing");
+}
+
+const LOG_FILE = path.join(app.getPath("userData"), "ayeba.log");
+function log(msg) {
+  const line = `[${new Date().toISOString()}] ${msg}\n`;
+  try {
+    fs.appendFileSync(LOG_FILE, line);
+  } catch {}
+  if (process.env.AYEBA_DEBUG) console.error(line.trim());
+}
+
+process.on("uncaughtException", (err) => {
+  log(`uncaughtException: ${err?.stack || err}`);
+  try {
+    const desk = path.join(app.getPath("desktop"), "AYEBA-ERREUR.txt");
+    fs.writeFileSync(
+      desk,
+      `AYEBA n'a pas pu démarrer.\n\n${err?.stack || err}\n\nJournal: ${LOG_FILE}\n`,
+      "utf8",
+    );
+  } catch {}
+  try {
+    dialog.showErrorBox(
+      "AYEBA — erreur au démarrage",
+      `${err?.message || err}\n\nUn fichier AYEBA-ERREUR.txt a été créé sur le Bureau.`,
+    );
+  } catch {}
+});
+
+process.on("unhandledRejection", (reason) => {
+  log(`unhandledRejection: ${reason?.stack || reason}`);
+});
+
+app.commandLine.appendSwitch("disable-features", "BlockInsecurePrivateNetworkRequests");
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
+  log("second instance blocked (AYEBA déjà lancé)");
   app.quit();
   process.exit(0);
 }
@@ -91,19 +132,38 @@ function normalizeOmni(input) {
   return `https://${raw}`;
 }
 
+function revealWindow(win) {
+  if (!win || win.isDestroyed()) return;
+  if (!win.isVisible()) win.show();
+  win.focus();
+}
+
 function createBrowserWindow() {
   ensureData();
+  log(`createBrowserWindow execPath=${process.execPath}`);
 
-  const win = new BaseWindow({
-    width: 1280,
-    height: 840,
-    minWidth: 900,
-    minHeight: 600,
-    backgroundColor: "#050507",
-    title: "AYEBA",
-    autoHideMenuBar: true,
-    show: false,
-  });
+  let win;
+  try {
+    win = new BaseWindow({
+      width: 1280,
+      height: 840,
+      minWidth: 900,
+      minHeight: 600,
+      backgroundColor: "#050507",
+      title: "AYEBA",
+      autoHideMenuBar: true,
+      show: false,
+      icon: path.join(__dirname, "..", "assets", "icon.ico"),
+    });
+  } catch (err) {
+    log(`BaseWindow failed: ${err?.stack || err}`);
+    dialog.showErrorBox(
+      "AYEBA — impossible d’ouvrir la fenêtre",
+      `${err?.message || err}\n\nJournal : ${LOG_FILE}`,
+    );
+    app.quit();
+    return null;
+  }
 
   const state = {
     win,
@@ -292,9 +352,12 @@ function createBrowserWindow() {
   win.on("maximize", layout);
   win.on("unmaximize", layout);
   win.once("ready-to-show", () => {
-    win.show();
+    revealWindow(win);
     layout();
   });
+
+  // Si ready-to-show ne se déclenche pas (GPU / pilote), forcer l’affichage
+  setTimeout(() => revealWindow(win), 2500);
   win.on("closed", () => {
     windows.delete(state);
   });
@@ -464,22 +527,25 @@ function bindIpc() {
 }
 
 app.whenReady().then(() => {
+  log(`ready v${app.getVersion()} userData=${app.getPath("userData")}`);
   ensureData();
   Menu.setApplicationMenu(null);
   session.defaultSession.setPermissionRequestHandler((_wc, _perm, cb) => cb(false));
   bindIpc();
 
   app.on("second-instance", () => {
+    log("second-instance → focus existing window");
     const first = [...windows][0];
     if (first?.win && !first.win.isDestroyed()) {
       if (first.win.isMinimized()) first.win.restore();
-      first.win.focus();
+      revealWindow(first.win);
       return;
     }
     createBrowserWindow();
   });
 
-  createBrowserWindow();
+  const created = createBrowserWindow();
+  if (!created) log("createBrowserWindow returned null");
 
   app.on("activate", () => {
     if (![...windows].length) createBrowserWindow();

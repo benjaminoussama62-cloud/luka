@@ -35,7 +35,10 @@ if (!fs.existsSync(path.join(electronDist, "electron.exe"))) {
   process.exit(1);
 }
 
-rm(dist);
+rm(outDir);
+const zipPath = path.join(dist, `${outName}.zip`);
+rm(zipPath);
+mkdir(dist);
 mkdir(outDir);
 console.log("Copy Electron runtime…");
 copyDir(electronDist, outDir);
@@ -44,8 +47,16 @@ const exeSrc = path.join(outDir, "electron.exe");
 const exeDst = path.join(outDir, "AYEBA.exe");
 fs.renameSync(exeSrc, exeDst);
 
+// Sinon Electron peut charger l’app par défaut au lieu de resources/app
 const defaultAsar = path.join(outDir, "resources", "default_app.asar");
-rm(defaultAsar);
+if (fs.existsSync(defaultAsar)) fs.unlinkSync(defaultAsar);
+
+const localesDir = path.join(outDir, "locales");
+if (fs.existsSync(localesDir)) {
+  for (const f of fs.readdirSync(localesDir)) {
+    if (!["fr.pak", "en-US.pak"].includes(f)) fs.unlinkSync(path.join(localesDir, f));
+  }
+}
 
 // App as unpacked resources/app (simple, reliable)
 const appDir = path.join(outDir, "resources", "app");
@@ -67,8 +78,15 @@ fs.writeFileSync(
   [
     "AYEBA Browser " + version,
     "",
-    "1. Double-cliquez AYEBA.exe",
-    "2. Si Windows SmartScreen apparaît : Informations complémentaires → Exécuter quand même",
+    "INSTALLATION",
+    "1. Extrayez TOUT le dossier (AYEBA.exe + resources + DLL doivent rester ensemble).",
+    "2. Double-cliquez AYEBA.exe (ou LANCER-AYEBA.bat pour voir les erreurs).",
+    "",
+    "SI L’APP NE S’OUVRE PAS",
+    "• SmartScreen : clic droit AYEBA.exe → Propriétés → cocher « Débloquer » → OK.",
+    "• Ou au premier lancement : Informations complémentaires → Exécuter quand même.",
+    "• Fermez les AYEBA déjà ouverts (Gestionnaire des tâches).",
+    "• Journal : %APPDATA%\\AyebaBrowser\\ayeba.log",
     "",
     "Site : https://ayeba.app",
     "Téléchargement : https://ayeba.app/telecharger",
@@ -77,8 +95,36 @@ fs.writeFileSync(
   "utf8",
 );
 
-const zipPath = path.join(dist, `${outName}.zip`);
-rm(zipPath);
+fs.writeFileSync(
+  path.join(outDir, "LANCER-AYEBA.bat"),
+  [
+    "@echo off",
+    "cd /d \"%~dp0\"",
+    "title AYEBA Browser",
+    "echo.",
+    "echo === AYEBA Browser ===",
+    "echo.",
+    "powershell -NoProfile -Command \"Unblock-File -LiteralPath '%~dp0AYEBA.exe' -ErrorAction SilentlyContinue\"",
+    "echo Si 360 Total Security / antivirusirus bloque : ajoutez ce dossier en exception.",
+    "echo.",
+    "start \"\" \"%~dp0AYEBA.exe\"",
+    "timeout /t 3 /nobreak >nul",
+    "tasklist /FI \"IMAGENAME eq AYEBA.exe\" | find /I \"AYEBA.exe\" >nul",
+    "if errorlevel 1 (",
+    "  echo.",
+    "  echo AYEBA ne tourne pas. Causes frequentes :",
+    "  echo  - Antivirus 360 qui tue le processus",
+    "  echo  - Extraction incomplete du ZIP",
+    "  echo  - Journal : %%APPDATA%%\\AyebaBrowser\\ayeba.log",
+    "  echo  - Bureau : AYEBA-ERREUR.txt",
+    "  echo.",
+    "  pause",
+    ")",
+    "",
+  ].join("\r\n"),
+  "utf8",
+);
+
 console.log("Zip…");
 execSync(
   `powershell -NoProfile -Command "Compress-Archive -Path '${outDir.replace(/'/g, "''")}' -DestinationPath '${zipPath.replace(/'/g, "''")}' -Force"`,

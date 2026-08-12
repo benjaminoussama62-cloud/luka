@@ -145,9 +145,79 @@ export function indexStats() {
 }
 
 export function recordClick(query: string, url: string, domain: string) {
-  getDb()
-    .prepare("INSERT INTO click_signals (query, url, domain, clicked_at) VALUES (?, ?, ?, ?)")
-    .run(query, url, domain, new Date().toISOString());
+  const db = getDb();
+  const now = new Date().toISOString();
+  db.prepare("INSERT INTO click_signals (query, url, domain, clicked_at) VALUES (?, ?, ?, ?)").run(
+    query,
+    url,
+    domain,
+    now,
+  );
+  bumpRadarDaily({ day: now.slice(0, 10), domain, query, url, clicks: 1, impressions: 0, position: null });
+}
+
+export function recordImpressions(
+  query: string,
+  items: Array<{ url: string; domain: string; position: number }>,
+) {
+  if (!query || !items.length) return;
+  const db = getDb();
+  const now = new Date().toISOString();
+  const day = now.slice(0, 10);
+  const ins = db.prepare(
+    "INSERT INTO impression_signals (query, url, domain, position, shown_at) VALUES (?, ?, ?, ?, ?)",
+  );
+  for (const item of items.slice(0, 30)) {
+    if (!item.url || !item.domain) continue;
+    try {
+      ins.run(query, item.url, item.domain, item.position, now);
+      bumpRadarDaily({
+        day,
+        domain: item.domain,
+        query,
+        url: item.url,
+        clicks: 0,
+        impressions: 1,
+        position: item.position,
+      });
+    } catch {
+      /* ignore single-row failures (memory db / missing table during hot reload) */
+    }
+  }
+}
+
+function bumpRadarDaily(input: {
+  day: string;
+  domain: string;
+  query: string;
+  url: string;
+  clicks: number;
+  impressions: number;
+  position: number | null;
+}) {
+  try {
+    const db = getDb();
+    db.prepare(
+      `INSERT INTO radar_daily (day, domain, query, url, impressions, clicks, position_sum, position_count)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(day, domain, query, url) DO UPDATE SET
+         impressions = impressions + excluded.impressions,
+         clicks = clicks + excluded.clicks,
+         position_sum = position_sum + excluded.position_sum,
+         position_count = position_count + excluded.position_count`,
+    ).run(
+      input.day,
+      input.domain,
+      input.query,
+      input.url,
+      input.impressions,
+      input.clicks,
+      input.position ?? 0,
+      input.position != null ? 1 : 0,
+    );
+  } catch {
+    /* table may not exist yet on old process */
+  }
 }
 
 export function clickBoost(query: string, url: string): number {

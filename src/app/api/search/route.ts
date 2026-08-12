@@ -4,6 +4,7 @@ import { pushSearchHistory } from "@/lib/db";
 import { synthesizeWithLlm } from "@/lib/llm";
 import { rateLimit } from "@/lib/rate-limit";
 import { liveSearch } from "@/lib/real-search";
+import { recordImpressions } from "@/lib/search-index/fts";
 import type { AlgorithmSliders } from "@/lib/types";
 
 export const maxDuration = 12;
@@ -49,7 +50,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // Never block SERP on LLM — race hard; fallback keeps buildSynthesis.
     if (!zeroAi) {
       const llmSummary = await Promise.race([
         synthesizeWithLlm(query, result.results, result.knowledge?.summary),
@@ -58,8 +58,21 @@ export async function POST(req: Request) {
       if (llmSummary) result.aiSummary = llmSummary;
     }
 
-    // History off the critical path (Next.js after).
     after(async () => {
+      try {
+        if (!body.privateMode && query.trim() && result.results?.length) {
+          recordImpressions(
+            query.trim(),
+            result.results.map((r, i) => ({
+              url: r.url,
+              domain: r.domain,
+              position: i + 1,
+            })),
+          );
+        }
+      } catch (e) {
+        console.warn("[search] impressions skipped", e);
+      }
       try {
         if (body.privateMode || !query.trim()) return;
         const session = await getSessionFromCookies();

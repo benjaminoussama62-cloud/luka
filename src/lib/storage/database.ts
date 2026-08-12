@@ -365,6 +365,58 @@ function migrate(db: AyebaDatabase) {
     );
 
     CREATE INDEX IF NOT EXISTS idx_history_user ON search_history(user_id, created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS impression_signals (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      query TEXT NOT NULL,
+      url TEXT NOT NULL,
+      domain TEXT NOT NULL,
+      position INTEGER NOT NULL DEFAULT 0,
+      shown_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_imp_domain_time ON impression_signals(domain, shown_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_imp_query_domain ON impression_signals(query, domain);
+
+    CREATE TABLE IF NOT EXISTS studio_sites (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      domain TEXT NOT NULL,
+      display_name TEXT NOT NULL DEFAULT '',
+      sitemap_url TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'pending',
+      verify_token TEXT NOT NULL,
+      verified_at TEXT,
+      created_at TEXT NOT NULL,
+      UNIQUE(user_id, domain)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_studio_sites_user ON studio_sites(user_id);
+
+    CREATE TABLE IF NOT EXISTS studio_site_urls (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      site_id TEXT NOT NULL,
+      url TEXT NOT NULL,
+      source TEXT NOT NULL DEFAULT 'manual',
+      submitted_at TEXT NOT NULL,
+      UNIQUE(site_id, url)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_studio_urls_site ON studio_site_urls(site_id);
+
+    CREATE TABLE IF NOT EXISTS radar_daily (
+      day TEXT NOT NULL,
+      domain TEXT NOT NULL,
+      query TEXT NOT NULL DEFAULT '',
+      url TEXT NOT NULL DEFAULT '',
+      impressions INTEGER NOT NULL DEFAULT 0,
+      clicks INTEGER NOT NULL DEFAULT 0,
+      position_sum REAL NOT NULL DEFAULT 0,
+      position_count INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (day, domain, query, url)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_radar_daily_domain ON radar_daily(domain, day DESC);
   `);
 
   seedCategories(db);
