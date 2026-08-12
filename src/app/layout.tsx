@@ -70,12 +70,11 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      { url: "/favicon.ico", sizes: "48x48" },
-      { url: "/icon", type: "image/png", sizes: "32x32" },
-      { url: "/brand/ayeba-mark.svg", type: "image/svg+xml" },
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/icon.png", type: "image/png", sizes: "180x180" },
     ],
-    shortcut: "/favicon.ico",
-    apple: [{ url: "/apple-icon", sizes: "180x180", type: "image/png" }],
+    shortcut: [{ url: "/favicon.ico" }],
+    apple: [{ url: "/apple-icon.png", sizes: "180x180", type: "image/png" }],
   },
   other: {
     "msapplication-TileColor": "#050507",
@@ -100,9 +99,11 @@ export default function RootLayout({
       className={`${brand.variable} ${display.variable} ${body.variable} ${mono.variable} h-full antialiased`}
     >
       <head>
+        {/* Favicon Ayeba only — all browsers (Edge, Chrome, Safari, Firefox) */}
         <link rel="icon" href="/favicon.ico" sizes="any" />
-        <link rel="icon" href="/icon" type="image/png" sizes="32x32" />
-        <link rel="apple-touch-icon" href="/apple-icon" />
+        <link rel="icon" href="/icon.png" type="image/png" sizes="180x180" />
+        <link rel="shortcut icon" href="/favicon.ico" />
+        <link rel="apple-touch-icon" href="/apple-icon.png" />
         <link
           rel="search"
           type="application/opensearchdescription+xml"

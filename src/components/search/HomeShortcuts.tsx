@@ -179,17 +179,19 @@ export function HomeShortcuts() {
           </div>
         ))}
 
-        <button
-          type="button"
-          className="ayeba-shortcut-tile ayeba-shortcut-add"
-          onClick={() => setAdding(true)}
-          title="Ajouter un site"
-        >
-          <span className="ayeba-shortcut-add-mark" aria-hidden>
-            +
-          </span>
-          <span className="ayeba-shortcut-label">Ajouter</span>
-        </button>
+        <div className="ayeba-shortcut-slot">
+          <button
+            type="button"
+            className="ayeba-shortcut-tile ayeba-shortcut-add"
+            onClick={() => setAdding(true)}
+            title="Ajouter un site"
+          >
+            <span className="ayeba-shortcut-add-mark" aria-hidden>
+              +
+            </span>
+            <span className="ayeba-shortcut-label">Ajouter</span>
+          </button>
+        </div>
       </nav>
 
       {adding ? (
