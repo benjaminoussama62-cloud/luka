@@ -14,7 +14,7 @@ export function AyebaWordmark({
     sm: "text-[20px]",
     md: "text-[26px]",
     lg: "text-[40px]",
-    hero: "text-[clamp(3.5rem,12vw,7.5rem)] leading-[0.92]",
+    hero: "text-[clamp(2.6rem,12vw,7.5rem)] leading-[0.92]",
   } as const;
 
   return (

@@ -386,7 +386,7 @@ function AyebaAppBody() {
       <>
         <Stage home />
         <div className="relative z-10 flex min-h-dvh flex-col">
-          <main className="ayeba-home-shell mx-auto flex w-full max-w-xl flex-1 flex-col px-4 pb-12">
+          <main className="ayeba-home-shell mx-auto flex w-full flex-1 flex-col px-3 pb-10 sm:max-w-xl sm:px-4 sm:pb-12">
             <HomeSplashGate
               header={
                 <>

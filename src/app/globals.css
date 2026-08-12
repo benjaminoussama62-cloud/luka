@@ -955,18 +955,118 @@ select option {
 }
 
 .ayeba-home-shell {
-  padding-top: 1rem;
+  padding-top: max(3.5rem, calc(env(safe-area-inset-top) + 3rem));
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  padding-left: max(0.75rem, env(safe-area-inset-left));
+  padding-right: max(0.75rem, env(safe-area-inset-right));
+  width: 100%;
+  max-width: 40rem;
+}
+
+.ayeba-home-search {
+  width: 100%;
+  max-width: min(36rem, 100%);
+  opacity: 0;
+  transform: translateY(24px);
+  pointer-events: none;
+  transition: opacity 0.75s var(--ease-out) 0.15s, transform 0.75s var(--ease-out) 0.15s;
+}
+
+.ayeba-home-search-visible {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.ayeba-home-search-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  width: 100%;
+}
+
+/* Site footer — text links, no boxed ghosts */
+.ayeba-site-footer {
+  margin-top: 2.25rem;
+  margin-bottom: 1rem;
+  padding: 0 0.5rem max(1rem, env(safe-area-inset-bottom));
+  text-align: center;
+}
+
+.ayeba-site-footer-primary,
+.ayeba-site-footer-legal {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem 0.15rem;
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.ayeba-site-footer-primary {
+  color: rgba(255, 255, 255, 0.55);
+  margin-bottom: 0.65rem;
+}
+
+.ayeba-site-footer-legal {
+  color: var(--faint);
+  font-size: 0.6rem;
+}
+
+.ayeba-site-footer a {
+  color: inherit;
+  text-decoration: none;
+  padding: 0.35rem 0.4rem;
+  transition: color 0.2s ease;
+}
+
+.ayeba-site-footer-primary a:hover {
+  color: rgba(0, 220, 255, 0.95);
+}
+
+.ayeba-site-footer-legal a:hover {
+  color: var(--muted);
+}
+
+.ayeba-site-footer-dot {
+  opacity: 0.4;
+  user-select: none;
+}
+
+.ayeba-site-footer-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
 }
 
 .ayeba-ticker-below-search {
   position: relative;
   width: 100%;
   margin-top: 0.85rem;
-  min-height: 3.25rem;
-  border-radius: 1rem;
+  min-height: 2.75rem;
+  border-radius: 0.75rem;
   border: 1px solid rgba(0, 220, 255, 0.2);
   background: rgba(0, 0, 0, 0.65);
   overflow: hidden;
+}
+
+@media (max-width: 479px) {
+  .ayeba-ticker-below-search {
+    min-height: 2.5rem;
+    border-radius: 0.65rem;
+  }
+
+  .ayeba-ticker-compact .ayeba-ticker-track {
+    gap: 0.85rem;
+    padding-inline: 0.65rem;
+  }
+
+  .ayeba-ticker-item {
+    font-size: 0.68rem;
+  }
 }
 
 .ayeba-ticker-bar-label {
@@ -1011,13 +1111,15 @@ select option {
 
 .ayeba-home-header {
   position: fixed;
-  top: 2.45rem;
+  top: 0;
   right: 0;
+  left: 0;
   z-index: 40;
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 0.5rem;
-  padding: 0.75rem 1.25rem;
+  padding: max(0.75rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right)) 0.75rem max(1rem, env(safe-area-inset-left));
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.6s var(--ease-out);
@@ -1362,50 +1464,6 @@ select option {
   animation: splash-hint-pulse 2.4s ease-in-out infinite;
 }
 
-.ayeba-home-search {
-  width: 100%;
-  max-width: 36rem;
-  opacity: 0;
-  transform: translateY(24px);
-  pointer-events: none;
-  transition: opacity 0.75s var(--ease-out) 0.15s, transform 0.75s var(--ease-out) 0.15s;
-}
-
-.ayeba-home-search-visible {
-  opacity: 1;
-  transform: translateY(0);
-  pointer-events: auto;
-}
-
-.ayeba-home-search-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  width: 100%;
-}
-
-.ayeba-home-nav {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.75rem;
-  margin-top: 2rem;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.ayeba-home-nav-link {
-  color: rgba(255, 255, 255, 0.45);
-  text-decoration: none;
-  transition: color 0.2s ease;
-}
-
-.ayeba-home-nav-link:hover {
-  color: rgba(0, 220, 255, 0.9);
-}
-
 .ayeba-lead {
   font-size: 1.125rem;
   line-height: 1.75;
@@ -1615,6 +1673,37 @@ select option {
 .ayeba-splash-hero {
   text-align: center;
   user-select: none;
+  width: 100%;
+  padding: 0 0.5rem;
+}
+
+.ayeba-splash-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.ayeba-splash-mark {
+  width: clamp(2.5rem, 8vw, 3.5rem);
+  height: clamp(2.5rem, 8vw, 3.5rem);
+  border-radius: 22%;
+  box-shadow:
+    0 0 24px rgba(0, 180, 255, 0.35),
+    0 0 48px rgba(232, 93, 4, 0.12);
+}
+
+@media (min-width: 640px) {
+  .ayeba-splash-brand {
+    flex-direction: row;
+    justify-content: center;
+    gap: 1rem;
+  }
+
+  .ayeba-splash-mark {
+    width: 3.25rem;
+    height: 3.25rem;
+  }
 }
 
 .ayeba-splash-kicker {
@@ -1853,13 +1942,23 @@ select option {
 
 /* ——— Home shortcuts (Yandex-like: circle + name) ——— */
 .ayeba-shortcuts {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 0.35rem 0.1rem;
-  margin: 1.5rem auto 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  justify-items: center;
+  gap: 0.65rem 0.25rem;
+  margin: 1.35rem auto 0;
   width: 100%;
-  max-width: 28rem;
+  max-width: 22rem;
+}
+
+@media (min-width: 480px) {
+  .ayeba-shortcuts {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.45rem 0.2rem;
+    max-width: 32rem;
+  }
 }
 
 @keyframes ayeba-shortcut-in {
@@ -1869,7 +1968,14 @@ select option {
 
 .ayeba-shortcut-slot {
   position: relative;
-  width: 5.25rem;
+  width: 100%;
+  max-width: 5.25rem;
+}
+
+@media (min-width: 480px) {
+  .ayeba-shortcut-slot {
+    width: 5.25rem;
+  }
 }
 
 .ayeba-shortcut-tile {
@@ -1880,7 +1986,9 @@ select option {
   flex-direction: column;
   align-items: center;
   gap: 0.45rem;
-  width: 5.25rem;
+  width: 100%;
+  max-width: 5.25rem;
+  margin: 0 auto;
   padding: 0.35rem 0.2rem 0.25rem;
   border: 0;
   border-radius: 0.75rem;

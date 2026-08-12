@@ -34,13 +34,46 @@ const mono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Ayeba",
-  description: "Ayeba — recherche mondiale, priorité locale silencieuse.",
-  applicationName: "Ayeba",
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://ayeba.app"),
+  title: {
+    default: "AYEBA — Recherche mondiale",
+    template: "%s · AYEBA",
+  },
+  description:
+    "AYEBA est le moteur de recherche mondial : résultats web, priorité Afrique & RDC, encyclopédie Ayebi, marchés et navigateur. Pas une société de conseil.",
+  applicationName: "AYEBA",
   manifest: "/manifest.webmanifest",
-  icons: { icon: "/brand/ayeba-mark.svg", apple: "/brand/ayeba-mark.svg" },
+  keywords: [
+    "AYEBA",
+    "moteur de recherche",
+    "recherche web",
+    "Congo",
+    "RDC",
+    "Ayebi",
+    "ayeba.app",
+  ],
+  authors: [{ name: "Ayeba", url: "https://ayeba.app" }],
+  creator: "Ayeba",
+  openGraph: {
+    type: "website",
+    locale: "fr_FR",
+    url: "https://ayeba.app",
+    siteName: "AYEBA",
+    title: "AYEBA — Recherche mondiale",
+    description:
+      "Moteur de recherche mondial · Ayebi · marchés · navigateur Windows. ayeba.app",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "AYEBA — Recherche mondiale",
+    description: "Le monde entier, une requête.",
+  },
+  icons: {
+    icon: [{ url: "/brand/ayeba-mark.svg", type: "image/svg+xml" }],
+    apple: [{ url: "/apple-icon", sizes: "180x180", type: "image/png" }],
+  },
   other: {
-    "msapplication-TileColor": "#000000",
+    "msapplication-TileColor": "#050507",
   },
 };
 

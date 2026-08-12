@@ -1,12 +1,17 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Ayeba">
   <defs>
-    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#ff3b4a"/>
-      <stop offset="55%" stop-color="#c01222"/>
-      <stop offset="100%" stop-color="#6b6b75"/>
+    <linearGradient id="ayebaBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0a0a0e"/>
+      <stop offset="100%" stop-color="#12141c"/>
+    </linearGradient>
+    <linearGradient id="ayebaA" x1="20%" y1="10%" x2="80%" y2="90%">
+      <stop offset="0%" stop-color="#7df0ff"/>
+      <stop offset="45%" stop-color="#00b4ff"/>
+      <stop offset="100%" stop-color="#e85d04"/>
     </linearGradient>
   </defs>
-  <rect width="512" height="512" rx="112" fill="#0a0a0e"/>
-  <rect x="28" y="28" width="456" height="456" rx="96" fill="url(#g)" opacity="0.92"/>
-  <text x="256" y="310" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-size="220" font-weight="800" fill="#ffffff">A</text>
+  <rect width="512" height="512" rx="108" fill="url(#ayebaBg)"/>
+  <rect x="22" y="22" width="468" height="468" rx="92" fill="none" stroke="rgba(0,180,255,0.35)" stroke-width="6"/>
+  <!-- Stylized A (paths — Google/mobile render SVG text poorly) -->
+  <path fill="url(#ayebaA)" d="M256 96 L392 400 H332 L302 324 H210 L180 400 H120 L256 96 Z M228 268 H284 L256 196 Z"/>
 </svg>
