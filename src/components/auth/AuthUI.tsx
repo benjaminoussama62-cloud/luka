@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { AyebaWordmark } from "@/components/brand/AyebaIcon";
 import { OAuthButton } from "@/components/auth/OAuthLogos";
 import { useAuth } from "@/lib/auth";
@@ -177,6 +177,23 @@ export function ProfileMenu() {
   const { user, setLoginOpen, logout } = useAuth();
   const [open, setOpen] = useState(false);
   const [history, setHistory] = useState<string[]>([]);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onDoc(e: MouseEvent) {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
 
   async function loadHistory() {
     try {
@@ -198,52 +215,96 @@ export function ProfileMenu() {
   }
 
   const initial = user.name.slice(0, 1).toUpperCase();
+  const firstName = user.name.trim().split(/\s+/)[0] || user.name;
+  const providerLabel =
+    user.provider === "google"
+      ? "Google"
+      : user.provider === "github"
+        ? "GitHub"
+        : user.provider === "microsoft"
+          ? "Microsoft"
+          : "Email";
 
   return (
-    <div className="relative">
+    <div className="ayeba-profile" ref={rootRef}>
       <button
         type="button"
+        className={`ayeba-profile-btn ${open ? "is-open" : ""}`}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        aria-label="Menu profil"
         onClick={() => {
           setOpen((v) => !v);
           if (!open) void loadHistory();
         }}
-        className="grid h-9 w-9 place-items-center border border-[var(--line)] text-xs font-semibold text-white"
-        style={{ background: `linear-gradient(135deg, ${user.avatarColor}, #111)` }}
-        aria-label="Profil"
       >
-        {initial}
+        <span
+          className="ayeba-profile-avatar"
+          style={{ background: `linear-gradient(145deg, ${user.avatarColor}, #0a0a0c)` }}
+          aria-hidden
+        >
+          {initial}
+        </span>
+        <span className="ayeba-profile-meta">
+          <span className="ayeba-profile-name">{firstName}</span>
+          <span className="ayeba-profile-chevron" aria-hidden>
+            ▾
+          </span>
+        </span>
       </button>
-      {open && (
-        <div className="ayeba-modal absolute right-0 z-50 mt-2 w-72 overflow-hidden">
-          <div className="border-b border-[var(--line)] px-4 py-3">
-            <p className="text-sm font-medium text-white">{user.name}</p>
-            <p className="font-[family-name:var(--font-mono)] text-[11px] text-[var(--muted)]">{user.email}</p>
-            <p className="mt-1 font-[family-name:var(--font-mono)] text-[10px] uppercase text-[var(--faint)]">
-              via {user.provider}
-            </p>
-          </div>
-          {history.length > 0 && (
-            <div className="max-h-40 overflow-y-auto border-b border-[var(--line)] px-4 py-2">
-              <p className="hud-label mb-2">Historique</p>
-              {history.slice(0, 8).map((h) => (
-                <p key={h} className="truncate py-1 text-xs text-[var(--muted)]">
-                  {h}
-                </p>
-              ))}
+
+      {open ? (
+        <div className="ayeba-profile-panel" role="menu">
+          <div className="ayeba-profile-panel-head">
+            <span
+              className="ayeba-profile-avatar ayeba-profile-avatar-lg"
+              style={{ background: `linear-gradient(145deg, ${user.avatarColor}, #0a0a0c)` }}
+              aria-hidden
+            >
+              {initial}
+            </span>
+            <div className="ayeba-profile-panel-id">
+              <p className="ayeba-profile-panel-name">{user.name}</p>
+              <p className="ayeba-profile-panel-email">{user.email}</p>
+              <p className="ayeba-profile-panel-via">Via {providerLabel}</p>
             </div>
-          )}
+          </div>
+
+          <div className="ayeba-profile-panel-actions">
+            <a href="/studio/app" className="ayeba-profile-link" role="menuitem">
+              Ayeba Studio
+            </a>
+            <a href="/telecharger" className="ayeba-profile-link" role="menuitem">
+              Télécharger AYEBA
+            </a>
+          </div>
+
+          {history.length > 0 ? (
+            <div className="ayeba-profile-history">
+              <p className="ayeba-profile-history-label">Recherches récentes</p>
+              <ul>
+                {history.slice(0, 6).map((h) => (
+                  <li key={h}>
+                    <span className="ayeba-profile-history-item">{h}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
           <button
             type="button"
+            role="menuitem"
+            className="ayeba-profile-logout"
             onClick={() => {
               void logout();
               setOpen(false);
             }}
-            className="w-full px-4 py-3 text-left text-xs text-[var(--muted)] hover:bg-white/5"
           >
             Déconnexion
           </button>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

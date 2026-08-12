@@ -1028,6 +1028,234 @@ select option {
   pointer-events: auto;
 }
 
+/* Profile button + panel */
+.ayeba-profile {
+  position: relative;
+  z-index: 60;
+}
+
+.ayeba-profile-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  max-width: 12rem;
+  height: 2.45rem;
+  padding: 0.2rem 0.65rem 0.2rem 0.25rem;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--ink);
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.ayeba-profile-btn:hover,
+.ayeba-profile-btn.is-open {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.28);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+}
+
+.ayeba-profile-avatar {
+  display: grid;
+  place-items: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  color: #fff;
+  font-family: var(--font-brand), system-ui, sans-serif;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  flex-shrink: 0;
+}
+
+.ayeba-profile-avatar-lg {
+  width: 2.75rem;
+  height: 2.75rem;
+  font-size: 1.05rem;
+}
+
+.ayeba-profile-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.ayeba-profile-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 6.5rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.ayeba-profile-chevron {
+  color: var(--faint);
+  font-size: 0.65rem;
+  line-height: 1;
+  transition: transform 0.2s ease;
+}
+
+.ayeba-profile-btn.is-open .ayeba-profile-chevron {
+  transform: rotate(180deg);
+}
+
+.ayeba-profile-panel {
+  position: absolute;
+  top: calc(100% + 0.55rem);
+  right: 0;
+  z-index: 70;
+  width: min(20rem, calc(100vw - 1.5rem));
+  min-width: 17.5rem;
+  border-radius: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(12, 13, 18, 0.96);
+  backdrop-filter: blur(20px);
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(0, 180, 255, 0.06);
+  overflow: hidden;
+  animation: ayeba-profile-in 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes ayeba-profile-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ayeba-profile-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 1rem 1rem 0.9rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.ayeba-profile-panel-id {
+  min-width: 0;
+  flex: 1;
+}
+
+.ayeba-profile-panel-name {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--font-brand), system-ui, sans-serif;
+  font-size: 1rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ayeba-profile-panel-email {
+  margin: 0.2rem 0 0;
+  color: var(--muted);
+  font-size: 0.75rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ayeba-profile-panel-via {
+  margin: 0.35rem 0 0;
+  color: var(--faint);
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.ayeba-profile-panel-actions {
+  display: flex;
+  flex-direction: column;
+  padding: 0.45rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.ayeba-profile-link {
+  display: block;
+  padding: 0.7rem 0.75rem;
+  border-radius: 0.55rem;
+  color: var(--ink);
+  font-size: 0.86rem;
+  text-decoration: none;
+  transition: background 0.15s ease;
+}
+
+.ayeba-profile-link:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.ayeba-profile-history {
+  max-height: 9rem;
+  overflow: auto;
+  padding: 0.65rem 1rem 0.75rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.ayeba-profile-history-label {
+  margin: 0 0 0.45rem;
+  color: var(--faint);
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.62rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.ayeba-profile-history ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ayeba-profile-history-item {
+  display: block;
+  padding: 0.28rem 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ayeba-profile-logout {
+  display: block;
+  width: 100%;
+  padding: 0.85rem 1rem;
+  border: 0;
+  background: transparent;
+  color: #f87171;
+  font-size: 0.86rem;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.ayeba-profile-logout:hover {
+  background: rgba(248, 113, 113, 0.08);
+}
+
+@media (max-width: 480px) {
+  .ayeba-profile-name {
+    display: none;
+  }
+  .ayeba-profile-btn {
+    padding-right: 0.35rem;
+  }
+}
+
 .ayeba-splash-stage {
   display: flex;
   flex-direction: column;
