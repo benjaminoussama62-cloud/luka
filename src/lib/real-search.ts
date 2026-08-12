@@ -23,10 +23,10 @@ import type {
 } from "./types";
 
 /** Hard ceiling for any single upstream — users leave engines that feel slow. */
-const UPSTREAM_MS = 2500;
-const UPSTREAM_FAST_MS = 1800;
+const UPSTREAM_MS = 3200;
+const UPSTREAM_FAST_MS = 2200;
 /** Whole liveSearch must finish under this or the product is unusable as a default engine. */
-const SEARCH_WALL_MS = 5500;
+const SEARCH_WALL_MS = 9000;
 
 type FetchOpts = {
   zeroAi: boolean;

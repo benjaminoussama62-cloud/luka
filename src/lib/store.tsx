@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -72,6 +73,8 @@ export function AyebaProvider({ children }: { children: ReactNode }) {
   const [canvasOpen, setCanvasOpen] = useState(false);
   const [codeOpen, setCodeOpen] = useState(false);
   const [podcastOpen, setPodcastOpen] = useState(false);
+  const searchAbortRef = useRef<AbortController | null>(null);
+  const searchSeqRef = useRef(0);
 
   const applySearch = useCallback(
     async (
@@ -79,6 +82,13 @@ export function AyebaProvider({ children }: { children: ReactNode }) {
       nextSliders = sliders,
       nextOpts = { zeroAi, zeroAds, privateMode },
     ) => {
+      searchAbortRef.current?.abort();
+      const controller = new AbortController();
+      searchAbortRef.current = controller;
+      const seq = ++searchSeqRef.current;
+
+      // Drop previous SERP immediately so a failed/new query never shows the wrong topic.
+      setResponse(null);
       setSearching(true);
       setSearchError(null);
       setHasSearched(true);
@@ -86,8 +96,7 @@ export function AyebaProvider({ children }: { children: ReactNode }) {
         window.scrollTo({ top: 0, behavior: "smooth" });
       }
       try {
-        const controller = new AbortController();
-        const timeout = window.setTimeout(() => controller.abort(), 10000);
+        const timeout = window.setTimeout(() => controller.abort(), 14000);
         const res = await fetch("/api/search", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -99,6 +108,7 @@ export function AyebaProvider({ children }: { children: ReactNode }) {
           signal: controller.signal,
         });
         window.clearTimeout(timeout);
+        if (seq !== searchSeqRef.current) return;
         if (!res.ok) {
           let detail = "La recherche n’a pas abouti. Réessayez.";
           try {
@@ -110,6 +120,7 @@ export function AyebaProvider({ children }: { children: ReactNode }) {
           throw new Error(detail);
         }
         const data = (await res.json()) as SearchResponse;
+        if (seq !== searchSeqRef.current) return;
         setResponse(data);
         setSearchError(null);
         if (data.code) setCodeOpen(true);
@@ -136,7 +147,11 @@ export function AyebaProvider({ children }: { children: ReactNode }) {
           sessionStorage.removeItem("ayeba-history");
         }
       } catch (e) {
-        // Keep previous results if any — never leave a broken empty SERP with a harsh banner.
+        if (seq !== searchSeqRef.current) return;
+        if (e instanceof Error && e.name === "AbortError" && controller.signal.aborted) {
+          // Superseded by a newer search — ignore.
+          if (searchAbortRef.current !== controller) return;
+        }
         setSearchError(
           e instanceof Error && e.name === "AbortError"
             ? "Recherche trop longue — réessayez"
@@ -145,7 +160,7 @@ export function AyebaProvider({ children }: { children: ReactNode }) {
               : "Erreur réseau",
         );
       } finally {
-        setSearching(false);
+        if (seq === searchSeqRef.current) setSearching(false);
       }
     },
     [sliders, zeroAi, zeroAds, privateMode],
