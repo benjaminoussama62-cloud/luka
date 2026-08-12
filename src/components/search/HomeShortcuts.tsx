@@ -195,7 +195,11 @@ export function HomeShortcuts() {
       {adding ? (
         <div className="ayeba-shortcut-modal" role="dialog" aria-modal aria-label="Ajouter un site">
           <form className="ayeba-shortcut-dialog" onSubmit={onAdd}>
+            <p className="ayeba-kicker ayeba-kicker-accent">Raccourci</p>
             <h3>Ajouter un site</h3>
+            <p className="ayeba-shortcut-dialog-lead">
+              Nom + adresse — le site s’ouvre dans votre navigateur.
+            </p>
             <label>
               Nom
               <input
@@ -217,10 +221,10 @@ export function HomeShortcuts() {
             </label>
             {error ? <p className="ayeba-shortcut-error">{error}</p> : null}
             <div className="ayeba-shortcut-dialog-actions">
-              <button type="button" className="ayeba-ghost" onClick={() => setAdding(false)}>
+              <button type="button" className="ayeba-ghost px-4 py-2" onClick={() => setAdding(false)}>
                 Annuler
               </button>
-              <button type="submit" className="ayeba-cta">
+              <button type="submit" className="ayeba-cta px-5 py-2">
                 Ajouter
               </button>
             </div>

@@ -69,7 +69,12 @@ export const metadata: Metadata = {
     description: "Le monde entier, une requête.",
   },
   icons: {
-    icon: [{ url: "/brand/ayeba-mark.svg", type: "image/svg+xml" }],
+    icon: [
+      { url: "/favicon.ico", sizes: "48x48" },
+      { url: "/icon", type: "image/png", sizes: "32x32" },
+      { url: "/brand/ayeba-mark.svg", type: "image/svg+xml" },
+    ],
+    shortcut: "/favicon.ico",
     apple: [{ url: "/apple-icon", sizes: "180x180", type: "image/png" }],
   },
   other: {
@@ -95,6 +100,9 @@ export default function RootLayout({
       className={`${brand.variable} ${display.variable} ${body.variable} ${mono.variable} h-full antialiased`}
     >
       <head>
+        <link rel="icon" href="/favicon.ico" sizes="any" />
+        <link rel="icon" href="/icon" type="image/png" sizes="32x32" />
+        <link rel="apple-touch-icon" href="/apple-icon" />
         <link
           rel="search"
           type="application/opensearchdescription+xml"

@@ -1677,35 +1677,6 @@ select option {
   padding: 0 0.5rem;
 }
 
-.ayeba-splash-brand {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.85rem;
-}
-
-.ayeba-splash-mark {
-  width: clamp(2.5rem, 8vw, 3.5rem);
-  height: clamp(2.5rem, 8vw, 3.5rem);
-  border-radius: 22%;
-  box-shadow:
-    0 0 24px rgba(0, 180, 255, 0.35),
-    0 0 48px rgba(232, 93, 4, 0.12);
-}
-
-@media (min-width: 640px) {
-  .ayeba-splash-brand {
-    flex-direction: row;
-    justify-content: center;
-    gap: 1rem;
-  }
-
-  .ayeba-splash-mark {
-    width: 3.25rem;
-    height: 3.25rem;
-  }
-}
-
 .ayeba-splash-kicker {
   font-family: var(--font-mono);
   font-size: clamp(9px, 2vw, 11px);
@@ -2093,71 +2064,89 @@ select option {
   z-index: 80;
   display: grid;
   place-items: center;
-  padding: 1rem;
-  background: rgba(0, 0, 0, 0.62);
-  backdrop-filter: blur(10px);
+  padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right)) max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(18px);
 }
 
 .ayeba-shortcut-dialog {
-  width: min(100%, 22.5rem);
+  width: min(100%, 22rem);
   display: flex;
   flex-direction: column;
-  gap: 0.9rem;
-  padding: 1.35rem 1.25rem 1.15rem;
-  border-radius: 1.25rem;
-  background: linear-gradient(180deg, rgba(28, 30, 40, 0.98), rgba(12, 13, 18, 0.98));
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+  gap: 0.85rem;
+  padding: 1.35rem 1.25rem 1.2rem;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  background: rgba(8, 8, 10, 0.92);
+  backdrop-filter: blur(24px);
+  box-shadow:
+    0 40px 120px rgba(0, 0, 0, 0.7),
+    0 0 60px rgba(232, 93, 4, 0.06);
+}
+
+.ayeba-shortcut-dialog .ayeba-kicker {
+  margin: 0;
 }
 
 .ayeba-shortcut-dialog h3 {
   margin: 0;
   color: var(--ink);
   font-family: var(--font-brand), system-ui, sans-serif;
-  font-size: 1.15rem;
-  font-weight: 700;
-  letter-spacing: -0.02em;
+  font-size: 1.55rem;
+  font-weight: 650;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.ayeba-shortcut-dialog-lead {
+  margin: -0.25rem 0 0.15rem;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.45;
 }
 
 .ayeba-shortcut-dialog label {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
-  color: var(--muted);
-  font-size: 0.72rem;
-  letter-spacing: 0.04em;
+  color: var(--faint);
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.62rem;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 
 .ayeba-shortcut-dialog input {
-  height: 2.65rem;
-  padding: 0 0.85rem;
-  border-radius: 999px;
+  height: 2.75rem;
+  padding: 0 0.9rem;
+  border-radius: 2px;
   border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.03);
   color: var(--ink);
+  font-family: var(--font-body), system-ui, sans-serif;
   font-size: 0.95rem;
   outline: none;
   text-transform: none;
   letter-spacing: 0;
+  transition: border-color 0.25s, box-shadow 0.25s;
 }
 
 .ayeba-shortcut-dialog input:focus {
-  border-color: rgba(0, 180, 255, 0.55);
-  box-shadow: 0 0 0 3px rgba(0, 180, 255, 0.12);
+  border-color: var(--line-bright);
+  box-shadow: 0 0 0 3px var(--orange-soft);
 }
 
 .ayeba-shortcut-dialog-actions {
   display: flex;
   justify-content: flex-end;
   gap: 0.55rem;
-  margin-top: 0.2rem;
+  margin-top: 0.35rem;
 }
 
 .ayeba-shortcut-error {
   margin: 0;
-  color: #f87171;
-  font-size: 0.75rem;
+  color: var(--bad);
+  font-size: 0.78rem;
 }
 /* Tab bar — Edge-like, Ayeba chrome */
 .ayeba-tabbar {
