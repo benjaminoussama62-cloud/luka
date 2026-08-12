@@ -238,44 +238,33 @@ export function ProfileMenu() {
           if (!open) void loadHistory();
         }}
       >
-        <span
-          className="ayeba-profile-avatar"
-          style={{ background: `linear-gradient(145deg, ${user.avatarColor}, #0a0a0c)` }}
-          aria-hidden
-        >
-          {initial}
+        <span className="ayeba-profile-avatar" aria-hidden>
+          <span className="ayeba-profile-avatar-glow" />
+          <span className="ayeba-profile-avatar-letter">{initial}</span>
         </span>
         <span className="ayeba-profile-meta">
           <span className="ayeba-profile-name">{firstName}</span>
-          <span className="ayeba-profile-chevron" aria-hidden>
-            ▾
-          </span>
+          <span className="ayeba-profile-chevron" aria-hidden />
         </span>
       </button>
 
       {open ? (
         <div className="ayeba-profile-panel" role="menu">
           <div className="ayeba-profile-panel-head">
-            <span
-              className="ayeba-profile-avatar ayeba-profile-avatar-lg"
-              style={{ background: `linear-gradient(145deg, ${user.avatarColor}, #0a0a0c)` }}
-              aria-hidden
-            >
-              {initial}
-            </span>
-            <div className="ayeba-profile-panel-id">
-              <p className="ayeba-profile-panel-name">{user.name}</p>
-              <p className="ayeba-profile-panel-email">{user.email}</p>
-              <p className="ayeba-profile-panel-via">Via {providerLabel}</p>
-            </div>
+            <p className="ayeba-kicker ayeba-kicker-accent">Compte</p>
+            <p className="ayeba-profile-panel-name">{user.name}</p>
+            <p className="ayeba-profile-panel-email">{user.email}</p>
+            <p className="ayeba-profile-panel-via">Via {providerLabel}</p>
           </div>
 
           <div className="ayeba-profile-panel-actions">
             <a href="/studio/app" className="ayeba-profile-link" role="menuitem">
-              Ayeba Studio
+              <span className="ayeba-profile-link-label">Ayeba Studio</span>
+              <span className="ayeba-profile-link-hint">Webmaster · Radar</span>
             </a>
             <a href="/telecharger" className="ayeba-profile-link" role="menuitem">
-              Télécharger AYEBA
+              <span className="ayeba-profile-link-label">Télécharger AYEBA</span>
+              <span className="ayeba-profile-link-hint">Navigateur Windows</span>
             </a>
           </div>
 

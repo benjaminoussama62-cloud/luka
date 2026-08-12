@@ -1028,7 +1028,7 @@ select option {
   pointer-events: auto;
 }
 
-/* Profile button + panel */
+/* Profile — Ayeba language (glass, brand type, orange accent, sharp edges) */
 .ayeba-profile {
   position: relative;
   z-index: 60;
@@ -1038,49 +1038,62 @@ select option {
   display: inline-flex;
   align-items: center;
   gap: 0.55rem;
-  max-width: 12rem;
-  height: 2.45rem;
-  padding: 0.2rem 0.65rem 0.2rem 0.25rem;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.06);
+  max-width: 13rem;
+  height: 2.5rem;
+  padding: 0.2rem 0.7rem 0.2rem 0.3rem;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(16px);
   color: var(--ink);
   cursor: pointer;
-  transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    background 0.3s var(--ease-out),
+    border-color 0.3s var(--ease-out),
+    box-shadow 0.3s var(--ease-out);
 }
 
 .ayeba-profile-btn:hover,
 .ayeba-profile-btn.is-open {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.28);
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+  background: var(--orange-soft);
+  border-color: var(--line-bright);
+  box-shadow: 0 0 28px rgba(232, 93, 4, 0.12);
 }
 
 .ayeba-profile-avatar {
+  position: relative;
   display: grid;
   place-items: center;
-  width: 1.9rem;
-  height: 1.9rem;
-  border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.22);
+  width: 1.85rem;
+  height: 1.85rem;
+  flex-shrink: 0;
+  border-radius: 2px;
+  border: 1px solid rgba(232, 93, 4, 0.45);
+  background: linear-gradient(160deg, rgba(232, 93, 4, 0.35) 0%, rgba(8, 8, 10, 0.95) 70%);
+  overflow: hidden;
+}
+
+.ayeba-profile-avatar-glow {
+  position: absolute;
+  inset: -40%;
+  background: radial-gradient(circle, rgba(0, 180, 255, 0.35) 0%, transparent 65%);
+  pointer-events: none;
+}
+
+.ayeba-profile-avatar-letter {
+  position: relative;
+  z-index: 1;
   color: #fff;
   font-family: var(--font-brand), system-ui, sans-serif;
   font-size: 0.78rem;
   font-weight: 700;
-  letter-spacing: 0.02em;
-  flex-shrink: 0;
-}
-
-.ayeba-profile-avatar-lg {
-  width: 2.75rem;
-  height: 2.75rem;
-  font-size: 1.05rem;
+  letter-spacing: 0.04em;
 }
 
 .ayeba-profile-meta {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.4rem;
   min-width: 0;
 }
 
@@ -1088,45 +1101,55 @@ select option {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 6.5rem;
-  font-size: 0.82rem;
+  max-width: 7rem;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.68rem;
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 
 .ayeba-profile-chevron {
-  color: var(--faint);
-  font-size: 0.65rem;
-  line-height: 1;
-  transition: transform 0.2s ease;
+  width: 0.4rem;
+  height: 0.4rem;
+  border-right: 1.5px solid var(--faint);
+  border-bottom: 1.5px solid var(--faint);
+  transform: rotate(45deg) translateY(-1px);
+  transition: transform 0.25s var(--ease-out), border-color 0.25s;
+}
+
+.ayeba-profile-btn:hover .ayeba-profile-chevron,
+.ayeba-profile-btn.is-open .ayeba-profile-chevron {
+  border-color: var(--orange);
 }
 
 .ayeba-profile-btn.is-open .ayeba-profile-chevron {
-  transform: rotate(180deg);
+  transform: rotate(225deg) translateY(-1px);
 }
 
 .ayeba-profile-panel {
   position: absolute;
-  top: calc(100% + 0.55rem);
+  top: calc(100% + 0.5rem);
   right: 0;
   z-index: 70;
-  width: min(20rem, calc(100vw - 1.5rem));
-  min-width: 17.5rem;
-  border-radius: 1rem;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(12, 13, 18, 0.96);
-  backdrop-filter: blur(20px);
+  width: min(21rem, calc(100vw - 1.5rem));
+  min-width: 18rem;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  background: rgba(8, 8, 10, 0.88);
+  backdrop-filter: blur(24px);
   box-shadow:
-    0 24px 60px rgba(0, 0, 0, 0.55),
-    0 0 0 1px rgba(0, 180, 255, 0.06);
+    0 40px 120px rgba(0, 0, 0, 0.7),
+    0 0 60px rgba(232, 93, 4, 0.06),
+    0 0 40px rgba(0, 180, 255, 0.04);
   overflow: hidden;
-  animation: ayeba-profile-in 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+  animation: ayeba-profile-in 0.28s var(--ease-out);
 }
 
 @keyframes ayeba-profile-in {
   from {
     opacity: 0;
-    transform: translateY(-6px);
+    transform: translateY(-8px);
   }
   to {
     opacity: 1;
@@ -1136,81 +1159,113 @@ select option {
 
 .ayeba-profile-panel-head {
   display: flex;
-  align-items: center;
-  gap: 0.85rem;
-  padding: 1rem 1rem 0.9rem;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+  padding: 1.1rem 1.15rem 1rem;
   border-bottom: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(232, 93, 4, 0.06) 0%, transparent 100%);
 }
 
-.ayeba-profile-panel-id {
-  min-width: 0;
-  flex: 1;
+.ayeba-profile-panel-head .ayeba-kicker {
+  margin: 0 0 0.55rem;
 }
 
 .ayeba-profile-panel-name {
   margin: 0;
   color: var(--ink);
   font-family: var(--font-brand), system-ui, sans-serif;
-  font-size: 1rem;
+  font-size: 1.35rem;
   font-weight: 650;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  max-width: 100%;
 }
 
 .ayeba-profile-panel-email {
-  margin: 0.2rem 0 0;
+  margin: 0.45rem 0 0;
   color: var(--muted);
-  font-size: 0.75rem;
+  font-size: 0.8rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  max-width: 100%;
 }
 
 .ayeba-profile-panel-via {
-  margin: 0.35rem 0 0;
+  margin: 0.55rem 0 0;
   color: var(--faint);
   font-family: var(--font-mono), ui-monospace, monospace;
   font-size: 0.62rem;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
 }
 
 .ayeba-profile-panel-actions {
   display: flex;
   flex-direction: column;
-  padding: 0.45rem;
+  padding: 0.35rem 0;
   border-bottom: 1px solid var(--line);
 }
 
 .ayeba-profile-link {
-  display: block;
-  padding: 0.7rem 0.75rem;
-  border-radius: 0.55rem;
-  color: var(--ink);
-  font-size: 0.86rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.85rem 1.15rem;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  border-radius: 0;
+  color: inherit;
   text-decoration: none;
-  transition: background 0.15s ease;
+  transition:
+    background 0.3s var(--ease-out),
+    padding-left 0.3s var(--ease-out),
+    border-color 0.3s var(--ease-out);
 }
 
 .ayeba-profile-link:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.03);
+  padding-left: 1.35rem;
+  border-bottom-color: var(--line);
+}
+
+.ayeba-profile-link-label {
+  color: var(--ink);
+  font-family: var(--font-brand), system-ui, sans-serif;
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.ayeba-profile-link:hover .ayeba-profile-link-label {
+  color: var(--orange);
+}
+
+.ayeba-profile-link-hint {
+  color: var(--faint);
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .ayeba-profile-history {
   max-height: 9rem;
   overflow: auto;
-  padding: 0.65rem 1rem 0.75rem;
+  padding: 0.75rem 1.15rem 0.85rem;
   border-bottom: 1px solid var(--line);
 }
 
 .ayeba-profile-history-label {
-  margin: 0 0 0.45rem;
+  margin: 0 0 0.5rem;
   color: var(--faint);
   font-family: var(--font-mono), ui-monospace, monospace;
   font-size: 0.62rem;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
 }
 
@@ -1222,29 +1277,40 @@ select option {
 
 .ayeba-profile-history-item {
   display: block;
-  padding: 0.28rem 0;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--line);
   color: var(--muted);
-  font-size: 0.78rem;
+  font-size: 0.8rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.ayeba-profile-history li:last-child .ayeba-profile-history-item {
+  border-bottom: 0;
+}
+
 .ayeba-profile-logout {
   display: block;
   width: 100%;
-  padding: 0.85rem 1rem;
+  padding: 0.95rem 1.15rem;
   border: 0;
+  border-top: 1px solid var(--line);
   background: transparent;
-  color: #f87171;
-  font-size: 0.86rem;
+  color: var(--muted);
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
   text-align: left;
+  text-transform: uppercase;
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: color 0.25s, background 0.25s;
 }
 
 .ayeba-profile-logout:hover {
-  background: rgba(248, 113, 113, 0.08);
+  color: var(--orange);
+  background: var(--orange-soft);
 }
 
 @media (max-width: 480px) {
@@ -1252,7 +1318,7 @@ select option {
     display: none;
   }
   .ayeba-profile-btn {
-    padding-right: 0.35rem;
+    padding-right: 0.45rem;
   }
 }
 
