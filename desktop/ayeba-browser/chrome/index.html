@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data: https:; connect-src 'self'"
+    />
+    <link rel="stylesheet" href="./chrome.css" />
+  </head>
+  <body>
+    <div class="chrome">
+      <div class="tabstrip" id="tabstrip">
+        <div class="tabs" id="tabs" role="tablist"></div>
+        <button type="button" class="icon-btn new-tab" id="btnNewTab" title="Nouvel onglet (Ctrl+T)">+</button>
+        <div class="tabstrip-spacer"></div>
+      </div>
+
+      <div class="toolbar">
+        <div class="nav">
+          <button type="button" class="icon-btn" id="btnBack" title="Précédent" aria-label="Précédent">←</button>
+          <button type="button" class="icon-btn" id="btnForward" title="Suivant" aria-label="Suivant">→</button>
+          <button type="button" class="icon-btn" id="btnReload" title="Actualiser" aria-label="Actualiser">↻</button>
+          <button type="button" class="icon-btn" id="btnHome" title="Accueil Ayeba" aria-label="Accueil">⌂</button>
+        </div>
+
+        <form class="omnibox" id="omniForm">
+          <span class="omni-mark" aria-hidden></span>
+          <input id="omni" type="text" spellcheck="false" autocomplete="off" placeholder="Rechercher sur Ayeba ou saisir une adresse" />
+          <div class="omni-progress" id="omniProgress" hidden></div>
+        </form>
+
+        <div class="tools">
+          <button type="button" class="icon-btn" id="btnFav" title="Ajouter aux favoris">☆</button>
+          <button type="button" class="pill-btn" id="btnMenu" title="Menu Ayeba" aria-haspopup="true" aria-expanded="false">⋯</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="menu" id="menu" hidden role="menu">
+      <button type="button" data-act="new-tab">Nouvel onglet<span>Ctrl+T</span></button>
+      <button type="button" data-act="new-window">Nouvelle fenêtre<span>Ctrl+N</span></button>
+      <div class="menu-sep"></div>
+      <div class="menu-zoom">
+        <span>Zoom</span>
+        <div>
+          <button type="button" data-act="zoom-out">−</button>
+          <em id="zoomLabel">100%</em>
+          <button type="button" data-act="zoom-in">+</button>
+        </div>
+      </div>
+      <div class="menu-sep"></div>
+      <button type="button" data-act="favorites">Favoris</button>
+      <button type="button" data-act="history">Historique</button>
+      <button type="button" data-act="downloads">Téléchargements</button>
+      <div class="menu-sep"></div>
+      <button type="button" data-act="find">Rechercher sur la page<span>Ctrl+F</span></button>
+      <button type="button" data-act="print">Imprimer<span>Ctrl+P</span></button>
+      <button type="button" data-act="clear">Effacer les données</button>
+      <div class="menu-sep"></div>
+      <button type="button" data-act="about">À propos d’AYEBA</button>
+    </div>
+
+    <div class="panel" id="panel" hidden>
+      <header>
+        <h3 id="panelTitle">Favoris</h3>
+        <button type="button" class="icon-btn" id="panelClose">×</button>
+      </header>
+      <div class="panel-body" id="panelBody"></div>
+    </div>
+
+    <div class="findbar" id="findbar" hidden>
+      <input id="findInput" type="text" placeholder="Rechercher sur la page…" />
+      <button type="button" id="findNext">Suivant</button>
+      <button type="button" id="findClose">✕</button>
+    </div>
+
+    <script src="./chrome.js"></script>
+  </body>
+</html>

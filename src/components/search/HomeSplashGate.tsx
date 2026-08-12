@@ -18,6 +18,10 @@ export function HomeSplashGate({
       <SplashHero />
       <div className="ayeba-home-search ayeba-home-search-visible">{search}</div>
       <nav className="ayeba-home-nav">
+        <Link href="/telecharger" className="ayeba-home-nav-link">
+          Télécharger
+        </Link>
+        <span className="text-[var(--faint)]">·</span>
         <Link href="/ayebi" className="ayeba-home-nav-link">
           Ayebi
         </Link>

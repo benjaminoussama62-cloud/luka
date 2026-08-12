@@ -1,0 +1,53 @@
+{
+  "name": "ayeba-browser",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AYEBA — navigateur et moteur de recherche (Windows)",
+  "author": "Ayeba",
+  "homepage": "https://ayeba.app/telecharger",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --enable-logging",
+    "pack": "electron-builder --dir",
+    "dist": "node scripts/build-portable.js",
+    "dist:nsis": "electron-builder --win nsis",
+    "dist:dir": "electron-builder --win dir"
+  },
+  "build": {
+    "appId": "app.ayeba.browser",
+    "productName": "AYEBA",
+    "copyright": "Copyright © Ayeba",
+    "directories": {
+      "output": "dist",
+      "buildResources": "assets"
+    },
+    "files": [
+      "src/**/*",
+      "chrome/**/*",
+      "newtab/**/*",
+      "assets/icon.*",
+      "package.json"
+    ],
+    "win": {
+      "target": ["nsis"],
+      "icon": "assets/icon.ico",
+      "artifactName": "AYEBA-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "AYEBA",
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico",
+      "runAfterFinish": true
+    }
+  },
+  "devDependencies": {
+    "electron": "^37.2.0",
+    "electron-builder": "^26.0.12",
+    "png-to-ico": "^2.1.8"
+  }
+}

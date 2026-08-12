@@ -10,7 +10,9 @@
     "typecheck": "tsc --noEmit",
     "jobs": "node --env-file=.env.local --import tsx scripts/run-jobs.ts",
     "jobs:quick": "node --env-file=.env.local --import tsx scripts/run-jobs.ts --quick",
-    "verify": "npx tsx scripts/verify-http.ts"
+    "verify": "npx tsx scripts/verify-http.ts",
+    "browser": "npm --prefix desktop/ayeba-browser start",
+    "browser:install": "npm --prefix desktop/ayeba-browser install"
   },
   "dependencies": {
     "@libsql/client": "^0.17.4",

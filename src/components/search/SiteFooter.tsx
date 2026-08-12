@@ -4,6 +4,10 @@ export function SiteFooter() {
   return (
     <footer className="mt-6 text-center text-xs text-[var(--faint)]">
       <nav className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
+        <Link href="/telecharger" className="ayeba-ghost px-2 py-1">
+          Télécharger
+        </Link>
+        <span aria-hidden>·</span>
         <Link href="/privacy" className="ayeba-ghost px-2 py-1">
           Confidentialité
         </Link>
