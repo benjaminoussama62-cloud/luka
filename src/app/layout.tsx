@@ -74,10 +74,24 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
+      {
+        url: "/brand/ayeba-mark-48.png",
+        type: "image/png",
+        sizes: "48x48",
+      },
+      {
+        url: "/brand/ayeba-mark-96.png",
+        type: "image/png",
+        sizes: "96x96",
+      },
+      {
+        url: "/brand/ayeba-mark-192.png",
+        type: "image/png",
+        sizes: "192x192",
+      },
       { url: "/favicon.ico", sizes: "any" },
-      { url: "/icon.png", type: "image/png", sizes: "180x180" },
     ],
-    shortcut: [{ url: "/favicon.ico" }],
+    shortcut: [{ url: "/brand/ayeba-mark-48.png" }],
     apple: [{ url: "/apple-icon.png", sizes: "180x180", type: "image/png" }],
   },
   other: {
@@ -103,10 +117,27 @@ export default function RootLayout({
       className={`${brand.variable} ${display.variable} ${body.variable} ${mono.variable} h-full antialiased`}
     >
       <head>
-        {/* Favicon Ayeba only — all browsers (Edge, Chrome, Safari, Firefox) */}
+        {/* Favicon Ayeba — 48px+ PNG first (Google Search / Search Console) */}
+        <link
+          rel="icon"
+          href="/brand/ayeba-mark-48.png"
+          type="image/png"
+          sizes="48x48"
+        />
+        <link
+          rel="icon"
+          href="/brand/ayeba-mark-96.png"
+          type="image/png"
+          sizes="96x96"
+        />
+        <link
+          rel="icon"
+          href="/brand/ayeba-mark-192.png"
+          type="image/png"
+          sizes="192x192"
+        />
         <link rel="icon" href="/favicon.ico" sizes="any" />
-        <link rel="icon" href="/icon.png" type="image/png" sizes="180x180" />
-        <link rel="shortcut icon" href="/favicon.ico" />
+        <link rel="shortcut icon" href="/brand/ayeba-mark-48.png" />
         <link rel="apple-touch-icon" href="/apple-icon.png" />
         <link
           rel="search"

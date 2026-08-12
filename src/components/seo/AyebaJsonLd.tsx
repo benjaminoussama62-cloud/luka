@@ -31,9 +31,9 @@ export function AyebaJsonLd() {
         url: origin,
         logo: {
           "@type": "ImageObject",
-          url: `${origin}/icon.png`,
-          width: 180,
-          height: 180,
+          url: `${origin}/brand/ayeba-mark-192.png`,
+          width: 192,
+          height: 192,
         },
         sameAs: [],
         description:
