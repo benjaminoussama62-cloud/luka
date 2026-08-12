@@ -7,6 +7,7 @@ import { AuthProvider } from "@/lib/auth";
 import { I18nProvider } from "@/lib/i18n";
 import { AyebaProvider } from "@/lib/store";
 import { MarketProvider } from "@/lib/market-context";
+import { AyebaJsonLd } from "@/components/seo/AyebaJsonLd";
 import "./globals.css";
 
 const brand = Inter({
@@ -40,9 +41,12 @@ export const metadata: Metadata = {
     template: "%s · AYEBA",
   },
   description:
-    "AYEBA est le moteur de recherche mondial : résultats web, priorité Afrique & RDC, encyclopédie Ayebi, marchés et navigateur. Pas une société de conseil.",
+    "AYEBA trouve tout sur le web : pages, actualités, Ayebi, marchés. Recherche mondiale — le monde entier, une requête. ayeba.app",
   applicationName: "AYEBA",
   manifest: "/manifest.webmanifest",
+  alternates: {
+    canonical: "https://ayeba.app",
+  },
   keywords: [
     "AYEBA",
     "moteur de recherche",
@@ -112,6 +116,7 @@ export default function RootLayout({
         />
       </head>
       <body className="ayeba-shell min-h-full">
+        <AyebaJsonLd />
         <AuthProvider>
           <I18nProvider>
             <AyebaProvider>
