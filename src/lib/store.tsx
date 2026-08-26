@@ -67,7 +67,8 @@ export function AyebaProvider({ children }: { children: ReactNode }) {
   const [zeroAi, setZeroAi] = useState(false);
   const [zeroAds, setZeroAds] = useState(false);
   const [privateMode, setPrivateMode] = useState(false);
-  const [splitScreen, setSplitScreen] = useState(true);
+  // Off by default — on mobile a forced AI panel pushes organic results below the fold.
+  const [splitScreen, setSplitScreen] = useState(false);
   const [showOpposing, setShowOpposing] = useState(false);
   const [deepResearchOpen, setDeepResearchOpen] = useState(false);
   const [canvasOpen, setCanvasOpen] = useState(false);

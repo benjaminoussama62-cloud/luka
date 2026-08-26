@@ -449,8 +449,14 @@ function AyebaAppBody() {
             {tab === "web" && response ? (
               <>
                 <InstantAnswerCard />
-                <AyebiSerpRail />
                 <FeaturedSnippetCard />
+                <EmptyResults />
+                {response.results
+                  .filter((r) => r.url !== response.featuredSnippet?.url)
+                  .map((r) => (
+                    <ResultCard key={r.id} result={r} />
+                  ))}
+                <AyebiSerpRail />
                 <PeopleAlsoAskBlock />
                 {response.maps.length > 0 ? <LocalPack places={response.maps} /> : null}
                 {response.images.some((m) => m.thumb.startsWith("http")) ? <ImageRail items={response.images} /> : null}
@@ -460,12 +466,6 @@ function AyebaAppBody() {
                     <p className="mt-4 text-[15px] leading-[1.8] text-[var(--muted)]">{response.aiSummary}</p>
                   </section>
                 ) : null}
-                <EmptyResults />
-                {response.results
-                  .filter((r) => r.url !== response.featuredSnippet?.url)
-                  .map((r) => (
-                    <ResultCard key={r.id} result={r} />
-                  ))}
                 <RelatedSearches />
               </>
             ) : null}

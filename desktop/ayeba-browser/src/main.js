@@ -147,12 +147,13 @@ function createBrowserWindow() {
     win = new BaseWindow({
       width: 1280,
       height: 840,
-      minWidth: 900,
-      minHeight: 600,
+      minWidth: 720,
+      minHeight: 480,
       backgroundColor: "#050507",
       title: "AYEBA",
       autoHideMenuBar: true,
-      show: false,
+      // BaseWindow often never fires ready-to-show — show immediately so the app is visible.
+      show: true,
       icon: path.join(__dirname, "..", "assets", "icon.ico"),
     });
   } catch (err) {
@@ -356,8 +357,14 @@ function createBrowserWindow() {
     layout();
   });
 
-  // Si ready-to-show ne se déclenche pas (GPU / pilote), forcer l’affichage
-  setTimeout(() => revealWindow(win), 2500);
+  // Always force visibility — ready-to-show is unreliable with BaseWindow + GPU off
+  revealWindow(win);
+  layout();
+  setTimeout(() => {
+    revealWindow(win);
+    layout();
+  }, 400);
+  setTimeout(() => revealWindow(win), 1500);
   win.on("closed", () => {
     windows.delete(state);
   });

@@ -174,9 +174,13 @@ export function SearchBar({ large = false }: { large?: boolean }) {
           <button
             type="submit"
             disabled={searching}
-            className={`ayeba-cta w-full shrink-0 sm:w-auto ${large ? "px-5 py-2.5 text-sm" : "px-4 py-2 text-xs"} ${!query.trim() ? "opacity-70" : ""}`}
+            className={`ayeba-cta shrink-0 ${
+              large
+                ? "w-full px-5 py-2.5 text-sm sm:w-auto"
+                : "w-auto px-3 py-2 text-[11px] sm:px-4 sm:text-xs"
+            } ${!query.trim() ? "opacity-70" : ""}`}
           >
-            {searching ? "…" : "Rechercher"}
+            {searching ? "…" : large ? "Rechercher" : "OK"}
           </button>
         </div>
       </form>

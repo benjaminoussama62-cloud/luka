@@ -623,8 +623,10 @@ body {
   display: none;
 }
 
-.ayeba-image-rail > a {
-  flex: 0 0 160px;
+.ayeba-image-rail > a,
+.ayeba-image-rail > button {
+  flex: 0 0 9.5rem;
+  min-width: 9.5rem;
   scroll-snap-align: start;
 }
 
@@ -1863,7 +1865,8 @@ select option {
   .ayeba-serp-header-inner {
     flex-wrap: wrap;
     gap: 0.5rem;
-    padding: 0.55rem 0.75rem 0.65rem;
+    padding: 0.55rem 0.75rem 0.45rem;
+    padding-top: max(0.55rem, env(safe-area-inset-top));
   }
 
   .ayeba-serp-brand {
@@ -1878,15 +1881,17 @@ select option {
   .ayeba-serp-search {
     order: 3;
     flex: 1 1 100%;
-    min-width: 100%;
+    min-width: 0;
+    max-width: 100%;
   }
 
   .ayeba-serp-lang {
     display: none;
   }
 
+  /* Keep Tools reachable on phone (split / privacy toggles) */
   .ayeba-serp-header .ayeba-tools-trigger {
-    display: none;
+    display: inline-flex;
   }
 
   .ayeba-serp-header .ayeba-cta {
@@ -1894,20 +1899,42 @@ select option {
     padding: 0 0.7rem;
     font-size: 0.65rem;
     letter-spacing: 0.08em;
+    width: auto !important;
+    flex-shrink: 0;
   }
 
   .ayeba-serp-header .ayeba-glass {
     height: 44px;
+    min-width: 0;
+    max-width: 100%;
     padding-left: 0.85rem;
     padding-right: 0.5rem;
+  }
+
+  /* Ticker + tabs scroll away — only brand/search stay sticky */
+  .ayeba-serp-header .ayeba-ticker-compact {
+    position: relative;
+    top: auto;
+    z-index: 1;
+    display: none;
   }
 
   .ayeba-serp-tabs-wrap {
     padding: 0 0.75rem;
   }
 
-  .ayeba-ticker-compact {
-    font-size: 0.65rem;
+  .ayeba-serp-header .ayeba-tab {
+    padding: 0.55rem 0.55rem;
+    font-size: 0.62rem;
+    letter-spacing: 0.12em;
+  }
+
+  .ayeba-serp-body {
+    padding: 1rem 0.85rem 2.5rem;
+  }
+
+  .ayeba-vignette-serp {
+    opacity: 0.45;
   }
 }
 
@@ -2382,13 +2409,14 @@ select option {
 .ayeba-serp-body-with-aside {
   max-width: 72rem;
   display: grid;
-  gap: 2rem;
+  gap: 1.5rem;
 }
 
-@media (min-width: 1024px) {
+@media (min-width: 900px) {
   .ayeba-serp-body-with-aside {
     grid-template-columns: minmax(0, 1fr) 280px;
     align-items: start;
+    gap: 2rem;
   }
 }
 
@@ -2397,14 +2425,19 @@ select option {
 }
 
 .ayeba-serp-aside {
-  display: none;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-width: 0;
 }
 
-@media (min-width: 1024px) {
+@media (max-width: 899px) {
   .ayeba-serp-aside {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
+    order: 2;
+  }
+
+  .ayeba-serp-main {
+    order: 1;
   }
 }
 

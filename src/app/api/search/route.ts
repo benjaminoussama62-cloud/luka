@@ -33,23 +33,13 @@ export async function POST(req: Request) {
     const query = body.query ?? "actualité";
     const zeroAi = Boolean(body.zeroAi);
 
-    // Align with liveSearch wall (~9s) + small slack; Vercel maxDuration is 12s.
-    const result = await Promise.race([
-      liveSearch(query, {
-        sliders,
-        zeroAi,
-        zeroAds: Boolean(body.zeroAds),
-        privateMode: Boolean(body.privateMode),
-      }),
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), 10500)),
-    ]);
-
-    if (!result) {
-      return NextResponse.json(
-        { error: "Recherche trop longue — réessayez", message: "deadline" },
-        { status: 504 },
-      );
-    }
+    // liveSearch has its own wall — do not race to empty 504 (that caused "échec" SERPs).
+    const result = await liveSearch(query, {
+      sliders,
+      zeroAi,
+      zeroAds: Boolean(body.zeroAds),
+      privateMode: Boolean(body.privateMode),
+    });
 
     if (!zeroAi) {
       const llmSummary = await Promise.race([

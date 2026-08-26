@@ -110,6 +110,16 @@ function isRelevantToQuery(hit: RawHit, query: string): boolean {
 }
 
 function isRelevantResult(r: SearchResult, query: string): boolean {
+  // Never drop trusted / fallback rows — over-filtering made SERPs look like failures.
+  if (
+    r.sourceType === "wiki" ||
+    r.sourceType === "gov" ||
+    r.sourceType === "news" ||
+    r.domain.includes("wikipedia") ||
+    r.url.includes("duckduckgo.com")
+  ) {
+    return true;
+  }
   return relevanceScore(`${r.title} ${r.snippet} ${r.domain} ${r.url}`, query) > 0;
 }
 
