@@ -5,6 +5,7 @@ on:
   push:
     paths:
       - "mobile/ayeba-app/**"
+      - ".github/workflows/android-aab.yml"
 
 jobs:
   build-aab:
