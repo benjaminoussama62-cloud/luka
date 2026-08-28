@@ -12,7 +12,9 @@
     "jobs:quick": "node --env-file=.env.local --import tsx scripts/run-jobs.ts --quick",
     "verify": "npx tsx scripts/verify-http.ts",
     "browser": "npm --prefix desktop/ayeba-browser start",
-    "browser:install": "npm --prefix desktop/ayeba-browser install"
+    "browser:install": "npm --prefix desktop/ayeba-browser install",
+    "mobile:install": "npm --prefix mobile/ayeba-app install",
+    "mobile:android": "npm --prefix mobile/ayeba-app run android"
   },
   "dependencies": {
     "@libsql/client": "^0.17.4",

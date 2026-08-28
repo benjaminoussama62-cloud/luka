@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
+import { MobileAppBootstrap } from "@/components/MobileAppBootstrap";
 import { PwaRegister } from "@/components/PwaRegister";
 import { VercelMetrics } from "@/components/monitoring/VercelMetrics";
 import { SearchFromUrlGate } from "@/components/search/SearchFromUrlGate";
@@ -152,6 +153,7 @@ export default function RootLayout({
           <I18nProvider>
             <AyebaProvider>
               <MarketProvider>
+                <MobileAppBootstrap />
                 <SearchFromUrlGate />
                 {children}
                 <PwaRegister />

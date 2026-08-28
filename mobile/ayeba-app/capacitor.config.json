@@ -1,0 +1,33 @@
+{
+  "appId": "app.ayeba.mobile",
+  "appName": "AYEBA",
+  "webDir": "www",
+  "server": {
+    "url": "https://ayeba.app/?app=1",
+    "cleartext": false,
+    "androidScheme": "https"
+  },
+  "android": {
+    "backgroundColor": "#050507",
+    "allowMixedContent": false,
+    "minWebViewVersion": 60
+  },
+  "ios": {
+    "backgroundColor": "#050507",
+    "contentInset": "automatic",
+    "scrollEnabled": true
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 1000,
+      "launchAutoHide": true,
+      "backgroundColor": "#050507",
+      "showSpinner": false,
+      "androidSplashResourceName": "splash"
+    },
+    "StatusBar": {
+      "style": "DARK",
+      "backgroundColor": "#050507"
+    }
+  }
+}

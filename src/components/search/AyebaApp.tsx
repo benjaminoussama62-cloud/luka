@@ -9,6 +9,7 @@ import { AppTabBar } from "@/components/shell/AppTabBar";
 import { InAppBrowser } from "@/components/shell/InAppBrowser";
 import { BrowserShellProvider, useBrowserShell } from "@/lib/browser-shell";
 import { useI18n } from "@/lib/i18n";
+import { isMobileApp } from "@/lib/mobile-app";
 import { useAyeba } from "@/lib/store";
 import type { MapPlace, MediaResult, SearchTab, ShopItem } from "@/lib/types";
 import { AlgorithmSliders } from "./AlgorithmSliders";
@@ -331,13 +332,18 @@ function EmptyResults() {
 }
 
 function Modals() {
+  const lite = typeof window !== "undefined" && isMobileApp();
   return (
     <>
       <LoginModal />
-      <DeepResearchPanel />
-      <InteractiveCanvas />
-      <CodeExecutor />
-      <PodcastPlayer />
+      {!lite ? (
+        <>
+          <DeepResearchPanel />
+          <InteractiveCanvas />
+          <CodeExecutor />
+          <PodcastPlayer />
+        </>
+      ) : null}
     </>
   );
 }
@@ -475,7 +481,7 @@ function AyebaAppBody() {
             {tab === "news" && response?.news.map((r) => <ResultCard key={r.id} result={r} dense />)}
             {tab === "maps" && response ? <InteractiveMapPanel places={response.maps} /> : null}
             {tab === "shopping" && response ? <NativeShoppingPanel items={response.shopping} /> : null}
-            {response && tab === "web" ? (
+            {response && tab === "web" && !isMobileApp() ? (
               <button type="button" onClick={() => setDeepResearchOpen(true)} className="ayeba-ghost mt-6 px-4 py-2 text-xs">
                 Recherche profonde
               </button>

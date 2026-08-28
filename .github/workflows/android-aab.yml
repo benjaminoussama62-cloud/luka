@@ -1,0 +1,60 @@
+name: Build AYEBA Android AAB
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "mobile/ayeba-app/**"
+
+jobs:
+  build-aab:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile/ayeba-app
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: mobile/ayeba-app/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install deps & Capacitor sync
+        run: |
+          npm install
+          npx cap sync android
+          node scripts/patch-android.js
+
+      - name: Create upload keystore
+        env:
+          KS_PASS: ${{ secrets.AYEBA_KEYSTORE_PASS }}
+        run: |
+          PASS="${KS_PASS:-ayeba2026}"
+          keytool -genkeypair -v \
+            -keystore ayeba-upload.keystore \
+            -alias ayeba \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass "$PASS" -keypass "$PASS" \
+            -dname "CN=Ayeba, OU=Mobile, O=Ayeba, L=Kinshasa, ST=Kinshasa, C=CD"
+          printf 'storePassword=%s\nkeyPassword=%s\nkeyAlias=ayeba\nstoreFile=../ayeba-upload.keystore\n' "$PASS" "$PASS" > android/keystore.properties
+
+      - name: Build release AAB
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew bundleRelease
+
+      - name: Upload AAB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AYEBA-PlayStore-aab
+          path: mobile/ayeba-app/android/app/build/outputs/bundle/release/app-release.aab
+          retention-days: 30

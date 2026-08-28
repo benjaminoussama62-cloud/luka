@@ -1,0 +1,27 @@
+{
+  "name": "ayeba-mobile",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AYEBA mobile — shell Capacitor léger (charge ayeba.app, ~12 Mo)",
+  "scripts": {
+    "postinstall": "node scripts/patch-android.js",
+    "cap:sync": "npx cap sync",
+    "cap:copy": "npx cap copy",
+    "android:add": "npx cap add android",
+    "ios:add": "npx cap add ios",
+    "android": "npx cap open android",
+    "ios": "npx cap open ios",
+    "android:release": "cd android && gradlew.bat assembleRelease"
+  },
+  "dependencies": {
+    "@capacitor/android": "^6.2.0",
+    "@capacitor/core": "^6.2.0",
+    "@capacitor/ios": "^6.2.0",
+    "@capacitor/splash-screen": "^6.0.3",
+    "@capacitor/status-bar": "^6.0.2"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.2.0",
+    "typescript": "^5"
+  }
+}

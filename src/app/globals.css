@@ -2697,3 +2697,37 @@ select option {
   animation: rise 0.55s var(--ease-out) both;
 }
 
+/* ——— Native app shell (Capacitor / Play / App Store) ——— */
+.ayeba-app-shell {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ayeba-app-shell .ayeba-cursor-glow,
+.ayeba-app-shell .ayeba-vignette {
+  display: none;
+}
+
+.ayeba-app-shell .ayeba-serp-header-inner {
+  padding-top: max(0.55rem, env(safe-area-inset-top));
+}
+
+.ayeba-app-shell .ayeba-home-header {
+  padding-top: max(0.5rem, env(safe-area-inset-top));
+}
+
+.ayeba-app-shell .ayeba-serp-body,
+.ayeba-app-shell .ayeba-home-shell {
+  padding-bottom: max(2rem, env(safe-area-inset-bottom));
+}
+
+.ayeba-app-shell .ayeba-gradient-blob {
+  opacity: 0.55;
+}
+
+@media (max-width: 720px) {
+  .ayeba-app-shell .ayeba-serp-tabs-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
