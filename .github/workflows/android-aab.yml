@@ -42,18 +42,34 @@ jobs:
           npx cap sync android
           node scripts/patch-android.js
 
-      - name: Create upload keystore
+      - name: Prepare upload keystore (same key every build)
         env:
+          KS_B64: ${{ secrets.AYEBA_KEYSTORE_BASE64 }}
           KS_PASS: ${{ secrets.AYEBA_KEYSTORE_PASS }}
         run: |
           PASS="${KS_PASS:-ayeba2026}"
-          keytool -genkeypair -v \
-            -keystore ayeba-upload.keystore \
-            -alias ayeba \
-            -keyalg RSA -keysize 2048 -validity 10000 \
-            -storepass "$PASS" -keypass "$PASS" \
-            -dname "CN=Ayeba, OU=Mobile, O=Ayeba, L=Kinshasa, ST=Kinshasa, C=CD"
+          if [ -n "$KS_B64" ]; then
+            echo "$KS_B64" | base64 -d > ayeba-upload.keystore
+            echo "Keystore loaded from GitHub secret."
+          else
+            keytool -genkeypair -v \
+              -keystore ayeba-upload.keystore \
+              -alias ayeba \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass "$PASS" -keypass "$PASS" \
+              -dname "CN=Ayeba, OU=Mobile, O=Ayeba, L=Kinshasa, ST=Kinshasa, C=CD"
+            echo "::warning::New keystore generated — add AYEBA_KEYSTORE_BASE64 secret to keep the same key!"
+          fi
+          keytool -list -v -keystore ayeba-upload.keystore -storepass "$PASS" 2>/dev/null | grep "SHA1:" || true
           printf 'storePassword=%s\nkeyPassword=%s\nkeyAlias=ayeba\nstoreFile=../ayeba-upload.keystore\n' "$PASS" "$PASS" > android/keystore.properties
+
+      - name: Backup keystore artifact (save once → GitHub secret)
+        if: ${{ secrets.AYEBA_KEYSTORE_BASE64 == '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: SAVE-upload-keystore
+          path: mobile/ayeba-app/ayeba-upload.keystore
+          retention-days: 90
 
       - name: Build release AAB
         run: |
