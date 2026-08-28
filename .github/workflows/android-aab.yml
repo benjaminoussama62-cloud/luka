@@ -74,10 +74,10 @@ jobs:
       - name: Publish AAB on GitHub Releases (download sans login)
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: mobile-1.0.0
-          name: AYEBA Mobile 1.0.0
+          tag_name: mobile-1.0.1
+          name: AYEBA Mobile 1.0.1
           body: |
-            Fichier Play Store : **AYEBA-1.0.0.aab** (~2,5 Mo)
+            Fichier Play Store : **AYEBA-1.0.1.aab** (API 35)
             Package : `app.ayeba.mobile`
           files: mobile/ayeba-app/android/app/build/outputs/bundle/release/app-release.aab
           overwrite_files: true
