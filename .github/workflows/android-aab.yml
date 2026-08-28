@@ -27,6 +27,9 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
       - name: Install deps & Capacitor sync
         run: |
           npm install
@@ -50,7 +53,10 @@ jobs:
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew bundleRelease
+          ./gradlew bundleRelease --stacktrace
+        env:
+          ANDROID_HOME: ${{ env.ANDROID_HOME }}
+          JAVA_HOME: ${{ env.JAVA_HOME }}
 
       - name: Upload AAB artifact
         uses: actions/upload-artifact@v4
