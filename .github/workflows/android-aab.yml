@@ -10,6 +10,8 @@ on:
 jobs:
   build-aab:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     defaults:
       run:
         working-directory: mobile/ayeba-app
@@ -68,3 +70,14 @@ jobs:
           name: AYEBA-PlayStore-aab
           path: mobile/ayeba-app/android/app/build/outputs/bundle/release/app-release.aab
           retention-days: 30
+
+      - name: Publish AAB on GitHub Releases (download sans login)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: mobile-1.0.0
+          name: AYEBA Mobile 1.0.0
+          body: |
+            Fichier Play Store : **AYEBA-1.0.0.aab** (~2,5 Mo)
+            Package : `app.ayeba.mobile`
+          files: mobile/ayeba-app/android/app/build/outputs/bundle/release/app-release.aab
+          overwrite_files: true
