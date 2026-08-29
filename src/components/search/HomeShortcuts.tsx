@@ -25,7 +25,7 @@ export const HOME_SHORTCUTS: HomeShortcut[] = [
     id: "sombateka",
     name: "Sombateka",
     href: process.env.NEXT_PUBLIC_SHORTCUT_SOMBATEKA || "https://sombatekaonline.com",
-    logo: "/brand/shortcuts/sombateka.png",
+    logo: "/brand/shortcuts/sombateka.svg",
     tint: "#14b8a6",
   },
   {
