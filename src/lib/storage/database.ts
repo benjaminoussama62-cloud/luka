@@ -417,10 +417,126 @@ function migrate(db: AyebaDatabase) {
     );
 
     CREATE INDEX IF NOT EXISTS idx_radar_daily_domain ON radar_daily(domain, day DESC);
+
+    CREATE TABLE IF NOT EXISTS oauth_clients (
+      client_id TEXT PRIMARY KEY,
+      client_secret_hash TEXT NOT NULL,
+      name TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      logo_url TEXT NOT NULL DEFAULT '',
+      owner_user_id TEXT NOT NULL,
+      client_type TEXT NOT NULL DEFAULT 'confidential',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_oauth_clients_owner ON oauth_clients(owner_user_id);
+
+    CREATE TABLE IF NOT EXISTS oauth_redirect_uris (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      client_id TEXT NOT NULL REFERENCES oauth_clients(client_id) ON DELETE CASCADE,
+      uri TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      UNIQUE(client_id, uri)
+    );
+
+    CREATE TABLE IF NOT EXISTS oauth_authorization_codes (
+      code TEXT PRIMARY KEY,
+      client_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      redirect_uri TEXT NOT NULL,
+      scope TEXT NOT NULL,
+      state TEXT NOT NULL DEFAULT '',
+      code_challenge TEXT,
+      code_challenge_method TEXT,
+      expires_at TEXT NOT NULL,
+      used_at TEXT,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_oauth_codes_client ON oauth_authorization_codes(client_id, expires_at);
+
+    CREATE TABLE IF NOT EXISTS oauth_access_tokens (
+      token_hash TEXT PRIMARY KEY,
+      client_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      scope TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      revoked_at TEXT,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_oauth_tokens_user ON oauth_access_tokens(user_id, client_id);
+
+    CREATE TABLE IF NOT EXISTS oauth_refresh_tokens (
+      token_hash TEXT PRIMARY KEY,
+      access_token_hash TEXT NOT NULL,
+      client_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      scope TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      revoked_at TEXT,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS oauth_user_consents (
+      user_id TEXT NOT NULL,
+      client_id TEXT NOT NULL,
+      scope TEXT NOT NULL,
+      granted_at TEXT NOT NULL,
+      PRIMARY KEY (user_id, client_id)
+    );
   `);
 
   seedCategories(db);
   seedMlWeights(db);
+  seedOAuthClients(db);
+}
+
+function seedOAuthClients(db: AyebaDatabase) {
+  const omegaRedirect = "https://omega-web.org/api/ayeba/callback";
+  const existing = db
+    .prepare("SELECT client_id FROM oauth_redirect_uris WHERE uri = ?")
+    .get(omegaRedirect) as { client_id: string } | undefined;
+  if (existing) return;
+
+  const clientId =
+    process.env.OMEGA_OAUTH_CLIENT_ID?.trim() ||
+    process.env.OAUTH_OMEGA_CLIENT_ID?.trim() ||
+    "ayeba_omega_web_prod";
+  const clientSecret =
+    process.env.OMEGA_OAUTH_CLIENT_SECRET?.trim() ||
+    process.env.OAUTH_OMEGA_CLIENT_SECRET?.trim() ||
+    "ayeba_omega_secret_change_in_production";
+
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const bcrypt = require("bcryptjs") as typeof import("bcryptjs");
+  const hash = bcrypt.hashSync(clientSecret, 10);
+  const now = new Date().toISOString();
+  const ownerId = "system";
+
+  db.prepare(
+    `INSERT OR IGNORE INTO oauth_clients
+     (client_id, client_secret_hash, name, description, owner_user_id, client_type, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, 'confidential', ?, ?)`,
+  ).run(
+    clientId,
+    hash,
+    "Omega",
+    "Plateforme sœur Omega — connexion avec compte Ayeba",
+    ownerId,
+    now,
+    now,
+  );
+
+  db.prepare(
+    "INSERT OR IGNORE INTO oauth_redirect_uris (client_id, uri, created_at) VALUES (?, ?, ?)",
+  ).run(clientId, omegaRedirect, now);
+
+  const localRedirect = "http://localhost:3000/api/ayeba/callback";
+  db.prepare(
+    "INSERT OR IGNORE INTO oauth_redirect_uris (client_id, uri, created_at) VALUES (?, ?, ?)",
+  ).run(clientId, localRedirect, now);
 }
 
 function seedMlWeights(db: AyebaDatabase) {

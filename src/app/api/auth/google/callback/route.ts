@@ -5,14 +5,24 @@ import {
   upsertGoogleUser,
 } from "@/lib/auth-server";
 import { appBaseUrl, oauthRedirectUri } from "@/lib/oauth";
+import { isAllowedOmegaReturn } from "@/lib/omega-cors";
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const code = searchParams.get("code");
   const error = searchParams.get("error");
+  const state = searchParams.get("state") || "";
   const base = appBaseUrl();
 
+  const omegaReturn = state.startsWith("omega|") ? state.slice("omega|".length) : "";
+  const backToOmega = omegaReturn && isAllowedOmegaReturn(omegaReturn) ? omegaReturn : "";
+
+  const ayebaReturn = state.startsWith("ayeba|") ? state.slice("ayeba|".length) : "";
+  const backToOAuth =
+    ayebaReturn.startsWith("/oauth/authorize") ? ayebaReturn : "";
+
   if (error || !code) {
+    if (backToOmega) return NextResponse.redirect(`${backToOmega}?ayeba_error=failed`);
     return NextResponse.redirect(`${base}/?auth=failed`);
   }
 
@@ -21,6 +31,7 @@ export async function GET(req: Request) {
   const redirectUri = oauthRedirectUri("google");
 
   if (!clientId || !clientSecret) {
+    if (backToOmega) return NextResponse.redirect(`${backToOmega}?ayeba_error=config`);
     return NextResponse.redirect(`${base}/?auth=config`);
   }
 
@@ -56,9 +67,21 @@ export async function GET(req: Request) {
     const jwt = await createSessionToken(user);
     await setSessionCookie(jwt);
 
+    if (backToOmega) {
+      const dest = new URL(backToOmega);
+      dest.searchParams.set("ayeba_token", jwt);
+      return NextResponse.redirect(dest.toString());
+    }
+
+    if (backToOAuth) {
+      return NextResponse.redirect(`${base}${backToOAuth}`);
+    }
+
     return NextResponse.redirect(`${base}/?auth=ok`);
   } catch (e) {
     console.error("[google/callback]", e);
+    if (backToOmega) return NextResponse.redirect(`${backToOmega}?ayeba_error=failed`);
     return NextResponse.redirect(`${base}/?auth=failed`);
   }
 }
+

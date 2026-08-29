@@ -2,6 +2,7 @@ import Link from "next/link";
 
 const PRIMARY = [
   { href: "/studio", label: "Studio" },
+  { href: "/developers", label: "Developers" },
   { href: "/telecharger", label: "Télécharger" },
   { href: "/ayebi", label: "Ayebi" },
   { href: "/marches", label: "Marchés" },

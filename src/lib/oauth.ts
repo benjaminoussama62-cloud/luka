@@ -57,7 +57,7 @@ export function oauthRedirectUri(provider: OAuthProviderId) {
   return `${appBase()}/api/auth/${provider}/callback`;
 }
 
-export function providerStartUrl(provider: OAuthProviderId) {
+export function providerStartUrl(provider: OAuthProviderId, extra?: { state?: string }) {
   const base = appBase();
   switch (provider) {
     case "google": {
@@ -70,6 +70,7 @@ export function providerStartUrl(provider: OAuthProviderId) {
         access_type: "online",
         prompt: "select_account",
       });
+      if (extra?.state) params.set("state", extra.state);
       return `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
     }
     case "github": {

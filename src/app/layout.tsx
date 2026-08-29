@@ -9,6 +9,7 @@ import { I18nProvider } from "@/lib/i18n";
 import { AyebaProvider } from "@/lib/store";
 import { MarketProvider } from "@/lib/market-context";
 import { AyebaJsonLd } from "@/components/seo/AyebaJsonLd";
+import { siteMetadataBase } from "@/lib/site-url";
 import "./globals.css";
 
 const brand = Inter({
@@ -36,7 +37,7 @@ const mono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://ayeba.app"),
+  metadataBase: siteMetadataBase(),
   title: {
     default: "AYEBA — Recherche mondiale",
     template: "%s · AYEBA",

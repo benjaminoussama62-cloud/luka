@@ -2731,3 +2731,516 @@ select option {
   }
 }
 
+/* ——— OAuth consent (accounts.ayeba.app style) ——— */
+.oauth-consent-shell {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  min-height: 100dvh;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1rem;
+}
+
+.oauth-consent-card {
+  width: 100%;
+  max-width: 440px;
+  padding: 2rem 1.75rem;
+  animation: rise 0.5s var(--ease-out) both;
+}
+
+.oauth-consent-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: -0.02em;
+}
+
+.oauth-consent-app {
+  display: flex;
+  gap: 1rem;
+  margin: 1.5rem 0;
+  padding: 1rem;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.oauth-consent-app-icon {
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(45, 212, 191, 0.25), rgba(59, 130, 246, 0.2));
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.oauth-consent-app-name {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.oauth-consent-app-desc {
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin-top: 0.15rem;
+}
+
+.oauth-consent-uri {
+  font-size: 0.72rem;
+  color: var(--faint);
+  margin-top: 0.35rem;
+  word-break: break-all;
+}
+
+.oauth-consent-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.oauth-consent-tabs button {
+  flex: 1;
+  padding: 0.45rem;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.oauth-consent-tabs button.active {
+  border-color: var(--line-bright);
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.oauth-input {
+  width: 100%;
+  margin-bottom: 0.65rem;
+}
+
+.oauth-google-link {
+  display: block;
+  margin-top: 0.75rem;
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--muted);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.oauth-consent-user {
+  font-size: 0.9rem;
+  color: var(--muted);
+  margin-bottom: 1rem;
+}
+
+.oauth-consent-scopes ul {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0 1.25rem;
+}
+
+.oauth-consent-scopes li {
+  padding: 0.65rem 0;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.oauth-consent-scopes li strong {
+  color: var(--ink);
+  font-size: 0.9rem;
+}
+
+.oauth-consent-scopes li span {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.oauth-consent-scopes-title {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.oauth-consent-actions {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.oauth-consent-error {
+  margin-top: 1rem;
+  color: #fca5a5;
+  font-size: 0.85rem;
+}
+
+.oauth-consent-footer {
+  margin-top: 1.25rem;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: var(--faint);
+}
+
+.oauth-consent-footer a {
+  color: var(--muted);
+  text-decoration: underline;
+}
+
+/* ——— Developer console ——— */
+.dev-console-shell {
+  animation: rise 0.55s var(--ease-out) both;
+}
+
+.dev-console-grid {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 1.25rem;
+  margin-top: 1.5rem;
+  min-height: 420px;
+}
+
+@media (max-width: 800px) {
+  .dev-console-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.dev-console-sidebar {
+  padding: 1rem;
+}
+
+.dev-console-sidebar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.dev-console-sidebar-head h2 {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.dev-console-app-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.dev-console-app-list button {
+  width: 100%;
+  text-align: left;
+  padding: 0.65rem 0.5rem;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.dev-console-app-list button:hover,
+.dev-console-app-list button.active {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.dev-console-app-name {
+  font-size: 0.88rem;
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.dev-console-app-id {
+  font-size: 0.68rem;
+  color: var(--faint);
+  font-family: ui-monospace, monospace;
+}
+
+.dev-console-muted {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.dev-console-empty,
+.dev-console-detail,
+.dev-console-login {
+  padding: 1.5rem;
+}
+
+.dev-console-endpoints {
+  margin-top: 1rem;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.dev-console-endpoints dt {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--faint);
+}
+
+.dev-console-endpoints dd {
+  margin: 0.2rem 0 0;
+}
+
+.dev-console-endpoints code {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.dev-console-field {
+  margin: 1rem 0;
+}
+
+.dev-console-field label {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--faint);
+  margin-bottom: 0.35rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.dev-console-code {
+  display: block;
+  padding: 0.5rem 0.65rem;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--line);
+  font-size: 0.78rem;
+  font-family: ui-monospace, monospace;
+  color: var(--ink);
+  word-break: break-all;
+}
+
+.dev-console-code-wrap {
+  white-space: pre-wrap;
+  line-height: 1.45;
+}
+
+.dev-console-textarea {
+  resize: vertical;
+  min-height: 80px;
+  font-family: ui-monospace, monospace;
+  font-size: 0.82rem;
+}
+
+.dev-console-secret-banner {
+  margin: 1rem 0;
+  padding: 0.85rem;
+  border-radius: 10px;
+  border: 1px solid rgba(45, 212, 191, 0.35);
+  background: rgba(45, 212, 191, 0.08);
+}
+
+.dev-console-secret-banner code {
+  display: block;
+  margin-top: 0.5rem;
+  font-size: 0.82rem;
+  word-break: break-all;
+}
+
+.dev-console-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.dev-console-msg {
+  margin-top: 0.75rem;
+  font-size: 0.85rem;
+  color: #86efac;
+}
+
+.dev-console-pre {
+  padding: 1rem;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--line);
+}
+
+.dev-console-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(0, 0, 0, 0.65);
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+
+.dev-console-modal {
+  width: 100%;
+  max-width: 480px;
+  padding: 1.5rem;
+}
+
+.dev-console-modal h2 {
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--ink);
+  margin-bottom: 0.5rem;
+}
+
+.dev-shell-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.dev-shell-nav a {
+  padding: 0.45rem 0.85rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  font-size: 0.78rem;
+  color: var(--muted);
+  text-decoration: none;
+  transition: border-color 0.2s, color 0.2s, background 0.2s;
+}
+
+.dev-shell-nav a:hover,
+.dev-shell-nav a.active {
+  border-color: var(--line-bright);
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.dev-overview-card {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+}
+
+.dev-console-detail-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.dev-console-badge {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0.25rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.dev-console-field-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
+.dev-console-copy {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.72rem;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.dev-docs-layout {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 1.25rem;
+  align-items: start;
+}
+
+@media (max-width: 860px) {
+  .dev-docs-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.dev-docs-toc {
+  position: sticky;
+  top: 1rem;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.dev-docs-toc a {
+  font-size: 0.85rem;
+  color: var(--muted);
+  text-decoration: none;
+  padding: 0.35rem 0;
+}
+
+.dev-docs-toc a:hover {
+  color: var(--ink);
+}
+
+.dev-docs-section {
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.dev-docs-section h2 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--ink);
+  margin-bottom: 0.65rem;
+}
+
+.dev-docs-section p {
+  font-size: 0.92rem;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.dev-docs-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.65;
+}
+
+.oauth-consent-brand {
+  position: absolute;
+  top: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  opacity: 0.85;
+}
+
+.oauth-consent-app-logo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+}
+
+.oauth-switch-account {
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0;
+  margin-left: 0.25rem;
+}
+
