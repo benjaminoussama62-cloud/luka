@@ -752,32 +752,37 @@ async function liveSearchCore(
 
   const cacheKey = `serpfts:${q}:${opts.sliders.locality}:${opts.sliders.authority}`;
   let rankedFts: Awaited<ReturnType<typeof rankHits>> = [];
-  try {
-    rankedFts = (await cacheGet<Awaited<ReturnType<typeof rankHits>>>(cacheKey)) ?? [];
-    if (!rankedFts.length) {
-      const hits = turso
-        ? await Promise.race([
-            searchIndexAsync(q, 40),
-            new Promise<Awaited<ReturnType<typeof searchIndexAsync>>>((r) =>
-              setTimeout(() => r([]), Math.min(800, msLeft())),
-            ),
-          ])
-        : searchIndex(q, 40);
-      rankedFts = rankHits(hits, q, {
-        localityBoost: opts.sliders.locality,
-        authorityBoost: opts.sliders.authority,
-      });
-      void cacheSet(cacheKey, rankedFts, 180).catch(() => {});
+  // Sync Turso cache blocks the event loop — memory SERP cache only on serverless.
+  if (!sisterFastPath) {
+    try {
+      if (!turso) {
+        rankedFts = (await cacheGet<Awaited<ReturnType<typeof rankHits>>>(cacheKey)) ?? [];
+      }
+      if (!rankedFts.length) {
+        const hits = turso
+          ? await Promise.race([
+              searchIndexAsync(q, 40),
+              new Promise<Awaited<ReturnType<typeof searchIndexAsync>>>((r) =>
+                setTimeout(() => r([]), Math.min(500, msLeft())),
+              ),
+            ])
+          : searchIndex(q, 40);
+        rankedFts = rankHits(hits, q, {
+          localityBoost: opts.sliders.locality,
+          authorityBoost: opts.sliders.authority,
+        });
+        if (!turso) void cacheSet(cacheKey, rankedFts, 180).catch(() => {});
+      }
+    } catch {
+      rankedFts = [];
     }
-  } catch {
-    rankedFts = [];
   }
 
   let ayebiPanel: KnowledgePanel | undefined;
   let ayebiHits: Awaited<ReturnType<typeof searchAyebiArticlesLive>> = [];
   let crawlHits: Awaited<ReturnType<typeof searchCrawlIndex>> = [];
 
-  if (turso) {
+  if (turso && !sisterFastPath) {
     try {
       const asyncAyebi = await Promise.race([
         searchAyebiAsync(q, 5),
@@ -808,7 +813,7 @@ async function liveSearchCore(
       ayebiHits = [];
     }
     crawlHits = [];
-  } else {
+  } else if (!sisterFastPath) {
     [ayebiPanel, ayebiHits, crawlHits] = await Promise.all([
       Promise.resolve().then(() => searchAyebiLive(q)),
       Promise.resolve().then(() => searchAyebiArticlesLive(q, 5)),
@@ -886,7 +891,11 @@ async function liveSearchCore(
           [],
           Math.min(UPSTREAM_FAST_MS, msLeft()),
         ),
-    settled(resolveInstantAnswers(q), [], Math.min(UPSTREAM_FAST_MS, msLeft())),
+    settled(
+      sisterFastPath ? Promise.resolve([]) : resolveInstantAnswers(q),
+      [],
+      Math.min(UPSTREAM_FAST_MS, msLeft()),
+    ),
   ]);
 
   void nativeVideos;
@@ -1058,28 +1067,30 @@ async function liveSearchCore(
 
   const panel =
     ayebiPanel ??
-    (() => {
-      const kg = panelFromQuery(q);
-      if (kg) {
-        return {
-          title: kg.entity.label,
-          subtitle: kg.entity.kind,
-          summary: kg.entity.summary,
-          facts: [
-            ...(kg.entity.ayebiSlug
-              ? [{ label: "Ayebi", value: `/ayebi/${kg.entity.ayebiSlug}` }]
-              : []),
-            ...kg.related.slice(0, 4).map((r) => ({
-              label: r.relation === "in_category" ? "Catégorie" : "Lié",
-              value: r.ayebiSlug ? `/ayebi/${r.ayebiSlug}` : r.label,
-            })),
-          ],
-          sources: ["ayebi-graph"],
-          image: undefined,
-        } satisfies KnowledgePanel;
-      }
-      return undefined;
-    })() ??
+    (sisterFastPath
+      ? undefined
+      : (() => {
+          const kg = panelFromQuery(q);
+          if (kg) {
+            return {
+              title: kg.entity.label,
+              subtitle: kg.entity.kind,
+              summary: kg.entity.summary,
+              facts: [
+                ...(kg.entity.ayebiSlug
+                  ? [{ label: "Ayebi", value: `/ayebi/${kg.entity.ayebiSlug}` }]
+                  : []),
+                ...kg.related.slice(0, 4).map((r) => ({
+                  label: r.relation === "in_category" ? "Catégorie" : "Lié",
+                  value: r.ayebiSlug ? `/ayebi/${r.ayebiSlug}` : r.label,
+                })),
+              ],
+              sources: ["ayebi-graph"],
+              image: undefined,
+            } satisfies KnowledgePanel;
+          }
+          return undefined;
+        })()) ??
     (knowledge && relevanceScore(`${knowledge.title} ${knowledge.summary}`, q) > 0
       ? knowledge
       : undefined);

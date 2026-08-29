@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { suggestQueries } from "@/lib/ayeba-index";
-import { searchSisterApps } from "@/lib/sister-search";
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -13,17 +12,13 @@ export async function GET(req: Request) {
     history = [];
   }
 
-  const sister = searchSisterApps(q).map((d) => d.title.split("—")[0].trim());
-  const local = suggestQueries(q, history);
-
-  // Wikipedia OpenSearch — court timeout pour ne pas ralentir l’autocomplete
   let wiki: string[] = [];
-  if (q.trim().length >= 2 && sister.length === 0) {
+  if (q.trim().length >= 2) {
     try {
       const ctrl = new AbortController();
-      const t = setTimeout(() => ctrl.abort(), 700);
+      const t = setTimeout(() => ctrl.abort(), 600);
       const res = await fetch(
-        `https://fr.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(q)}&limit=6&namespace=0&format=json&origin=*`,
+        `https://fr.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(q)}&limit=8&namespace=0&format=json&origin=*`,
         { signal: ctrl.signal, next: { revalidate: 0 } },
       );
       clearTimeout(t);
@@ -36,11 +31,8 @@ export async function GET(req: Request) {
     }
   }
 
-  // Apps sœurs d’abord (évite « Dorothée Jemma » avant JEMSA)
-  const merged = [...new Set([...sister, ...local.slice(0, 4), ...wiki, ...local.slice(4)])].slice(
-    0,
-    10,
-  );
+  const local = suggestQueries(q, history);
+  const merged = [...new Set([...local.slice(0, 4), ...wiki, ...local.slice(4)])].slice(0, 10);
 
   if (searchParams.get("format") === "opensearch") {
     return NextResponse.json([q, merged]);

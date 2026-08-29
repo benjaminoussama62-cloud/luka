@@ -97,7 +97,7 @@ export function AyebaProvider({ children }: { children: ReactNode }) {
         window.scrollTo({ top: 0, behavior: "smooth" });
       }
       try {
-        const timeout = window.setTimeout(() => controller.abort(), 10000);
+        const timeout = window.setTimeout(() => controller.abort(), 12000);
         const res = await fetch("/api/search", {
           method: "POST",
           headers: { "Content-Type": "application/json" },

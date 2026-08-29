@@ -1,11 +1,6 @@
 /** Corpus + suggestions + dictionnaire Ayeba (index maison léger). */
 
 export const POPULAR_QUERIES = [
-  "Jemsa",
-  "Tala",
-  "Sombateka",
-  "Omega",
-  "Ayeba",
   "Patrice Lumumba",
   "Kinshasa",
   "Banque Centrale du Congo",
