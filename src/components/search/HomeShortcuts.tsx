@@ -46,8 +46,8 @@ export const HOME_SHORTCUTS: HomeShortcut[] = [
     id: "omega",
     name: "Omega",
     href: process.env.NEXT_PUBLIC_SHORTCUT_OMEGA || "https://omega-web.org",
-    logo: "/brand/shortcuts/omega.svg",
-    tint: "#7c3aed",
+    logo: "/brand/shortcuts/omega.png",
+    tint: "#1c1917",
   },
 ];
 
