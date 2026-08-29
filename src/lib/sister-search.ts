@@ -1,79 +1,122 @@
 import type { IndexedDoc } from "./ayeba-index";
 
-/** Marques indexées — titres = le produit, pas « app sœur ». */
+/** Marques indexées — descriptions vérifiées sur les sites officiels. */
 export const BRAND_SEARCH_DOCS: IndexedDoc[] = [
   {
     id: "brand-jemsa",
-    title: "JEMSA",
+    title: "Jemsa",
     url: "https://jemsa.net",
     domain: "jemsa.net",
-    snippet: "Site officiel JEMSA — jemsa.net. Service en ligne, accès direct depuis le web.",
-    keywords: ["jemsa", "jemsa.net", "jemsa net"],
+    snippet:
+      "Réseau social et plateforme éducative congolaise : étudiants, universités, tuteurs, livres, emplois et culture RDC — Kinshasa et provinces.",
+    keywords: ["jemsa", "jemsa.net", "réseau social", "éducation", "rdc", "congo", "kinshasa"],
     congoRelevant: true,
     sourceType: "tech",
     credibility: 99,
-    sitelinks: [{ title: "jemsa.net", url: "https://jemsa.net" }],
+    sitelinks: [
+      { title: "Créer un compte", url: "https://jemsa.net" },
+      { title: "Culture RDC", url: "https://jemsa.net" },
+    ],
   },
   {
     id: "brand-tala",
-    title: "Tala",
+    title: "TALA",
     url: "https://to-tala.com",
     domain: "to-tala.com",
-    snippet: "Tala — to-tala.com. Plateforme web officielle Tala.",
-    keywords: ["tala", "to-tala", "to tala", "to-tala.com", "tot tala"],
-    congoRelevant: true,
-    sourceType: "tech",
-    credibility: 99,
-    sitelinks: [{ title: "to-tala.com", url: "https://to-tala.com" }],
-  },
-  {
-    id: "brand-sombateka",
-    title: "Sombateka Online",
-    url: "https://sombatekaonline.com",
-    domain: "sombatekaonline.com",
-    snippet: "Sombateka Online — boutique et services sur sombatekaonline.com.",
+    snippet:
+      "Streaming vidéo congolais — films, séries, musique, sport, éducation, actualités, culture, comédie et shorts sur to-tala.com.",
     keywords: [
-      "sombateka",
-      "sombatekaonline",
-      "sombateka online",
-      "sombatekaonline.com",
+      "tala",
+      "to-tala",
+      "to tala",
+      "to-tala.com",
+      "streaming",
+      "vidéo",
+      "congo",
+      "films",
+      "séries",
     ],
     congoRelevant: true,
     sourceType: "tech",
     credibility: 99,
-    sitelinks: [{ title: "sombatekaonline.com", url: "https://sombatekaonline.com" }],
+    sitelinks: [
+      { title: "Films", url: "https://to-tala.com" },
+      { title: "S'inscrire", url: "https://to-tala.com/auth/register" },
+    ],
+  },
+  {
+    id: "brand-sombateka",
+    title: "SombaTeka",
+    url: "https://sombatekaonline.com",
+    domain: "sombatekaonline.com",
+    snippet:
+      "Marketplace premium en RDC — achat et vente en ligne sur sombatekaonline.com.",
+    keywords: [
+      "sombateka",
+      "sombatekaonline",
+      "somba teka",
+      "marketplace",
+      "achat",
+      "vente",
+      "rdc",
+      "congo",
+      "shopping",
+    ],
+    congoRelevant: true,
+    sourceType: "shop",
+    credibility: 99,
+    sitelinks: [{ title: "Marketplace", url: "https://sombatekaonline.com" }],
   },
   {
     id: "brand-omega",
-    title: "Omega",
+    title: "OMEGA",
     url: "https://omega-web.org",
     domain: "omega-web.org",
-    snippet: "Omega — omega-web.org. Site officiel de la plateforme Omega.",
-    keywords: ["omega", "omega-web", "omega web", "omega-web.org", "omegaweb"],
+    snippet:
+      "Maison de romans — catalogue et abonnement Premium sur omega-web.org, lecture dans l’application Omega.",
+    keywords: [
+      "omega",
+      "omega-web",
+      "omega web",
+      "omega-web.org",
+      "romans",
+      "livres",
+      "lecture",
+      "catalogue",
+      "premium",
+    ],
     congoRelevant: true,
     sourceType: "tech",
     credibility: 99,
-    sitelinks: [{ title: "omega-web.org", url: "https://omega-web.org" }],
+    sitelinks: [
+      { title: "Catalogue", url: "https://omega-web.org" },
+      { title: "Premium", url: "https://omega-web.org" },
+    ],
   },
   {
     id: "brand-devalpha",
     title: "DevAlpha",
     url: "https://devalpha1.com",
     domain: "devalpha1.com",
-    snippet: "DevAlpha — studio produits web et logiciels. Site officiel devalpha1.com.",
-    keywords: ["devalpha", "devalpha1", "dev alpha"],
+    snippet:
+      "Agence digitale — développement web, mobile, cloud, cybersécurité et IA. Solutions sur mesure pour entreprises.",
+    keywords: ["devalpha", "devalpha1", "agence", "web", "mobile", "ia", "développement"],
     congoRelevant: true,
     sourceType: "tech",
     credibility: 98,
-    sitelinks: [{ title: "devalpha1.com", url: "https://devalpha1.com" }],
+    sitelinks: [
+      { title: "Services", url: "https://devalpha1.com" },
+      { title: "Contact", url: "https://devalpha1.com" },
+    ],
   },
   {
     id: "brand-ayeba",
     title: "AYEBA",
     url: "https://ayeba.app",
     domain: "ayeba.app",
-    snippet: "AYEBA — moteur de recherche. Recherche mondiale, priorité RDC. Studio, Ayebi, Developers.",
-    keywords: ["ayeba", "recherche", "moteur", "search"],
+    snippet:
+      "Moteur de recherche — le monde entier, une requête. Priorité RDC, Studio, Ayebi et Developers sur ayeba.app.",
+    keywords: ["ayeba", "recherche", "moteur", "search", "rdc"],
     congoRelevant: true,
     sourceType: "tech",
     credibility: 100,
@@ -136,7 +179,6 @@ export function searchSisterApps(query: string): IndexedDoc[] {
   if (!scored.length) return [];
 
   const top = scored[0].score;
-  // Match marque fort → ne pas noyer Omega sous Ayeba qui cite le mot « omega ».
   if (top >= 200) {
     const cut = top * 0.55;
     return scored.filter((x) => x.score >= cut).map((x) => x.doc);
@@ -159,8 +201,7 @@ export function suggestBrandQueries(query: string): string[] {
       out.push({ label: doc.title.split(" ")[0], score: score - 10 });
     }
     return out;
-  })
-    .sort((a, b) => b.score - a.score);
+  }).sort((a, b) => b.score - a.score);
 
   const seen = new Set<string>();
   const labels: string[] = [];
