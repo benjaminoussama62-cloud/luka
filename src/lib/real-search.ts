@@ -122,7 +122,7 @@ function favicon(domain: string) {
 function queryTokens(query: string) {
   return query
     .toLowerCase()
-    .split(/[\s\-_/]+/)
+    .split(/[\s\-_./]+/)
     .filter((t) => t.length >= 2);
 }
 
@@ -145,10 +145,16 @@ function relevanceScore(text: string, query: string): number {
 }
 
 function isRelevantToQuery(hit: RawHit, query: string): boolean {
-  return relevanceScore(`${hit.title} ${hit.snippet} ${hit.url}`, query) > 0;
+  if (hit.url.startsWith("/ayebi/")) return true;
+  const q = query.toLowerCase();
+  const qc = q.replace(/[\s._-]/g, "");
+  const hay = `${hit.title} ${hit.snippet} ${hit.url}`.toLowerCase();
+  if (qc && hay.replace(/[\s._-]/g, "").includes(qc)) return true;
+  return relevanceScore(hay, query) > 0;
 }
 
 function isRelevantResult(r: SearchResult, query: string): boolean {
+  if (r.domain === "ayebi" || r.url.startsWith("/ayebi/")) return true;
   // Never drop trusted / fallback rows — over-filtering made SERPs look like failures.
   if (
     r.sourceType === "wiki" ||
@@ -1059,7 +1065,7 @@ async function liveSearchCore(
     .filter((r) => isRelevantResult(r, q) || r.sourceType === "news")
     .sort((a, b) => (b.rankScore ?? 0) - (a.rankScore ?? 0));
 
-  if (results.length < 3 && ayebiHits.length === 0 && sisterHits.length === 0) {
+  if (results.length < 3 && !ayebiPanel && ayebiHits.length === 0 && sisterHits.length === 0) {
     results = rankAndFilter(
       [
         ...results,

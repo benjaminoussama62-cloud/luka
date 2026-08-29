@@ -99,8 +99,8 @@ export const BRAND_SEARCH_DOCS: IndexedDoc[] = [
     url: "https://devalpha1.com",
     domain: "devalpha1.com",
     snippet:
-      "Agence digitale — développement web, mobile, cloud, cybersécurité et IA. Solutions sur mesure pour entreprises.",
-    keywords: ["devalpha", "devalpha1", "agence", "web", "mobile", "ia", "développement"],
+      "Agence digitale — développement web, mobile, cloud, cybersécurité et IA. Édite Jemsa, TALA, SombaTeka, OMEGA et Ayeba. devalpha1.com",
+    keywords: ["devalpha", "devalpha1", "devalpha1.com", "agence", "web", "mobile", "ia", "développement"],
     congoRelevant: true,
     sourceType: "tech",
     credibility: 98,

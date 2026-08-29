@@ -44,6 +44,7 @@ export function scoreArticle(article: AyebiArticle, query: string): number {
     .replace(/\p{M}/gu, "");
 
   if (hay.includes(q)) score += 50;
+  if (qc.includes("devalpha1") && article.slug === "devalpha") score += 90;
   if (qc.includes("totala") && article.slug === "tala") score += 90;
   if (qc.includes("sombatekaonline") && article.slug === "sombateka") score += 90;
   if (qc.includes("jemsa") && article.slug === "jemsa") score += 70;
