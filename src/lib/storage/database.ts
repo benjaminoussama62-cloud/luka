@@ -409,6 +409,52 @@ function migrate(db: AyebaDatabase) {
 
     CREATE INDEX IF NOT EXISTS idx_studio_urls_site ON studio_site_urls(site_id);
 
+    CREATE TABLE IF NOT EXISTS studio_site_modules (
+      site_id TEXT PRIMARY KEY,
+      trace_key TEXT NOT NULL,
+      trace_enabled INTEGER NOT NULL DEFAULT 1,
+      yield_enabled INTEGER NOT NULL DEFAULT 0,
+      yield_config_json TEXT NOT NULL DEFAULT '{}',
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS trace_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      site_id TEXT NOT NULL,
+      path TEXT NOT NULL,
+      referrer TEXT NOT NULL DEFAULT '',
+      session_id TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_trace_site_time ON trace_events(site_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_trace_path ON trace_events(site_id, path);
+
+    CREATE TABLE IF NOT EXISTS yield_stats_daily (
+      day TEXT NOT NULL,
+      site_id TEXT NOT NULL,
+      placement_id TEXT NOT NULL,
+      impressions INTEGER NOT NULL DEFAULT 0,
+      clicks INTEGER NOT NULL DEFAULT 0,
+      revenue_cdf REAL NOT NULL DEFAULT 0,
+      PRIMARY KEY (day, site_id, placement_id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_yield_site_day ON yield_stats_daily(site_id, day DESC);
+
+    CREATE TABLE IF NOT EXISTS velocity_audits (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      site_id TEXT NOT NULL,
+      url TEXT NOT NULL,
+      score INTEGER NOT NULL,
+      ttfb_ms INTEGER NOT NULL,
+      html_bytes INTEGER NOT NULL,
+      findings_json TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_velocity_site ON velocity_audits(site_id, created_at DESC);
+
     CREATE TABLE IF NOT EXISTS radar_daily (
       day TEXT NOT NULL,
       domain TEXT NOT NULL,

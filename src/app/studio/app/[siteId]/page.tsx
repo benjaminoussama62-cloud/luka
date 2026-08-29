@@ -7,7 +7,7 @@ export default function SiteHomeRedirect() {
   const { siteId } = useParams<{ siteId: string }>();
   const router = useRouter();
   useEffect(() => {
-    router.replace(`/studio/app/${siteId}/radar`);
+    router.replace(`/studio/app/${siteId}/aether`);
   }, [router, siteId]);
   return null;
 }

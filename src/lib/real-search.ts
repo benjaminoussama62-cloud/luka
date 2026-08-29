@@ -1,7 +1,7 @@
 import { didYouMean, searchLocalIndex } from "./ayeba-index";
-import { searchSisterApps } from "./sister-search";
+import { searchSisterApps, scoreBrandDoc } from "./sister-search";
 import { searchAyebiArticles, scoreArticle } from "./ayebi/index";
-import { searchAyebiLive, searchAyebiArticlesLive } from "./ayebi/server";
+import { searchAyebiArticlesLive } from "./ayebi/server";
 import type { AyebiArticle } from "./ayebi/types";
 import { searchCrawlIndex } from "./crawler";
 import { panelFromQuery } from "./knowledge-graph/graph";
@@ -14,6 +14,25 @@ import { searchMapsNative } from "./verticals/maps";
 import { buildNativeShopping } from "./verticals/shopping";
 import { getDbMode } from "./storage/database";
 import { searchAyebiAsync, searchIndexAsync } from "./storage/turso-async";
+import {
+  ayebiPanelMinScore,
+  estimateResultCount,
+  isCongoHint,
+  isRawHitRelevant,
+  isResultRelevant,
+  isStrongAyebiMatch,
+  isStrongBrandQuery,
+  navigationalSiteForQuery,
+  rdcRankingBoost,
+  relevanceScore,
+  topBrandScore,
+} from "./search-relevance";
+import {
+  geoMismatchPenalty,
+  knownCapitalAnswer,
+  parseSearchIntent,
+  upstreamQuery,
+} from "./query-intent";
 import type {
   AlgorithmSliders,
   FeaturedSnippet,
@@ -119,57 +138,12 @@ function favicon(domain: string) {
   return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64`;
 }
 
-function queryTokens(query: string) {
-  return query
-    .toLowerCase()
-    .split(/[\s\-_./]+/)
-    .filter((t) => t.length >= 2);
-}
-
-function isCongoHint(q: string) {
-  return /\b(rdc|congo|kinshasa|lubumbashi|katanga|goma|lingala|cobalt|coltan|bcc|unikin)\b/i.test(
-    q,
-  );
-}
-
-function relevanceScore(text: string, query: string): number {
-  const hay = text.toLowerCase();
-  const tokens = queryTokens(query);
-  if (!tokens.length) return 0;
-  let score = 0;
-  for (const t of tokens) {
-    if (hay.includes(t)) score += 12;
-  }
-  if (hay.includes(query.toLowerCase())) score += 25;
-  return score;
-}
-
 function isRelevantToQuery(hit: RawHit, query: string): boolean {
-  if (hit.url.startsWith("/ayebi/")) return true;
-  const q = query.toLowerCase();
-  const qc = q.replace(/[\s._-]/g, "");
-  const hay = `${hit.title} ${hit.snippet} ${hit.url}`.toLowerCase();
-  if (qc && hay.replace(/[\s._-]/g, "").includes(qc)) return true;
-  return relevanceScore(hay, query) > 0;
+  return isRawHitRelevant(hit, query);
 }
 
 function isRelevantResult(r: SearchResult, query: string): boolean {
-  if (r.domain === "ayebi" || r.url.startsWith("/ayebi/")) return true;
-  // Never drop trusted / fallback rows — over-filtering made SERPs look like failures.
-  if (
-    r.sourceType === "wiki" ||
-    r.sourceType === "gov" ||
-    r.sourceType === "news" ||
-    r.sourceType === "tech" ||
-    r.domain.includes("wikipedia") ||
-    r.url.includes("duckduckgo.com") ||
-    /\b(jemsa|tala|sombateka|omega|ayeba|devalpha)\b/i.test(
-      `${r.title} ${r.domain} ${r.url}`,
-    )
-  ) {
-    return true;
-  }
-  return relevanceScore(`${r.title} ${r.snippet} ${r.domain} ${r.url}`, query) > 0;
+  return isResultRelevant(r, query);
 }
 
 function credibilityFor(domain: string): number {
@@ -482,7 +456,6 @@ function rankAndFilter(
   opts: FetchOpts,
 ): SearchResult[] {
   const q = query.toLowerCase();
-  const boostRdc = (100 - opts.sliders.locality) / 100;
 
   return results
     .filter((r) => {
@@ -494,24 +467,34 @@ function rankAndFilter(
       let score = r.trust.credibility;
       const rel = relevanceScore(`${r.title} ${r.snippet}`, query);
       score += rel;
-      if (r.title.toLowerCase().includes(q)) score += 20;
-      if (r.congoRelevant && isCongoHint(query)) score += 22 * boostRdc;
+      if (r.title.toLowerCase().includes(q)) score += 24;
+      score += rdcRankingBoost(r, query, opts.sliders.locality, rel);
       if (r.sourceType === "academic") score += opts.sliders.audience * 0.2;
       if (r.sourceType === "wiki" || r.sourceType === "gov") score += opts.sliders.authority * 0.15;
       score -= r.trust.clickbaitRisk * 0.2;
-      // Preserve local / sister boosts applied before rankAndFilter.
       const prior = r.rankScore ?? 0;
       if (prior > 80) score += prior;
+      const brandScore = topBrandScore(query);
       if (
+        brandScore >= 150 &&
         /\b(jemsa\.net|to-tala\.com|sombatekaonline|omega-web\.org|devalpha1\.com|ayeba\.app)\b/i.test(
           r.domain,
-        ) ||
-        r.domain === "ayebi" ||
-        r.url.startsWith("/ayebi/")
+        )
       ) {
-        score += 120;
+        score += 180;
+      } else if (
+        (r.congoRelevant || r.domain.endsWith(".cd")) &&
+        rel >= 28
+      ) {
+        score += 35;
       }
-      return { ...r, rankScore: Math.round(score) };
+      if (r.domain === "ayebi" || r.url.startsWith("/ayebi/")) {
+        score += isStrongAyebiMatch(rel, { slug: r.url.split("/").pop() || "", title: r.title }, query)
+          ? 90
+          : -40;
+      }
+      score -= geoMismatchPenalty(`${r.title} ${r.snippet} ${r.domain}`, query);
+      return { ...r, rankScore: Math.round(Math.max(0, score)) };
     })
     .sort((a, b) => (b.rankScore ?? 0) - (a.rankScore ?? 0));
 }
@@ -533,15 +516,15 @@ function relatedFrom(query: string, results: SearchResult[]): string[] {
 }
 
 function tryMathSnippet(query: string): FeaturedSnippet | undefined {
-  const q = query.trim().replace(/,/g, ".");
-  if (!/^[\d\s+\-*/().^%]+$/.test(q) || q.length > 40) return undefined;
+  const display = query.trim().replace(/,/g, ".");
+  const expr = display.replace(/=+\s*$/, "");
+  if (!/^[\d\s+\-*/().^%]+$/.test(expr) || expr.length > 40 || !/[\d]/.test(expr)) return undefined;
+  if (!/[+\-*/^]/.test(expr)) return undefined;
   try {
-    const expr = q.replace(/\^/g, "**");
-    // eslint-disable-next-line no-new-func
-    const val = Function(`"use strict"; return (${expr})`)();
+    const val = Function(`"use strict"; return (${expr.replace(/\^/g, "**")})`)();
     if (typeof val !== "number" || !Number.isFinite(val)) return undefined;
     return {
-      title: q,
+      title: display,
       text: String(val),
       url: "#calc",
       domain: "ayeba",
@@ -800,15 +783,31 @@ async function liveSearchCore(
   const wall = Date.now() + SEARCH_WALL_MS;
   const msLeft = () => Math.max(200, wall - Date.now());
   const turso = getDbMode() === "turso";
+  const intent = parseSearchIntent(rawQuery);
+  const webQ = upstreamQuery(q, intent);
+  const factualIntent = intent.kind === "capital" || intent.kind === "city" || intent.kind === "math";
+  const capitalFact = knownCapitalAnswer(intent);
 
-  // Apps sœurs + index maison — sync, immédiat (corrige « jemsa sur l’accueil mais pas en SERP »).
+  // Apps sœurs + index maison — sync, immédiat.
   const sisterHits = searchSisterApps(q);
   const houseHits = searchLocalIndex(q);
-  const sisterFastPath = sisterHits.length > 0;
+  const brandStrong = isStrongBrandQuery(q);
+  const sisterFastPath = brandStrong && sisterHits.length > 0;
+  const skipWebForMath = intent.kind === "math";
+  const navSite = intent.kind === "navigational" ? intent.site : navigationalSiteForQuery(q);
+  const navHit: RawHit[] = navSite
+    ? [
+        {
+          title: navSite.title,
+          url: navSite.url,
+          snippet: navSite.snippet,
+          source: "navigational",
+        },
+      ]
+    : [];
 
   const cacheKey = `serpfts:${q}:${opts.sliders.locality}:${opts.sliders.authority}`;
   let rankedFts: Awaited<ReturnType<typeof rankHits>> = [];
-  // Sync Turso cache blocks the event loop — memory SERP cache only on serverless.
   if (!sisterFastPath) {
     try {
       if (!turso) {
@@ -838,14 +837,17 @@ async function liveSearchCore(
   let ayebiHits: Awaited<ReturnType<typeof searchAyebiArticlesLive>> = [];
   let crawlHits: Awaited<ReturnType<typeof searchCrawlIndex>> = [];
 
-  // Ayebi en mémoire — TOUJOURS (même chemin rapide marque). C’est le contenu encyclopédique.
-  const ayebiSync = searchAyebiArticles(q, 8);
-  if (ayebiSync.length) {
+  const ayebiSync = factualIntent ? [] : searchAyebiArticles(q, 8);
+  if (ayebiSync.length && !navSite) {
     const topScore = scoreArticle(ayebiSync[0], q);
-    ayebiHits = ayebiSync.filter((a) => scoreArticle(a, q) >= Math.max(50, topScore * 0.45));
-  }
-  if (ayebiHits[0] && scoreArticle(ayebiHits[0], q) >= 12) {
-    ayebiPanel = ayebiKnowledgePanel(ayebiHits[0]);
+    const minRel = ayebiPanelMinScore(q);
+    ayebiHits = ayebiSync.filter((a) => {
+      const s = scoreArticle(a, q);
+      return s >= minRel * 0.65 && isStrongAyebiMatch(s, a, q);
+    });
+    if (ayebiHits[0] && isStrongAyebiMatch(topScore, ayebiHits[0], q)) {
+      ayebiPanel = ayebiKnowledgePanel(ayebiHits[0]);
+    }
   }
 
   if (turso && !sisterFastPath) {
@@ -859,8 +861,7 @@ async function liveSearchCore(
       const seenSlugs = new Set(ayebiHits.map((a) => a.slug));
       for (const a of asyncAyebi) {
         if (seenSlugs.has(a.slug)) continue;
-        seenSlugs.add(a.slug);
-        ayebiHits.push({
+        const stub = {
           slug: a.slug,
           title: a.title,
           subtitle: "",
@@ -869,24 +870,19 @@ async function liveSearchCore(
           body: [],
           facts: [],
           tags: a.tags,
-        });
-      }
-      if (!ayebiPanel && asyncAyebi[0]) {
-        ayebiPanel = {
-          title: asyncAyebi[0].title,
-          subtitle: "Ayebi",
-          summary: asyncAyebi[0].summary,
-          facts: [{ label: "Lire sur Ayebi", value: `/ayebi/${asyncAyebi[0].slug}` }],
-          sources: ["ayebi"],
         };
+        const s = scoreArticle(stub, q);
+        if (!isStrongAyebiMatch(s, stub, q)) continue;
+        seenSlugs.add(a.slug);
+        ayebiHits.push(stub);
       }
     } catch {
       /* keep sync hits */
     }
     crawlHits = [];
   } else if (!sisterFastPath) {
-    [ayebiPanel, ayebiHits, crawlHits] = await Promise.all([
-      Promise.resolve().then(() => searchAyebiLive(q)),
+    [, ayebiHits, crawlHits] = await Promise.all([
+      Promise.resolve(undefined),
       Promise.resolve().then(() => searchAyebiArticlesLive(q, 5)),
       Promise.resolve().then(() => {
         try {
@@ -896,6 +892,10 @@ async function liveSearchCore(
         }
       }),
     ]);
+    ayebiHits = ayebiHits.filter((a) => isStrongAyebiMatch(scoreArticle(a, q), a, q));
+    if (!ayebiPanel && ayebiHits[0] && !navSite) {
+      ayebiPanel = ayebiKnowledgePanel(ayebiHits[0]);
+    }
   }
 
   const ftsDocs = rankedFts.map((h) => ({
@@ -913,12 +913,10 @@ async function liveSearchCore(
 
   const localCount =
     sisterHits.length + houseHits.length + ftsDocs.length + ayebiHits.length + crawlHits.length;
-  const richLocal = localCount >= 3 || sisterFastPath;
-  const skipHeavyUpstream = sisterFastPath || richLocal || msLeft() < 1500;
-  const upstreamMs = Math.min(
-    sisterFastPath ? 600 : richLocal ? UPSTREAM_FAST_MS : UPSTREAM_MS,
-    msLeft(),
-  );
+  void localCount;
+  // Toujours interroger le web — priorité RDC = boost au classement, pas couper Internet.
+  const skipHeavyUpstream = sisterFastPath && msLeft() < 1200;
+  const upstreamMs = Math.min(sisterFastPath ? UPSTREAM_FAST_MS : UPSTREAM_MS, msLeft());
 
   const [
     wikiFr,
@@ -932,41 +930,32 @@ async function liveSearchCore(
     nativeMaps,
     instantAnswers,
   ] = await Promise.all([
-    skipHeavyUpstream && sisterFastPath
+    sisterFastPath || skipWebForMath
       ? Promise.resolve([] as RawHit[])
-      : settled(fetchWikipedia(q, "fr"), [], upstreamMs),
-    skipHeavyUpstream
+      : settled(fetchWikipedia(webQ, "fr"), [], upstreamMs),
+    sisterFastPath || skipWebForMath
       ? Promise.resolve([] as RawHit[])
-      : settled(fetchWikipedia(q, "en"), [], upstreamMs),
-    skipHeavyUpstream && sisterFastPath
+      : settled(fetchWikipedia(webQ, "en"), [], upstreamMs),
+    sisterFastPath || skipWebForMath
       ? Promise.resolve([] as RawHit[])
-      : settled(fetchDuckDuckGo(q), [], upstreamMs),
-    // HTML scrape is slow/flaky — skip when native index already feeds the SERP.
-    skipHeavyUpstream || msLeft() < 1000
+      : settled(fetchDuckDuckGo(webQ), [], upstreamMs),
+    sisterFastPath || skipWebForMath || msLeft() < 900
       ? Promise.resolve([] as RawHit[])
-      : settled(fetchDuckDuckGoHtml(q), [], upstreamMs),
-    skipHeavyUpstream
+      : settled(fetchDuckDuckGoHtml(webQ), [], upstreamMs),
+    sisterFastPath
       ? Promise.resolve([] as RawHit[])
-      : settled(fetchNewsRss(q), [], upstreamMs),
-    skipHeavyUpstream
+      : settled(fetchNewsRss(webQ), [], upstreamMs),
+    sisterFastPath || navSite || factualIntent
       ? Promise.resolve(undefined)
-      : settled(fetchWikiSummary(q), undefined, Math.min(UPSTREAM_FAST_MS, msLeft())),
-    skipHeavyUpstream
-      ? Promise.resolve([] as MediaResult[])
-      : settled(searchImagesNative(q), [], Math.min(UPSTREAM_FAST_MS, msLeft())),
+      : settled(fetchWikiSummary(webQ), undefined, Math.min(UPSTREAM_FAST_MS, msLeft())),
+    settled(searchImagesNative(q), [], Math.min(UPSTREAM_FAST_MS, msLeft())),
     Promise.resolve([] as MediaResult[]),
-    skipHeavyUpstream || msLeft() < 700
-      ? Promise.resolve([] as MapPlace[])
-      : settled(
-          searchMapsNative(isCongoHint(q) ? `${q} République démocratique du Congo` : q),
-          [],
-          Math.min(UPSTREAM_FAST_MS, msLeft()),
-        ),
     settled(
-      sisterFastPath ? Promise.resolve([]) : resolveInstantAnswers(q),
+      searchMapsNative(isCongoHint(q) ? `${q} République démocratique du Congo` : q),
       [],
       Math.min(UPSTREAM_FAST_MS, msLeft()),
     ),
+    sisterFastPath ? Promise.resolve([]) : settled(resolveInstantAnswers(q), [], upstreamMs),
   ]);
 
   void nativeVideos;
@@ -983,26 +972,35 @@ async function liveSearchCore(
   }
 
   const localDocs = [
-    ...ayebiHits.map((a, i) => ({
-      id: `ayebi-${a.slug}`,
-      title: `${a.title} — Ayebi`,
-      url: `/ayebi/${a.slug}`,
-      snippet: ayebiRichSnippet(a),
-      domain: "ayebi",
-      keywords: a.tags,
-      congoRelevant: true,
-      sourceType: "wiki" as const,
-      credibility: 99,
-      rankScore: 680 - i * 15,
-      sitelinks: [
-        { title: "Lire la fiche", url: `/ayebi/${a.slug}` },
-        ...(officialSiteForAyebi(a.slug)
-          ? [{ title: "Site officiel", url: officialSiteForAyebi(a.slug)! }]
-          : []),
-      ],
+    ...ayebiHits.map((a, i) => {
+      const rel = scoreArticle(a, q);
+      return {
+        id: `ayebi-${a.slug}`,
+        title: `${a.title} — Ayebi`,
+        url: `/ayebi/${a.slug}`,
+        snippet: ayebiRichSnippet(a),
+        domain: "ayebi",
+        keywords: a.tags,
+        congoRelevant: isCongoHint(q) || a.category === "lieu",
+        sourceType: "wiki" as const,
+        credibility: 99,
+        rankScore: Math.min(420, 180 + rel * 2) - i * 8,
+        sitelinks: [
+          { title: "Lire la fiche", url: `/ayebi/${a.slug}` },
+          ...(officialSiteForAyebi(a.slug)
+            ? [{ title: "Site officiel", url: officialSiteForAyebi(a.slug)! }]
+            : []),
+        ],
+      };
+    }),
+    ...sisterHits.map((d) => ({
+      ...d,
+      rankScore: Math.min(560, scoreBrandDoc(d, q) + 80),
     })),
-    ...sisterHits.map((d) => ({ ...d, rankScore: 520 })),
-    ...houseHits,
+    ...houseHits.map((d, i) => ({
+      ...d,
+      rankScore: Math.max(0, relevanceScore(`${d.title} ${d.snippet}`, q) + 40 - i * 3),
+    })),
     ...ftsDocs,
     ...crawlHits.map((c) => ({
       id: c.id,
@@ -1014,6 +1012,7 @@ async function liveSearchCore(
       congoRelevant: c.localRelevant,
       sourceType: c.sourceType,
       credibility: c.credibility,
+      rankScore: relevanceScore(`${c.title} ${c.snippet}`, q) + 20,
     })),
   ];
   const localAsRaw = localDocs.map((d) => ({
@@ -1023,8 +1022,16 @@ async function liveSearchCore(
     source: "ayeba-index",
   }));
 
-  // Native / Ayebi first — switching engines requires local hits to feel owned, not scraped.
-  const raw = [...localAsRaw, ...ddgHtml, ...ddg, ...wikiFr, ...wikiEn, ...news];
+  // Web d’abord dans le pool, puis index local — le ranking décide (RDC = boost, pas filtre).
+  const raw = [
+    ...navHit,
+    ...ddgHtml,
+    ...ddg,
+    ...wikiFr,
+    ...wikiEn,
+    ...news,
+    ...localAsRaw,
+  ];
   const seen = new Set<string>();
   const unique = raw.filter((h) => {
     const key = h.url.split("#")[0];
@@ -1039,7 +1046,8 @@ async function liveSearchCore(
       const base = toResult(h, i, q);
       const local = localDocs.find((d) => d.url === h.url);
       if (local) {
-        const sisterBoost = sisterHits.some((s) => s.url === h.url) ? 400 : 0;
+        const sisterBoost =
+          sisterHits.some((s) => s.url === h.url) && brandStrong ? 320 : 0;
         return {
           ...base,
           trust: {
@@ -1052,17 +1060,19 @@ async function liveSearchCore(
           sitelinks: "sitelinks" in local ? local.sitelinks : undefined,
           rankScore:
             (base.rankScore ?? 0) +
-            15 +
             sisterBoost +
             ("rankScore" in local ? Number(local.rankScore ?? 0) : 0),
         };
+      }
+      if (h.source === "navigational") {
+        return { ...base, rankScore: (base.rankScore ?? 0) + 500 };
       }
       return base;
     }),
     q,
     opts,
   )
-    .filter((r) => isRelevantResult(r, q) || r.sourceType === "news")
+    .filter((r) => isRelevantResult(r, q) || r.sourceType === "news" || r.url.includes("duckduckgo.com"))
     .sort((a, b) => (b.rankScore ?? 0) - (a.rankScore ?? 0));
 
   if (results.length < 3 && !ayebiPanel && ayebiHits.length === 0 && sisterHits.length === 0) {
@@ -1144,12 +1154,12 @@ async function liveSearchCore(
   const shopping = buildNativeShopping(q);
 
   const panel =
-    ayebiPanel ??
-    (sisterFastPath
+    (!navSite && !factualIntent ? ayebiPanel : undefined) ??
+    (sisterFastPath || navSite || factualIntent
       ? undefined
       : (() => {
           const kg = panelFromQuery(q);
-          if (kg) {
+          if (kg && relevanceScore(`${kg.entity.label} ${kg.entity.summary}`, q) >= 45) {
             return {
               title: kg.entity.label,
               subtitle: kg.entity.kind,
@@ -1169,31 +1179,70 @@ async function liveSearchCore(
           }
           return undefined;
         })()) ??
-    (knowledge && relevanceScore(`${knowledge.title} ${knowledge.summary}`, q) > 0
+    (knowledge && !factualIntent && relevanceScore(`${knowledge.title} ${knowledge.summary}`, q) >= 35
       ? knowledge
       : undefined);
 
+  const topWeb = results.find(
+    (r) =>
+      r.domain !== "ayebi" &&
+      !r.url.startsWith("/ayebi/") &&
+      isRelevantResult(r, q) &&
+      relevanceScore(`${r.title} ${r.snippet}`, q) >= 28,
+  );
+
   const featuredSnippet: FeaturedSnippet | undefined =
     tryMathSnippet(q) ??
-    (panel
+    (capitalFact
       ? {
-          title: panel.title,
-          text: panel.summary.slice(0, 420),
-          url:
-            panel.facts.find((f) => f.label === "Lire sur Ayebi")?.value ??
-            panel.facts.find((f) => f.label === "Ayebi")?.value ??
-            results[0]?.url ??
-            "#",
-          domain: "ayebi",
+          title: `${capitalFact.capital} — capitale ${capitalFact.country}`,
+          text: capitalFact.summary,
+          url: capitalFact.wiki,
+          domain: "wikipedia.org",
         }
-      : results[0] && isRelevantResult(results[0], q)
+      : undefined) ??
+    (intent.kind === "city" && topWeb
+      ? {
+          title: topWeb.title,
+          text: topWeb.snippet,
+          url: topWeb.url,
+          domain: topWeb.domain,
+        }
+      : undefined) ??
+    (navSite
+      ? {
+          title: navSite.title,
+          text: navSite.snippet,
+          url: navSite.url,
+          domain: navSite.domain,
+        }
+      : panel && relevanceScore(`${panel.title} ${panel.summary}`, q) >= ayebiPanelMinScore(q)
         ? {
-            title: results[0].title,
-            text: results[0].snippet,
-            url: results[0].url,
-            domain: results[0].domain,
+            title: panel.title,
+            text: panel.summary.slice(0, 420),
+            url:
+              panel.facts.find((f) => f.label === "Lire sur Ayebi")?.value ??
+              panel.facts.find((f) => f.label === "Ayebi")?.value ??
+              topWeb?.url ??
+              results[0]?.url ??
+              "#",
+            domain: panel.facts.some((f) => f.label === "Lire sur Ayebi") ? "ayebi" : topWeb?.domain ?? "ayeba",
           }
-        : undefined);
+        : topWeb
+          ? {
+              title: topWeb.title,
+              text: topWeb.snippet,
+              url: topWeb.url,
+              domain: topWeb.domain,
+            }
+          : results[0] && isRelevantResult(results[0], q)
+            ? {
+                title: results[0].title,
+                text: results[0].snippet,
+                url: results[0].url,
+                domain: results[0].domain,
+              }
+            : undefined);
 
   const topAyebi = ayebiHits[0];
   const aiSummary = buildSynthesis(q, panel, results, newsResults);
@@ -1213,11 +1262,11 @@ async function liveSearchCore(
     query: rawQuery,
     correctedQuery:
       suggested && suggested.toLowerCase() !== rawQuery.toLowerCase() ? suggested : undefined,
-    approxResults: Math.max(
-      projectedScale,
-      unique.length * 285_000,
-      results.length * 18_000,
-    ),
+    approxResults: estimateResultCount({
+      uniqueHits: unique.length,
+      ftsHits: ftsDocs.length,
+      indexProjected: projectedScale > 0 ? projectedScale : undefined,
+    }),
     results,
     images,
     videos,

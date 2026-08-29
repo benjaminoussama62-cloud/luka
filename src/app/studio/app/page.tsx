@@ -64,8 +64,8 @@ export default function StudioAppHomePage() {
         Vos propriétés
       </h1>
       <p className="mt-3 max-w-xl text-sm leading-relaxed text-[var(--muted)]">
-        Ajoutez un domaine, vérifiez que vous le contrôlez, puis ouvrez Radar pour voir l’indexation et
-        les requêtes Ayeba.
+        Ajoutez un domaine, vérifiez que vous le contrôlez, puis ouvrez Aether, Radar, Trace, Yield ou
+        Velocity.
       </p>
 
       <form onSubmit={onCreate} className="mt-8 flex max-w-xl flex-col gap-3 sm:flex-row">
@@ -97,8 +97,8 @@ export default function StudioAppHomePage() {
                   Vérifier
                 </Link>
               ) : null}
-              <Link href={`/studio/app/${s.id}/radar`} className="ayeba-cta px-3 py-2 text-xs">
-                Ouvrir Radar
+              <Link href={`/studio/app/${s.id}/aether`} className="ayeba-cta px-3 py-2 text-xs">
+                Ouvrir Studio
               </Link>
             </div>
           </li>

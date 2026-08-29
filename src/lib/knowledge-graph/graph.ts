@@ -1,5 +1,6 @@
 import { getDb } from "../storage/database";
 import { AYEBI_ARTICLES } from "../ayebi/index";
+import { navigationalSiteForQuery, relevanceScore } from "../search-relevance";
 
 export type KgEntity = {
   id: string;
@@ -41,14 +42,22 @@ export function getEntity(id: string): KgEntity | null {
 }
 
 export function findEntities(query: string, limit = 8): KgEntity[] {
-  const q = `%${query.trim().toLowerCase()}%`;
+  const q = query.trim().toLowerCase();
+  if (q.length < 2) return [];
   const rows = getDb()
     .prepare(
-      `SELECT id, label, kind, summary, ayebi_slug as ayebiSlug FROM kg_entities
-       WHERE lower(label) LIKE ? OR lower(summary) LIKE ? LIMIT ?`,
+      `SELECT id, label, kind, summary, ayebi_slug as ayebiSlug FROM kg_entities LIMIT 200`,
     )
-    .all(q, q, limit) as KgEntity[];
-  return rows;
+    .all() as KgEntity[];
+  return rows
+    .map((entity) => ({
+      entity,
+      score: relevanceScore(`${entity.label} ${entity.summary}`, query),
+    }))
+    .filter((x) => x.score >= 45)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map((x) => x.entity);
 }
 
 export function relatedEntities(id: string, limit = 6) {
@@ -62,7 +71,7 @@ export function relatedEntities(id: string, limit = 6) {
 }
 
 export function panelFromQuery(query: string) {
-  // Sync once lazily — never rewrite the full graph on every SERP (was a major latency sink).
+  if (navigationalSiteForQuery(query)) return null;
   try {
     const db = getDb();
     const count = db.prepare("SELECT COUNT(*) as c FROM kg_entities").get() as { c: number } | undefined;
@@ -70,9 +79,17 @@ export function panelFromQuery(query: string) {
   } catch {
     /* ignore */
   }
-  const entities = findEntities(query, 3);
+  const entities = findEntities(query, 5);
   if (!entities.length) return null;
-  const main = entities[0];
+  const scored = entities
+    .map((entity) => ({
+      entity,
+      score: relevanceScore(`${entity.label} ${entity.summary}`, query),
+    }))
+    .filter((x) => x.score >= 45)
+    .sort((a, b) => b.score - a.score);
+  if (!scored.length) return null;
+  const main = scored[0].entity;
   const related = relatedEntities(main.id, 5);
   return { entity: main, related };
 }

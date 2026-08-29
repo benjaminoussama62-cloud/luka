@@ -7,10 +7,10 @@ import { useAuth } from "@/lib/auth";
 
 const MODULES = [
   { id: "radar", label: "Radar", live: true },
-  { id: "trace", label: "Trace", live: false },
-  { id: "yield", label: "Yield", live: false },
-  { id: "velocity", label: "Velocity", live: false },
-  { id: "aether", label: "Aether", live: false },
+  { id: "trace", label: "Trace", live: true },
+  { id: "yield", label: "Yield", live: true },
+  { id: "velocity", label: "Velocity", live: true },
+  { id: "aether", label: "Aether", live: true },
 ] as const;
 
 export function StudioAppShell({
@@ -61,17 +61,6 @@ export function StudioAppShell({
           {MODULES.map((m) => {
             const href = `/studio/app/${siteId}/${m.id}`;
             const active = pathname?.includes(`/${m.id}`);
-            if (!m.live) {
-              return (
-                <span
-                  key={m.id}
-                  className="cursor-not-allowed px-3 py-2 text-xs text-[var(--faint)]"
-                  title="Bientôt"
-                >
-                  {m.label}
-                </span>
-              );
-            }
             return (
               <Link
                 key={m.id}

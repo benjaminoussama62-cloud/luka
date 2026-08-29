@@ -1,4 +1,5 @@
 import type { KnowledgePanel } from "../types";
+import { meaningfulTokens, navigationalSiteForQuery } from "../search-relevance";
 import { CULTURE_ARTICLES, SPORT_ARTICLES } from "./articles-culture-sport";
 import { ECOSYSTEM_ARTICLES } from "./articles-ecosystem";
 import { FLAGSHIP_ARTICLES } from "./articles-flagship";
@@ -36,14 +37,19 @@ export const AYEBI_SEED_ARTICLES = AYEBI_ARTICLES;
 export function scoreArticle(article: AyebiArticle, query: string): number {
   const q = query.toLowerCase().normalize("NFD").replace(/\p{M}/gu, "");
   const qc = q.replace(/[\s._-]/g, "");
-  const tokens = q.split(/[\s\-_./]+/).filter((t) => t.length >= 2);
+  const tokens = meaningfulTokens(query);
   let score = 0;
+  const titleNorm = `${article.title} ${article.subtitle}`
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "");
   const hay = `${article.title} ${article.subtitle} ${article.summary} ${article.tags.join(" ")} ${article.slug} ${article.facts.map((f) => f.value).join(" ")}`
     .toLowerCase()
     .normalize("NFD")
     .replace(/\p{M}/gu, "");
 
-  if (hay.includes(q)) score += 50;
+  if (titleNorm.includes(q) || article.slug.includes(qc)) score += 55;
+  else if (hay.includes(q)) score += 28;
   if (qc.includes("devalpha1") && article.slug === "devalpha") score += 90;
   if (qc.includes("totala") && article.slug === "tala") score += 90;
   if (qc.includes("sombatekaonline") && article.slug === "sombateka") score += 90;
@@ -52,7 +58,8 @@ export function scoreArticle(article: AyebiArticle, query: string): number {
   for (const t of tokens) {
     if (article.slug.includes(t)) score += 28;
     if (article.tags.some((tag) => tag.includes(t) || t.includes(tag))) score += 18;
-    if (hay.includes(t)) score += 10;
+    if (titleNorm.includes(t)) score += 16;
+    else if (hay.includes(t)) score += 8;
   }
   if (article.category === "lieu" && /\b(stade|marché|marche|ville|parc|aéroport)\b/.test(q)) score += 5;
   if (article.category === "personnalité" && /\b(président|president|ministre|footballeur|chanteur)\b/.test(q)) score += 5;
@@ -60,8 +67,12 @@ export function scoreArticle(article: AyebiArticle, query: string): number {
     const brandHit =
       article.slug === q ||
       article.tags.some((tag) => q.includes(tag) || tag.includes(q)) ||
-      article.title.toLowerCase().normalize("NFD").replace(/\p{M}/gu, "").includes(q);
+      titleNorm.includes(q);
     if (brandHit) score += 45;
+  }
+  const nav = navigationalSiteForQuery(query);
+  if (nav && article.slug !== nav.domain.split(".")[0] && !titleNorm.includes(q)) {
+    score = Math.min(score, 22);
   }
   return score;
 }
@@ -70,7 +81,7 @@ export function searchAyebiArticles(query: string, limit = 8): AyebiArticle[] {
   const q = query.trim();
   if (!q) return AYEBI_ARTICLES.slice(0, limit);
   return AYEBI_ARTICLES.map((a) => ({ a, s: scoreArticle(a, q) }))
-    .filter((x) => x.s >= 8)
+    .filter((x) => x.s >= 22)
     .sort((x, y) => y.s - x.s)
     .slice(0, limit)
     .map((x) => x.a);
@@ -82,7 +93,7 @@ export function findAyebiArticle(query: string): AyebiArticle | undefined {
 
 export function searchAyebi(query: string): KnowledgePanel | undefined {
   const top = findAyebiArticle(query);
-  if (!top || scoreArticle(top, query) < 12) return undefined;
+  if (!top || scoreArticle(top, query) < 42) return undefined;
 
   return {
     title: top.title,

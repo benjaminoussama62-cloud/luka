@@ -24,27 +24,27 @@ const MODULES = [
   },
   {
     name: "Trace",
-    status: "Bientôt",
-    live: false,
-    text: "Audience et comportement sur votre site — prochain module.",
+    status: "Disponible",
+    live: true,
+    text: "Audience et comportement sur votre site — sessions, pages vues, referrers et snippet de suivi.",
   },
   {
     name: "Yield",
-    status: "Bientôt",
-    live: false,
-    text: "Monétisation native Ayeba — emplacements et performance.",
+    status: "Disponible",
+    live: true,
+    text: "Monétisation native Ayeba — emplacements, CTR, revenus et activation par slot.",
   },
   {
     name: "Velocity",
-    status: "Bientôt",
-    live: false,
-    text: "Audits de vitesse et plan d’action priorisé.",
+    status: "Disponible",
+    live: true,
+    text: "Audits de vitesse TTFB, score performance et plan d’action priorisé.",
   },
   {
     name: "Aether",
-    status: "Bientôt",
-    live: false,
-    text: "Copilote qui lit vos signaux et propose 3 actions à fort impact.",
+    status: "Disponible",
+    live: true,
+    text: "Copilote qui lit Radar, Trace, Yield et Velocity — 3 actions à fort impact.",
   },
 ];
 
@@ -73,8 +73,8 @@ export default function StudioLandingPage() {
             L’infrastructure du web pour ceux qui publient.
           </h1>
           <p className="mt-5 max-w-2xl text-[1.08rem] leading-relaxed text-[var(--muted)]">
-            Pas un tableau décoratif. Studio vous dit si Ayeba voit votre site, quelles requêtes
-            amènent des clics, et quelle action faire maintenant — Radar d’abord, le reste suit.
+            Pas un tableau décoratif. Studio vous dit si Ayeba voit votre site, qui visite vos pages,
+            comment monétiser, si c’est rapide — et quelle action faire maintenant avec Aether.
           </p>
 
           <div className="mt-9 flex flex-col gap-3 sm:flex-row sm:items-center">

@@ -1,6 +1,7 @@
 import { randomBytes } from "crypto";
 import { getDb } from "@/lib/storage/database";
 import type { SessionUser } from "@/lib/auth-server";
+import { ensureSiteModules } from "./modules";
 import type { StudioSite, StudioSiteStatus } from "./types";
 
 function rowToSite(r: {
@@ -114,6 +115,7 @@ export function createSite(
     throw new StudioAuthError("Ce domaine est déjà lié à votre compte", 409);
   }
 
+  ensureSiteModules(id);
   return getSiteById(id)!;
 }
 

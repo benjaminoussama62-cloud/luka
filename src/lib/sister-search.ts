@@ -63,7 +63,7 @@ export const BRAND_SEARCH_DOCS: IndexedDoc[] = [
       "shopping",
     ],
     congoRelevant: true,
-    sourceType: "shop",
+    sourceType: "web",
     credibility: 99,
     sitelinks: [{ title: "Marketplace", url: "https://sombatekaonline.com" }],
   },

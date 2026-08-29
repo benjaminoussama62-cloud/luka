@@ -1,5 +1,7 @@
 /** Corpus + suggestions + dictionnaire Ayeba (index maison léger). */
 
+import { meaningfulTokens, relevanceScore } from "./search-relevance";
+
 export const POPULAR_QUERIES = [
   "Patrice Lumumba",
   "Kinshasa",
@@ -310,20 +312,20 @@ export function didYouMean(query: string): string | undefined {
 
 export function searchLocalIndex(query: string): IndexedDoc[] {
   const q = query.trim().toLowerCase();
-  const tokens = q.split(/\s+/).filter((t) => t.length >= 2);
-  if (!tokens.length && q.length < 2) return [];
+  const tokens = meaningfulTokens(query);
+  if (!tokens.length && q.length < 3) return [];
 
   return AYEBA_INDEX.map((doc) => {
-    const hay = `${doc.title} ${doc.snippet} ${doc.keywords.join(" ")} ${doc.domain}`.toLowerCase();
-    let score = 0;
-    if (q.length >= 2 && (hay.includes(q) || doc.domain.includes(q))) score += 40;
+    const hay = `${doc.title} ${doc.snippet} ${doc.keywords.join(" ")} ${doc.domain}`;
+    let score = relevanceScore(hay, query);
+    if (q.length >= 3 && doc.domain.includes(q.replace(/^www\./, ""))) score += 35;
     for (const t of tokens) {
-      if (doc.title.toLowerCase().includes(t)) score += 20;
-      else if (hay.includes(t)) score += 10;
+      if (doc.title.toLowerCase().includes(t)) score += 18;
     }
     return { doc, score };
   })
-    .filter((x) => x.score > 0)
+    .filter((x) => x.score >= 30)
     .sort((a, b) => b.score - a.score)
+    .slice(0, 8)
     .map((x) => x.doc);
 }
