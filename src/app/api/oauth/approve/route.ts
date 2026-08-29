@@ -6,6 +6,7 @@ import {
   registerUser,
   setSessionCookie,
 } from "@/lib/auth-server";
+import { logOAuthAudit } from "@/lib/oauth-provider/audit";
 import { createAuthorizationCode, hasUserConsent, recordUserConsent } from "@/lib/oauth-provider/codes";
 import { getOAuthClient } from "@/lib/oauth-provider/clients";
 import { parseScopeString } from "@/lib/oauth-provider/scopes";
@@ -14,11 +15,16 @@ import {
   buildRedirectWithError,
   parseAuthorizeParams,
 } from "@/lib/oauth-provider/validate";
+import { oauthRateLimit, rateLimitResponse } from "@/lib/rate-limit";
+import { userRequiresTotp, verifyUserTotp } from "@/lib/security/user-security";
 
 export const runtime = "nodejs";
 
 /** POST /api/oauth/approve — consent or login+consent */
 export async function POST(req: Request) {
+  if (!oauthRateLimit(req, "oauth-approve", 40)) return rateLimitResponse();
+
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
   const body = (await req.json()) as {
     action?: "approve" | "deny" | "login";
     client_id?: string;
@@ -31,6 +37,7 @@ export async function POST(req: Request) {
     password?: string;
     name?: string;
     mode?: "login" | "register";
+    totp_code?: string;
   };
 
   const qs = new URLSearchParams();
@@ -48,6 +55,7 @@ export async function POST(req: Request) {
   }
 
   if (body.action === "deny") {
+    logOAuthAudit({ event: "authorize_denied", clientId: parsed.clientId, ip });
     return NextResponse.json({
       redirect: buildRedirectWithError(parsed.redirectUri, "access_denied", parsed.state),
     });
@@ -62,11 +70,13 @@ export async function POST(req: Request) {
         : await loginUser(body.email, body.password);
 
     if ("error" in result && result.error) {
+      logOAuthAudit({ event: "login_failed", clientId: parsed.clientId, ip, detail: body.email });
       return NextResponse.json({ error: result.error }, { status: 401 });
     }
     const token = await createSessionToken(result.user!);
     await setSessionCookie(token);
     session = result.user!;
+    logOAuthAudit({ event: "login_success", clientId: parsed.clientId, userId: session.id, ip });
   }
 
   if (!session) {
@@ -79,10 +89,20 @@ export async function POST(req: Request) {
   if (body.action === "login") {
     return NextResponse.json({
       user: { name: session.name, email: session.email },
+      requiresTotp: userRequiresTotp(session.id),
     });
   }
 
   if (body.action === "approve") {
+    if (userRequiresTotp(session.id)) {
+      if (!body.totp_code) {
+        return NextResponse.json({ error: "Code 2FA requis", requiresTotp: true }, { status: 403 });
+      }
+      if (!verifyUserTotp(session.id, body.totp_code)) {
+        return NextResponse.json({ error: "Code 2FA invalide", requiresTotp: true }, { status: 403 });
+      }
+    }
+
     recordUserConsent(session.id, parsed.clientId, parsed.scope);
 
     const code = createAuthorizationCode({
@@ -93,6 +113,14 @@ export async function POST(req: Request) {
       state: parsed.state,
       codeChallenge: parsed.codeChallenge,
       codeChallengeMethod: parsed.codeChallengeMethod,
+    });
+
+    logOAuthAudit({
+      event: "authorize_granted",
+      clientId: parsed.clientId,
+      userId: session.id,
+      ip,
+      detail: parsed.scope,
     });
 
     return NextResponse.json({
@@ -117,6 +145,7 @@ export async function GET(req: Request) {
   return NextResponse.json({
     loggedIn: true,
     hasConsent: hasUserConsent(session.id, parsed.clientId, parsed.scope),
+    requiresTotp: userRequiresTotp(session.id),
     user: { name: session.name, email: session.email },
   });
 }

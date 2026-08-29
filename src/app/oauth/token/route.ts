@@ -1,13 +1,18 @@
 import { NextResponse } from "next/server";
 import { consumeAuthorizationCode } from "@/lib/oauth-provider/codes";
 import { verifyOAuthClientSecret } from "@/lib/oauth-provider/clients";
+import { logOAuthAudit } from "@/lib/oauth-provider/audit";
 import { oauthJsonError, parseBasicAuth, readOAuthFormBody, OAUTH_NO_STORE } from "@/lib/oauth-provider/http";
 import { issueTokens, refreshAccessToken } from "@/lib/oauth-provider/tokens";
+import { clientIp, oauthRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
 /** POST /oauth/token — authorization_code | refresh_token */
 export async function POST(req: Request) {
+  if (!oauthRateLimit(req, "oauth-token", 60)) return rateLimitResponse();
+
+  const ip = clientIp(req);
   try {
     const body = await readOAuthFormBody(req);
     const basic = parseBasicAuth(req);
@@ -46,6 +51,14 @@ export async function POST(req: Request) {
         scope: consumed.scope,
       });
 
+      logOAuthAudit({
+        event: "token_issued",
+        clientId,
+        userId: consumed.userId,
+        ip,
+        detail: "authorization_code",
+      });
+
       return NextResponse.json(tokens, { headers: OAUTH_NO_STORE });
     }
 
@@ -55,6 +68,8 @@ export async function POST(req: Request) {
 
       const tokens = await refreshAccessToken({ refreshToken, clientId });
       if (!tokens) return oauthJsonError("invalid_grant", "Refresh token invalide");
+
+      logOAuthAudit({ event: "token_refreshed", clientId, ip });
 
       return NextResponse.json(tokens, { headers: OAUTH_NO_STORE });
     }

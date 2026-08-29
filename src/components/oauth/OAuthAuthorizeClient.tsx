@@ -27,6 +27,8 @@ export function OAuthAuthorizeClient({ client, params, user: initialUser }: Prop
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [requiresTotp, setRequiresTotp] = useState(false);
+  const [totpCode, setTotpCode] = useState("");
 
   const scopes = describeScopes(parseScopeString(params.scope));
 
@@ -49,12 +51,14 @@ export function OAuthAuthorizeClient({ client, params, user: initialUser }: Prop
           password: action === "login" ? password : undefined,
           name: mode === "register" ? name : undefined,
           mode,
+          totp_code: action === "approve" ? totpCode : undefined,
         }),
       });
       const data = (await res.json()) as {
         redirect?: string;
         error?: string;
         user?: { name: string; email: string };
+        requiresTotp?: boolean;
       };
       if (data.redirect) {
         window.location.href = data.redirect;
@@ -62,10 +66,12 @@ export function OAuthAuthorizeClient({ client, params, user: initialUser }: Prop
       }
       if (data.error) {
         setError(data.error);
+        if (data.requiresTotp) setRequiresTotp(true);
         return;
       }
       if (action === "login" && res.ok && data.user) {
         setUser(data.user);
+        if (data.requiresTotp) setRequiresTotp(true);
         return;
       }
     } catch {
@@ -98,7 +104,10 @@ export function OAuthAuthorizeClient({ client, params, user: initialUser }: Prop
             )}
           </div>
           <div>
-            <p className="oauth-consent-app-name">{client.name}</p>
+            <p className="oauth-consent-app-name">
+              {client.name}
+              {client.verified ? <span className="dev-verified-badge">Vérifiée</span> : null}
+            </p>
             <p className="oauth-consent-app-desc">
               {client.description || "Application tierce connectée à Ayeba"}
             </p>
@@ -194,6 +203,16 @@ export function OAuthAuthorizeClient({ client, params, user: initialUser }: Prop
                 ))}
               </ul>
             </div>
+            {requiresTotp ? (
+              <input
+                className="ayeba-input oauth-input"
+                placeholder="Code 2FA (6 chiffres)"
+                value={totpCode}
+                onChange={(e) => setTotpCode(e.target.value)}
+                inputMode="numeric"
+                autoComplete="one-time-code"
+              />
+            ) : null}
             <div className="oauth-consent-actions">
               <button
                 type="button"

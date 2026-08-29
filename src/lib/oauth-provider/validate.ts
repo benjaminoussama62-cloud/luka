@@ -1,5 +1,5 @@
 import type { AuthorizeRequest } from "./types";
-import { getOAuthClient, isRedirectUriAllowed } from "./clients";
+import { getOAuthClient, isClientAllowedForAuthorize, isRedirectUriAllowed } from "./clients";
 import { parseScopeString } from "./scopes";
 
 export function parseAuthorizeParams(searchParams: URLSearchParams): AuthorizeRequest | { error: string } {
@@ -19,6 +19,9 @@ export function parseAuthorizeParams(searchParams: URLSearchParams): AuthorizeRe
 
   const client = getOAuthClient(clientId);
   if (!client) return { error: "client_id inconnu" };
+  if (!isClientAllowedForAuthorize(client)) {
+    return { error: "Application en attente de vérification Ayeba. Contactez developers@ayeba.app" };
+  }
   if (!isRedirectUriAllowed(clientId, redirectUri)) {
     return { error: "redirect_uri non autorisé pour cette application" };
   }

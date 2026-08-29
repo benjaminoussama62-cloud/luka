@@ -9,6 +9,7 @@ export const OAUTH_PATHS = {
   token: "/oauth/token",
   userinfo: "/oauth/userinfo",
   revoke: "/oauth/revoke",
+  introspect: "/oauth/introspect",
   discovery: "/.well-known/openid-configuration",
   jwks: "/.well-known/jwks.json",
 } as const;

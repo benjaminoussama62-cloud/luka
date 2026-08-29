@@ -3233,6 +3233,54 @@ select option {
   border-radius: inherit;
 }
 
+.dev-verified-badge {
+  display: inline-block;
+  margin-left: 0.4rem;
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  background: rgba(45, 212, 191, 0.15);
+  border: 1px solid rgba(45, 212, 191, 0.35);
+  color: #5eead4;
+  vertical-align: middle;
+}
+
+.connected-apps-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.connected-apps-item {
+  padding: 1.25rem;
+}
+
+.connected-apps-item-head {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.connected-apps-name {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.connected-apps-link {
+  font-size: 0.8rem;
+  color: var(--muted);
+  text-decoration: underline;
+}
+
+.account-shell {
+  animation: rise 0.55s var(--ease-out) both;
+}
+
 .oauth-switch-account {
   border: none;
   background: none;

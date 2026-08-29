@@ -1,5 +1,5 @@
 import { getDb } from "@/lib/storage/database";
-import type { OAuthClient, OAuthClientType, OAuthClientWithSecret } from "./types";
+import type { OAuthClient, OAuthClientTier, OAuthClientType, OAuthClientWithSecret } from "./types";
 import { generateClientId, generateClientSecret, hashClientSecret, verifyClientSecret } from "./crypto";
 
 type ClientRow = {
@@ -8,8 +8,11 @@ type ClientRow = {
   name: string;
   description: string;
   logo_url: string;
+  website_url: string;
   owner_user_id: string;
   client_type: string;
+  tier: string;
+  verified: number;
   created_at: string;
   updated_at: string;
 };
@@ -27,9 +30,12 @@ function rowToClient(row: ClientRow): OAuthClient {
     clientId: row.client_id,
     name: row.name,
     description: row.description,
-    logoUrl: row.logo_url,
+    logoUrl: row.logo_url || "",
+    websiteUrl: row.website_url || "",
     ownerUserId: row.owner_user_id,
     clientType: row.client_type as OAuthClientType,
+    tier: (row.tier || "public") as OAuthClientTier,
+    verified: row.verified === 1,
     redirectUris: loadRedirectUris(row.client_id),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -43,6 +49,12 @@ export function getOAuthClient(clientId: string): OAuthClient | null {
     | undefined;
   if (!row) return null;
   return rowToClient(row);
+}
+
+/** Apps tier public must be verified before authorize (like Google app review). */
+export function isClientAllowedForAuthorize(client: OAuthClient): boolean {
+  if (client.tier === "sister" || client.tier === "partner") return true;
+  return client.verified;
 }
 
 export function verifyOAuthClientSecret(clientId: string, secret: string): boolean {
@@ -70,6 +82,7 @@ export function listOAuthClientsByOwner(ownerUserId: string): OAuthClient[] {
 export function createOAuthClient(input: {
   name: string;
   description?: string;
+  websiteUrl?: string;
   ownerUserId: string;
   redirectUris: string[];
   clientType?: OAuthClientType;
@@ -81,13 +94,14 @@ export function createOAuthClient(input: {
 
   db.prepare(
     `INSERT INTO oauth_clients
-     (client_id, client_secret_hash, name, description, owner_user_id, client_type, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+     (client_id, client_secret_hash, name, description, logo_url, website_url, owner_user_id, client_type, tier, verified, created_at, updated_at)
+     VALUES (?, ?, ?, ?, '', ?, ?, ?, 'public', 0, ?, ?)`,
   ).run(
     clientId,
     hashClientSecret(clientSecret),
     input.name.trim(),
     input.description?.trim() || "",
+    input.websiteUrl?.trim() || "",
     input.ownerUserId,
     input.clientType || "confidential",
     now,
@@ -105,10 +119,34 @@ export function createOAuthClient(input: {
   return { ...client, clientSecret };
 }
 
+export function requestClientVerification(clientId: string, ownerUserId: string): boolean {
+  const db = getDb();
+  const row = db.prepare("SELECT owner_user_id, verified, tier FROM oauth_clients WHERE client_id = ?").get(
+    clientId,
+  ) as { owner_user_id: string; verified: number; tier: string } | undefined;
+  if (!row || row.owner_user_id !== ownerUserId) return false;
+  if (row.verified === 1 || row.tier === "sister") return true;
+  db.prepare("UPDATE oauth_clients SET updated_at = ? WHERE client_id = ?").run(
+    new Date().toISOString(),
+    clientId,
+  );
+  return true;
+}
+
+export function verifyOAuthClient(clientId: string): boolean {
+  const db = getDb();
+  const row = db.prepare("SELECT client_id FROM oauth_clients WHERE client_id = ?").get(clientId);
+  if (!row) return false;
+  db.prepare(
+    "UPDATE oauth_clients SET verified = 1, tier = CASE WHEN tier = 'public' THEN 'partner' ELSE tier END, updated_at = ? WHERE client_id = ?",
+  ).run(new Date().toISOString(), clientId);
+  return true;
+}
+
 export function updateOAuthClient(
   clientId: string,
   ownerUserId: string,
-  patch: { name?: string; description?: string; redirectUris?: string[] },
+  patch: { name?: string; description?: string; websiteUrl?: string; redirectUris?: string[] },
 ): OAuthClient | null {
   const db = getDb();
   const row = db.prepare("SELECT * FROM oauth_clients WHERE client_id = ?").get(clientId) as
@@ -117,10 +155,16 @@ export function updateOAuthClient(
   if (!row || (row.owner_user_id !== ownerUserId && row.owner_user_id !== "system")) return null;
 
   const now = new Date().toISOString();
-  if (patch.name || patch.description !== undefined) {
+  if (patch.name || patch.description !== undefined || patch.websiteUrl !== undefined) {
     db.prepare(
-      "UPDATE oauth_clients SET name = ?, description = ?, updated_at = ? WHERE client_id = ?",
-    ).run(patch.name ?? row.name, patch.description ?? row.description, now, clientId);
+      "UPDATE oauth_clients SET name = ?, description = ?, website_url = ?, updated_at = ? WHERE client_id = ?",
+    ).run(
+      patch.name ?? row.name,
+      patch.description ?? row.description,
+      patch.websiteUrl ?? row.website_url,
+      now,
+      clientId,
+    );
   }
 
   if (patch.redirectUris) {
@@ -154,10 +198,10 @@ export function rotateClientSecret(clientId: string, ownerUserId: string): strin
 
 export function deleteOAuthClient(clientId: string, ownerUserId: string): boolean {
   const db = getDb();
-  const row = db.prepare("SELECT owner_user_id FROM oauth_clients WHERE client_id = ?").get(clientId) as
-    | { owner_user_id: string }
+  const row = db.prepare("SELECT owner_user_id, tier FROM oauth_clients WHERE client_id = ?").get(clientId) as
+    | { owner_user_id: string; tier: string }
     | undefined;
-  if (!row || row.owner_user_id !== ownerUserId) return false;
+  if (!row || row.owner_user_id !== ownerUserId || row.tier === "sister") return false;
   db.prepare("DELETE FROM oauth_redirect_uris WHERE client_id = ?").run(clientId);
   db.prepare("DELETE FROM oauth_clients WHERE client_id = ?").run(clientId);
   return true;

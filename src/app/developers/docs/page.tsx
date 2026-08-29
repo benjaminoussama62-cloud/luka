@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { DevelopersShell } from "@/components/developers/DevelopersShell";
 import { oauthEndpoint } from "@/lib/oauth-provider/endpoints";
+import { SISTER_APPS } from "@/lib/oauth-provider/sister-apps";
 
 export const metadata: Metadata = {
   title: "Documentation OAuth — Ayeba Developers",
@@ -79,6 +80,26 @@ export default function DevelopersDocsPage() {
                   <code>{oauthEndpoint("userinfo")}</code>
                 </dd>
               </div>
+            </dl>
+          </section>
+
+          <section id="sister-apps" className="dev-docs-section ayeba-panel">
+            <h2>Apps sœurs Ayeba (pré-configurées)</h2>
+            <p className="mb-4">
+              Omega, JEMSA, TALA et Sombateka sont enregistrées comme clients OAuth vérifiés (tier{" "}
+              <code>sister</code>).
+            </p>
+            <dl className="dev-console-endpoints">
+              {SISTER_APPS.map((app) => (
+                <div key={app.slug}>
+                  <dt>{app.name}</dt>
+                  <dd>
+                    <code>{app.clientId}</code>
+                    <br />
+                    <code>{`https://${app.productionDomain}/api/ayeba/callback`}</code>
+                  </dd>
+                </div>
+              ))}
             </dl>
           </section>
 

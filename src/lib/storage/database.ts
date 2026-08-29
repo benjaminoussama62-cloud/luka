@@ -1,5 +1,10 @@
 import { mkdirSync } from "fs";
 import path from "path";
+import {
+  SISTER_APPS,
+  sisterDevCallback,
+  sisterProductionCallback,
+} from "@/lib/oauth-provider/sister-apps";
 
 /** Minimal surface shared by better-sqlite3 and libsql sync drivers. */
 export type AyebaDatabase = {
@@ -486,57 +491,112 @@ function migrate(db: AyebaDatabase) {
       granted_at TEXT NOT NULL,
       PRIMARY KEY (user_id, client_id)
     );
+
+    CREATE TABLE IF NOT EXISTS oauth_audit_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      event_type TEXT NOT NULL,
+      client_id TEXT,
+      user_id TEXT,
+      ip TEXT,
+      detail TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_oauth_audit_client ON oauth_audit_log(client_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_oauth_audit_user ON oauth_audit_log(user_id, created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS user_security (
+      user_id TEXT PRIMARY KEY,
+      totp_secret TEXT,
+      totp_enabled INTEGER NOT NULL DEFAULT 0,
+      backup_codes_json TEXT NOT NULL DEFAULT '[]',
+      updated_at TEXT NOT NULL
+    );
   `);
 
+  migrateOAuthColumns(db);
   seedCategories(db);
   seedMlWeights(db);
   seedOAuthClients(db);
 }
 
+function migrateOAuthColumns(db: AyebaDatabase) {
+  const alters = [
+    "ALTER TABLE oauth_clients ADD COLUMN verified INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE oauth_clients ADD COLUMN tier TEXT NOT NULL DEFAULT 'public'",
+    "ALTER TABLE oauth_clients ADD COLUMN website_url TEXT NOT NULL DEFAULT ''",
+  ];
+  for (const sql of alters) {
+    try {
+      db.exec(sql);
+    } catch {
+      /* column exists */
+    }
+  }
+  try {
+    db.exec(
+      "UPDATE oauth_clients SET verified = 1, tier = 'sister' WHERE owner_user_id = 'system'",
+    );
+  } catch {
+    /* ignore */
+  }
+}
+
 function seedOAuthClients(db: AyebaDatabase) {
-  const omegaRedirect = "https://omega-web.org/api/ayeba/callback";
-  const existing = db
-    .prepare("SELECT client_id FROM oauth_redirect_uris WHERE uri = ?")
-    .get(omegaRedirect) as { client_id: string } | undefined;
-  if (existing) return;
-
-  const clientId =
-    process.env.OMEGA_OAUTH_CLIENT_ID?.trim() ||
-    process.env.OAUTH_OMEGA_CLIENT_ID?.trim() ||
-    "ayeba_omega_web_prod";
-  const clientSecret =
-    process.env.OMEGA_OAUTH_CLIENT_SECRET?.trim() ||
-    process.env.OAUTH_OMEGA_CLIENT_SECRET?.trim() ||
-    "ayeba_omega_secret_change_in_production";
-
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const bcrypt = require("bcryptjs") as typeof import("bcryptjs");
-  const hash = bcrypt.hashSync(clientSecret, 10);
   const now = new Date().toISOString();
   const ownerId = "system";
+  const isProd = process.env.NODE_ENV === "production" || process.env.VERCEL === "1";
 
-  db.prepare(
-    `INSERT OR IGNORE INTO oauth_clients
-     (client_id, client_secret_hash, name, description, owner_user_id, client_type, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, 'confidential', ?, ?)`,
-  ).run(
-    clientId,
-    hash,
-    "Omega",
-    "Plateforme sœur Omega — connexion avec compte Ayeba",
-    ownerId,
-    now,
-    now,
-  );
+  for (const app of SISTER_APPS) {
+    const clientId =
+      process.env[app.clientIdEnv]?.trim() ||
+      process.env[`OAUTH_${app.slug.toUpperCase()}_CLIENT_ID`]?.trim() ||
+      app.clientId;
 
-  db.prepare(
-    "INSERT OR IGNORE INTO oauth_redirect_uris (client_id, uri, created_at) VALUES (?, ?, ?)",
-  ).run(clientId, omegaRedirect, now);
+    const existing = db.prepare("SELECT client_id FROM oauth_clients WHERE client_id = ?").get(clientId);
+    if (existing) continue;
 
-  const localRedirect = "http://localhost:3000/api/ayeba/callback";
-  db.prepare(
-    "INSERT OR IGNORE INTO oauth_redirect_uris (client_id, uri, created_at) VALUES (?, ?, ?)",
-  ).run(clientId, localRedirect, now);
+    const secretFromEnv = process.env[app.secretEnv]?.trim();
+    const secret =
+      secretFromEnv ||
+      (isProd
+        ? null
+        : `ayeba_${app.slug}_dev_secret_${app.slug}`);
+
+    if (!secret) {
+      console.warn(`[oauth] ${app.secretEnv} manquant — client ${clientId} non seedé`);
+      continue;
+    }
+
+    const hash = bcrypt.hashSync(secret, 10);
+
+    db.prepare(
+      `INSERT INTO oauth_clients
+       (client_id, client_secret_hash, name, description, logo_url, website_url, owner_user_id, client_type, tier, verified, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'confidential', 'sister', 1, ?, ?)`,
+    ).run(
+      clientId,
+      hash,
+      app.name,
+      app.description,
+      app.logoUrl,
+      app.websiteUrl,
+      ownerId,
+      now,
+      now,
+    );
+
+    const prodUri = sisterProductionCallback(app.productionDomain);
+    const devUri = sisterDevCallback(app.slug);
+    const ins = db.prepare(
+      "INSERT OR IGNORE INTO oauth_redirect_uris (client_id, uri, created_at) VALUES (?, ?, ?)",
+    );
+    ins.run(clientId, prodUri, now);
+    ins.run(clientId, devUri, now);
+    ins.run(clientId, "http://localhost:3000/api/ayeba/callback", now);
+  }
 }
 
 function seedMlWeights(db: AyebaDatabase) {

@@ -6,6 +6,7 @@ const NAV = [
   { href: "/developers", label: "Vue d’ensemble", exact: true as const },
   { href: "/developers/docs", label: "Documentation OAuth", exact: false as const },
   { href: "/developers/console", label: "Console", exact: false as const },
+  { href: "/developers/policy", label: "Politique", exact: false as const },
 ] as const;
 
 type Props = {

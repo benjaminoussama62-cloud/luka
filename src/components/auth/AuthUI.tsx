@@ -258,6 +258,10 @@ export function ProfileMenu() {
           </div>
 
           <div className="ayeba-profile-panel-actions">
+            <a href="/compte/applications" className="ayeba-profile-link" role="menuitem">
+              <span className="ayeba-profile-link-label">Compte Ayeba</span>
+              <span className="ayeba-profile-link-hint">Apps connectées · 2FA</span>
+            </a>
             <a href="/studio/app" className="ayeba-profile-link" role="menuitem">
               <span className="ayeba-profile-link-label">Ayeba Studio</span>
               <span className="ayeba-profile-link-hint">Webmaster · Radar</span>

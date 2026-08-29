@@ -1,12 +1,16 @@
 export type OAuthClientType = "confidential" | "public";
+export type OAuthClientTier = "sister" | "partner" | "public";
 
 export type OAuthClient = {
   clientId: string;
   name: string;
   description: string;
   logoUrl: string;
+  websiteUrl: string;
   ownerUserId: string;
   clientType: OAuthClientType;
+  tier: OAuthClientTier;
+  verified: boolean;
   redirectUris: string[];
   createdAt: string;
   updatedAt: string;

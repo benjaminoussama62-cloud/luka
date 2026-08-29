@@ -20,9 +20,16 @@ export function DeveloperAppDetail({
 }) {
   const [name, setName] = useState(app.name);
   const [description, setDescription] = useState(app.description);
+  const [websiteUrl, setWebsiteUrl] = useState(app.websiteUrl);
   const [redirectUris, setRedirectUris] = useState(app.redirectUris.join("\n"));
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+
+  async function requestVerification() {
+    const res = await fetch(`/api/developers/apps/${app.clientId}/verify-request`, { method: "POST" });
+    const data = (await res.json()) as { message?: string; error?: string };
+    setMsg(data.message || data.error || "Demande envoyée");
+  }
 
   async function save() {
     setBusy(true);
@@ -33,6 +40,7 @@ export function DeveloperAppDetail({
       body: JSON.stringify({
         name,
         description,
+        websiteUrl,
         redirectUris: redirectUris.split("\n").map((s) => s.trim()).filter(Boolean),
       }),
     });
@@ -63,8 +71,22 @@ export function DeveloperAppDetail({
           <h2>{app.name}</h2>
           <p className="dev-console-muted">{app.description || "Application OAuth Ayeba"}</p>
         </div>
-        <span className="dev-console-badge">Confidentielle</span>
+        <span className="dev-console-badge">
+          {app.tier === "sister" ? "Sœur Ayeba" : app.verified ? "Vérifiée" : "En attente"}
+        </span>
       </div>
+
+      {!app.verified && app.tier === "public" ? (
+        <div className="dev-console-secret-banner mb-4">
+          <strong>Vérification requise</strong>
+          <p className="text-sm text-[var(--muted)] mt-1">
+            Les apps tierces doivent être vérifiées par Ayeba avant utilisation en production (comme Google).
+          </p>
+          <button type="button" className="ayeba-cta mt-2 px-3 py-1.5 text-xs" onClick={() => void requestVerification()}>
+            Demander la vérification
+          </button>
+        </div>
+      ) : null}
 
       <CopyField label="Client ID" value={app.clientId} />
 
@@ -82,6 +104,10 @@ export function DeveloperAppDetail({
       <div className="dev-console-field">
         <label>Nom affiché (écran consentement)</label>
         <input className="ayeba-input" value={name} onChange={(e) => setName(e.target.value)} />
+      </div>
+      <div className="dev-console-field">
+        <label>Site web de l&apos;application</label>
+        <input className="ayeba-input" value={websiteUrl} onChange={(e) => setWebsiteUrl(e.target.value)} placeholder="https://example.com" />
       </div>
       <div className="dev-console-field">
         <label>Description</label>

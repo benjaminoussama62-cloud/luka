@@ -20,6 +20,7 @@ export async function POST(req: Request) {
   const body = (await req.json()) as {
     name?: string;
     description?: string;
+    websiteUrl?: string;
     redirectUris?: string[];
   };
 
@@ -33,6 +34,7 @@ export async function POST(req: Request) {
   const app = createOAuthClient({
     name,
     description: body.description,
+    websiteUrl: body.websiteUrl,
     ownerUserId: auth.user.id,
     redirectUris,
   });
