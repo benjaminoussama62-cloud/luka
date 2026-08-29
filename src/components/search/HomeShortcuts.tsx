@@ -25,7 +25,7 @@ export const HOME_SHORTCUTS: HomeShortcut[] = [
     id: "sombateka",
     name: "Sombateka",
     href: process.env.NEXT_PUBLIC_SHORTCUT_SOMBATEKA || "https://sombatekaonline.com",
-    logo: "/brand/shortcuts/sombateka.svg",
+    logo: "/brand/shortcuts/sombateka.png",
     tint: "#14b8a6",
   },
   {
@@ -169,6 +169,12 @@ export function HomeShortcuts() {
                   height={40}
                   loading="lazy"
                   decoding="async"
+                  onError={(e) => {
+                    const img = e.currentTarget;
+                    if (img.dataset.fallback) return;
+                    img.dataset.fallback = "1";
+                    img.src = faviconFor(s.href);
+                  }}
                 />
               </span>
               <span className="ayeba-shortcut-label">{s.name}</span>

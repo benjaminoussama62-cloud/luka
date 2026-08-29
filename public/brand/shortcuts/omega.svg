@@ -1,34 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="Omega">
-  <defs>
-    <linearGradient id="og" x1="96" y1="84" x2="416" y2="428" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#7c3aed"/>
-      <stop offset="0.55" stop-color="#6366f1"/>
-      <stop offset="1" stop-color="#4f46e5"/>
-    </linearGradient>
-    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
-      <feDropShadow dx="0" dy="18" stdDeviation="22" flood-color="#000000" flood-opacity="0.55"/>
-      <feDropShadow dx="0" dy="0" stdDeviation="10" flood-color="#a78bfa" flood-opacity="0.22"/>
-    </filter>
-    <radialGradient id="shine" cx="30%" cy="20%" r="75%">
-      <stop offset="0" stop-color="#ffffff" stop-opacity="0.28"/>
-      <stop offset="0.35" stop-color="#ffffff" stop-opacity="0.08"/>
-      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
-    </radialGradient>
-    <clipPath id="clip">
-      <rect x="64" y="64" width="384" height="384" rx="92" ry="92"/>
-    </clipPath>
-  </defs>
-
-  <g filter="url(#shadow)">
-    <rect x="64" y="64" width="384" height="384" rx="92" ry="92" fill="url(#og)"/>
-    <g clip-path="url(#clip)">
-      <circle cx="170" cy="150" r="230" fill="url(#shine)"/>
-    </g>
-    <rect x="64" y="64" width="384" height="384" rx="92" ry="92" fill="none" stroke="#ffffff" stroke-opacity="0.14" stroke-width="10"/>
-    <!-- Omega symbol — path (no font dependency) -->
-    <path
-      fill="#ffffff"
-      d="M256 148c-52 0-94 38-94 86 0 28 16 52 40 68l-28 58h52l20-42c12 4 26 6 40 6 14 0 28-2 40-6l20 42h52l-28-58c24-16 40-40 40-68 0-48-42-86-94-86zm0 36c28 0 50 22 50 50s-22 50-50 50-50-22-50-50 22-50 50-50z"
-    />
-  </g>
+  <rect x="64" y="64" width="384" height="384" rx="92" fill="#6366f1"/>
+  <rect x="64" y="64" width="384" height="384" rx="92" fill="none" stroke="#ffffff" stroke-opacity="0.18" stroke-width="8"/>
+  <path
+    fill="#ffffff"
+    d="M256 152c-48 0-88 36-88 82 0 26 14 48 36 64l-26 54h48l18-38c12 4 24 6 38 6s26-2 38-6l18 38h48l-26-54c22-16 36-38 36-64 0-46-40-82-88-82zm0 34c26 0 48 20 48 48s-22 48-48 48-48-20-48-48 22-48 48-48z"
+  />
 </svg>

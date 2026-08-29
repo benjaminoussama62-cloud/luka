@@ -18,32 +18,22 @@ export const metadata: Metadata = {
 const MODULES = [
   {
     name: "Radar",
-    status: "Disponible",
-    live: true,
     text: "Indexation, requêtes, clics, couverture et inspection d’URL dans le moteur Ayeba.",
   },
   {
     name: "Trace",
-    status: "Disponible",
-    live: true,
     text: "Audience et comportement sur votre site — sessions, pages vues, referrers et snippet de suivi.",
   },
   {
     name: "Yield",
-    status: "Disponible",
-    live: true,
     text: "Monétisation native Ayeba — emplacements, CTR, revenus et activation par slot.",
   },
   {
     name: "Velocity",
-    status: "Disponible",
-    live: true,
     text: "Audits de vitesse TTFB, score performance et plan d’action priorisé.",
   },
   {
     name: "Aether",
-    status: "Disponible",
-    live: true,
     text: "Copilote qui lit Radar, Trace, Yield et Velocity — 3 actions à fort impact.",
   },
 ];
@@ -92,18 +82,9 @@ export default function StudioLandingPage() {
           <section className="mt-16 grid gap-6 border-t border-[var(--line)] pt-10 sm:grid-cols-2 lg:grid-cols-3">
             {MODULES.map((m) => (
               <article key={m.name} className="min-w-0">
-                <div className="flex items-baseline justify-between gap-3">
-                  <h2 className="font-[family-name:var(--font-brand)] text-2xl font-semibold text-[var(--ink)]">
-                    {m.name}
-                  </h2>
-                  <span
-                    className={`text-[10px] uppercase tracking-[0.14em] ${
-                      m.live ? "text-[var(--accent)]" : "text-[var(--faint)]"
-                    }`}
-                  >
-                    {m.status}
-                  </span>
-                </div>
+                <h2 className="font-[family-name:var(--font-brand)] text-2xl font-semibold text-[var(--ink)]">
+                  {m.name}
+                </h2>
                 <p className="mt-3 text-sm leading-relaxed text-[var(--muted)]">{m.text}</p>
               </article>
             ))}
