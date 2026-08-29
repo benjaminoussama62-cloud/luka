@@ -12,6 +12,8 @@ const LEGAL = [
   { href: "/privacy", label: "Confidentialité" },
   { href: "/terms", label: "CGU" },
   { href: "/mentions-legales", label: "Mentions" },
+  { href: "/droits", label: "Droits" },
+  { href: "/support", label: "Support" },
   { href: "/status", label: "Statut" },
 ] as const;
 

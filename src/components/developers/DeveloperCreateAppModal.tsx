@@ -15,7 +15,7 @@ export function DeveloperCreateAppModal({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [redirectUris, setRedirectUris] = useState(
-    "https://omega-web.org/api/ayeba/callback\nhttp://localhost:3000/api/ayeba/callback",
+    "https://votre-domaine.com/api/ayeba/callback\nhttp://localhost:3000/api/ayeba/callback",
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);

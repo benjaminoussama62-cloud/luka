@@ -2,154 +2,137 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { DevelopersShell } from "@/components/developers/DevelopersShell";
 import { oauthEndpoint } from "@/lib/oauth-provider/endpoints";
-import { SISTER_APPS } from "@/lib/oauth-provider/sister-apps";
 
 export const metadata: Metadata = {
   title: "Documentation OAuth — Ayeba Developers",
-  description: "Guide d’intégration OAuth 2.0 / OpenID Connect pour Se connecter avec Ayeba.",
+  description:
+    "Intégration Se connecter avec Ayeba : flux authorization code, OpenID Connect, scopes et bonnes pratiques.",
 };
-
-const SECTIONS = [
-  {
-    id: "overview",
-    title: "Vue d’ensemble",
-    body: "Ayeba agit comme fournisseur d’identité (équivalent accounts.google.com). Chaque utilisateur possède un identifiant stable sub (UUID Ayeba) partagé entre Omega et toutes les applications sœurs.",
-  },
-  {
-    id: "flow",
-    title: "Flux authorization code",
-    body: "Utilisez response_type=code. Après consentement, Ayeba redirige vers votre redirect_uri avec ?code=...&state=.... Échangez le code côté serveur uniquement — ne exposez jamais client_secret au navigateur.",
-  },
-  {
-    id: "scopes",
-    title: "Scopes",
-    body: "openid (obligatoire pour id_token), email, profile. Demandez openid email profile pour un profil complet.",
-  },
-  {
-    id: "pkce",
-    title: "PKCE (recommandé)",
-    body: "Pour les clients publics (SPA, mobile), envoyez code_challenge (S256) à l’authorize et code_verifier au token endpoint.",
-  },
-];
 
 export default function DevelopersDocsPage() {
   return (
-    <DevelopersShell activePath="/developers/docs" kicker="Documentation" title="OAuth 2.0 & OpenID Connect">
+    <DevelopersShell
+      activePath="/developers/docs"
+      kicker="Documentation"
+      title="Intégrer Se connecter avec Ayeba"
+    >
       <div className="dev-docs-layout">
         <nav className="dev-docs-toc ayeba-panel" aria-label="Sommaire">
-          {SECTIONS.map((s) => (
-            <a key={s.id} href={`#${s.id}`}>
-              {s.title}
-            </a>
-          ))}
+          <a href="#overview">Vue d’ensemble</a>
+          <a href="#discovery">Découverte OpenID</a>
+          <a href="#flow">Flux authorization code</a>
+          <a href="#scopes">Scopes</a>
+          <a href="#pkce">Clients publics (PKCE)</a>
+          <a href="#claims">Profil utilisateur</a>
+          <a href="#security">Bonnes pratiques</a>
           <Link href="/developers/console">→ Console OAuth</Link>
+          <Link href="/developers/policy">→ Politique</Link>
         </nav>
 
         <article className="dev-docs-content">
-          {SECTIONS.map((s) => (
-            <section key={s.id} id={s.id} className="dev-docs-section ayeba-panel">
-              <h2>{s.title}</h2>
-              <p>{s.body}</p>
-            </section>
-          ))}
-
-          <section id="endpoints" className="dev-docs-section ayeba-panel">
-            <h2>Endpoints</h2>
-            <dl className="dev-console-endpoints">
-              <div>
-                <dt>Discovery</dt>
-                <dd>
-                  <code>{oauthEndpoint("discovery")}</code>
-                </dd>
-              </div>
-              <div>
-                <dt>Authorize</dt>
-                <dd>
-                  <code>{oauthEndpoint("authorize")}</code>
-                </dd>
-              </div>
-              <div>
-                <dt>Token</dt>
-                <dd>
-                  <code>{oauthEndpoint("token")}</code>
-                </dd>
-              </div>
-              <div>
-                <dt>Userinfo</dt>
-                <dd>
-                  <code>{oauthEndpoint("userinfo")}</code>
-                </dd>
-              </div>
-            </dl>
-          </section>
-
-          <section id="sister-apps" className="dev-docs-section ayeba-panel">
-            <h2>Apps sœurs Ayeba (pré-configurées)</h2>
-            <p className="mb-4">
-              Omega, JEMSA, TALA et Sombateka sont enregistrées comme clients OAuth vérifiés (tier{" "}
-              <code>sister</code>).
+          <section id="overview" className="dev-docs-section ayeba-panel">
+            <h2>Vue d’ensemble</h2>
+            <p>
+              Ayeba agit comme fournisseur d’identité. Après autorisation par l’utilisateur, votre
+              application reçoit des jetons lui permettant de reconnaître de façon stable la même
+              personne à travers vos services, sans gérer elle-même le mot de passe Ayeba.
             </p>
-            <dl className="dev-console-endpoints">
-              {SISTER_APPS.map((app) => (
-                <div key={app.slug}>
-                  <dt>{app.name}</dt>
-                  <dd>
-                    <code>{app.clientId}</code>
-                    <br />
-                    <code>{`https://${app.productionDomain}/api/ayeba/callback`}</code>
-                  </dd>
-                </div>
-              ))}
-            </dl>
+            <p>
+              Les identifiants de votre application (client_id, client_secret, redirect URIs) sont
+              délivrés exclusivement dans la{" "}
+              <Link href="/developers/console">console OAuth</Link> après authentification. Ils ne
+              sont pas publiés sur les pages marketing du site.
+            </p>
           </section>
 
-          <section id="omega" className="dev-docs-section ayeba-panel">
-            <h2>Intégration Omega (production)</h2>
-            <pre className="dev-console-pre overflow-x-auto text-xs leading-relaxed text-[var(--muted)]">
-{`// 1. Redirection utilisateur
-window.location = "${oauthEndpoint("authorize")}"
-  + "?client_id=ayeba_omega_web_prod"
-  + "&redirect_uri=" + encodeURIComponent("https://omega-web.org/api/ayeba/callback")
-  + "&response_type=code"
-  + "&scope=openid+email+profile"
-  + "&state=" + csrfToken;
+          <section id="discovery" className="dev-docs-section ayeba-panel">
+            <h2>Découverte OpenID</h2>
+            <p>
+              Comme pour tout fournisseur OpenID Connect conforme, les endpoints publics sont
+              décrits dans le document de découverte. Votre serveur doit lire ce document plutôt
+              que de coder en dur des chemins susceptibles d’évoluer :
+            </p>
+            <p className="mt-3">
+              <code className="dev-console-code">{oauthEndpoint("discovery")}</code>
+            </p>
+            <p className="mt-3">
+              Ce document expose notamment les adresses d’autorisation, d’échange de jetons et
+              d’informations utilisateur, ainsi que les algorithmes de signature des id_token.
+            </p>
+          </section>
 
-// 2. Callback serveur Omega — échange du code
-const tokenRes = await fetch("${oauthEndpoint("token")}", {
-  method: "POST",
-  headers: { "Content-Type": "application/x-www-form-urlencoded" },
-  body: new URLSearchParams({
-    grant_type: "authorization_code",
-    code,
-    client_id: process.env.AYEBA_CLIENT_ID,
-    client_secret: process.env.AYEBA_CLIENT_SECRET,
-    redirect_uri: "https://omega-web.org/api/ayeba/callback",
-  }),
-});
-const { access_token, id_token, refresh_token } = await tokenRes.json();
+          <section id="flow" className="dev-docs-section ayeba-panel">
+            <h2>Flux authorization code</h2>
+            <p>
+              Le flux recommandé pour les applications serveur est le code d’autorisation
+              (<code> response_type=code</code>. L’utilisateur est redirigé vers Ayeba, s’authentifie
+              et consent, puis revient sur votre redirect_uri avec un code à courte durée de vie.
+            </p>
+            <p>
+              L’échange du code contre des jetons s’effectue uniquement côté serveur, avec votre
+              client_secret (ou PKCE pour les clients publics). Ne placez jamais le secret dans une
+              application frontale, un dépôt public ou une URL.
+            </p>
+            <p>
+              Paramètres usuels de la requête d’autorisation : <code>client_id</code>,{" "}
+              <code>redirect_uri</code> (exactement enregistrée), <code>scope</code>,{" "}
+              <code>state</code> (anti-CSRF), et le cas échéant <code>code_challenge</code>.
+            </p>
+          </section>
 
-// 3. Profil stable
-const profile = await fetch("${oauthEndpoint("userinfo")}", {
-  headers: { Authorization: \`Bearer \${access_token}\` },
-}).then(r => r.json());
-// profile.sub === ID Ayeba permanent`}
-            </pre>
+          <section id="scopes" className="dev-docs-section ayeba-panel">
+            <h2>Scopes</h2>
+            <ul className="dev-docs-list">
+              <li>
+                <strong>openid</strong> — identité OpenID ; nécessaire pour recevoir un id_token.
+              </li>
+              <li>
+                <strong>email</strong> — adresse e-mail associée au compte Ayeba.
+              </li>
+              <li>
+                <strong>profile</strong> — nom affiché et éléments de profil.
+              </li>
+            </ul>
+            <p className="mt-3">
+              Demandez uniquement ce dont votre produit a réellement besoin. Un usage excessif des
+              scopes peut retarder ou empêcher la vérification de l’application.
+            </p>
+          </section>
+
+          <section id="pkce" className="dev-docs-section ayeba-panel">
+            <h2>Clients publics (PKCE)</h2>
+            <p>
+              Pour les applications qui ne peuvent pas conserver un secret (certaines SPA, clients
+              natifs), utilisez PKCE avec la méthode S256 : un code_challenge à l’étape
+              d’autorisation, puis le code_verifier lors de l’échange de jetons. Même dans ce cas,
+              validez toujours le paramètre <code>state</code> et restreignez les redirect URIs.
+            </p>
           </section>
 
           <section id="claims" className="dev-docs-section ayeba-panel">
-            <h2>Claims userinfo</h2>
+            <h2>Profil utilisateur</h2>
+            <p>
+              Après obtention d’un access_token, votre serveur peut consulter l’endpoint userinfo
+              (découvert via OpenID Configuration) pour lire l’identifiant stable{" "}
+              <code>sub</code> et, selon les scopes accordés, l’e-mail et le profil. Traitez{" "}
+              <code>sub</code> comme clé primaire d’identité côté votre application — pas l’e-mail
+              seul, qui peut évoluer.
+            </p>
+          </section>
+
+          <section id="security" className="dev-docs-section ayeba-panel">
+            <h2>Bonnes pratiques</h2>
             <ul className="dev-docs-list">
+              <li>Échangez les codes et stockez les secrets uniquement côté serveur.</li>
+              <li>Utilisez HTTPS en production pour toutes les redirect URIs.</li>
+              <li>Vérifiez le paramètre state à chaque retour d’autorisation.</li>
+              <li>Révoquez et régénérez un secret dès qu’il a pu être exposé.</li>
+              <li>Informez clairement vos utilisateurs de l’usage que vous faites de leurs données.</li>
               <li>
-                <strong>sub</strong> — Identifiant Ayeba stable (UUID). Même humain = même sub partout.
-              </li>
-              <li>
-                <strong>email</strong> — Adresse e-mail du compte (scope email).
-              </li>
-              <li>
-                <strong>name</strong> — Nom affiché (scope profile).
-              </li>
-              <li>
-                <strong>picture</strong> — Avatar généré (scope profile).
+                Respectez la{" "}
+                <Link href="/developers/policy">politique développeurs</Link> et les droits des
+                personnes décrits sur{" "}
+                <Link href="/droits">ayeba.app/droits</Link>.
               </li>
             </ul>
           </section>

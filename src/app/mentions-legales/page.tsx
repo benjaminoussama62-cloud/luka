@@ -1,110 +1,132 @@
-import Link from "next/link";
-import { GradientStage } from "@/components/effects/GradientStage";
+import type { Metadata } from "next";
+import { LegalDocumentShell, LegalSection } from "@/components/legal/LegalDocumentShell";
 
-export const metadata = {
+export const metadata: Metadata = {
   title: "Mentions légales — AYEBA",
+  description: "Mentions légales du site ayeba.app : éditeur, hébergeur, contact et propriété intellectuelle.",
 };
 
 export default function MentionsLegalesPage() {
   return (
-    <>
-      <GradientStage />
-      <div className="relative z-10 px-4 py-10">
-        <div className="mx-auto max-w-3xl">
-          <Link href="/legal" className="ayeba-ghost px-3 py-1.5 text-xs">
-            ← Informations légales
-          </Link>
-
-          <h1 className="mt-6 font-[family-name:var(--font-display)] text-3xl text-white">
-            Mentions légales
-          </h1>
-          <p className="mt-2 text-sm text-[var(--muted)]">
-            Informations réglementaires relatives au site ayeba.app
-          </p>
-
-          <section className="ayeba-panel mt-8 p-6">
-            <h2 className="ayeba-kicker ayeba-kicker-accent mb-4">Éditeur du site</h2>
-            <dl className="space-y-3 text-sm">
-              <div>
-                <dt className="text-white">Dénomination</dt>
-                <dd className="text-[var(--muted)]">AYEBA</dd>
-              </div>
-              <div>
-                <dt className="text-white">Activité</dt>
-                <dd className="text-[var(--muted)]">
-                  Moteur de recherche web et services associés (Ayebi, marchés, indexation).
-                </dd>
-              </div>
-              <div>
-                <dt className="text-white">Contact</dt>
-                <dd className="text-[var(--muted)]">
-                  <a href="mailto:contact@ayeba.app" className="text-white underline">
-                    contact@ayeba.app
-                  </a>
-                </dd>
-              </div>
-              <div>
-                <dt className="text-white">Domaine</dt>
-                <dd className="text-[var(--muted)]">ayeba.app</dd>
-              </div>
-            </dl>
-          </section>
-
-          <section className="ayeba-panel mt-6 p-6">
-            <h2 className="ayeba-kicker mb-4">Directeur de la publication</h2>
-            <p className="text-sm text-[var(--muted)]">
-              Le directeur de la publication est le représentant légal du projet AYEBA, joignable à
-              l&apos;adresse{" "}
-              <a href="mailto:contact@ayeba.app" className="text-white underline">
+    <LegalDocumentShell
+      title="Mentions légales"
+      subtitle="Informations réglementaires relatives à l’édition et à l’hébergement du site ayeba.app."
+      updated="Dernière mise à jour · 29 août 2026"
+    >
+      <LegalSection title="1. Éditeur du site">
+        <dl className="space-y-4">
+          <div>
+            <dt className="text-[var(--ink)] font-medium">Dénomination</dt>
+            <dd>AYEBA</dd>
+          </div>
+          <div>
+            <dt className="text-[var(--ink)] font-medium">Activité</dt>
+            <dd>
+              Édition d’un moteur de recherche web et de services associés (encyclopédie Ayebi,
+              marchés, Studio pour éditeurs, fournisseur d’identité pour applications partenaires).
+            </dd>
+          </div>
+          <div>
+            <dt className="text-[var(--ink)] font-medium">Site</dt>
+            <dd>
+              <a href="https://ayeba.app" className="text-[var(--ink)] underline">
+                https://ayeba.app
+              </a>
+            </dd>
+          </div>
+          <div>
+            <dt className="text-[var(--ink)] font-medium">Contact général</dt>
+            <dd>
+              <a href="mailto:contact@ayeba.app" className="text-[var(--ink)] underline">
                 contact@ayeba.app
               </a>
-              .
-            </p>
-          </section>
+            </dd>
+          </div>
+          <div>
+            <dt className="text-[var(--ink)] font-medium">Contact juridique</dt>
+            <dd>
+              <a href="mailto:legal@ayeba.app" className="text-[var(--ink)] underline">
+                legal@ayeba.app
+              </a>
+            </dd>
+          </div>
+          <div>
+            <dt className="text-[var(--ink)] font-medium">Protection des données</dt>
+            <dd>
+              <a href="mailto:privacy@ayeba.app" className="text-[var(--ink)] underline">
+                privacy@ayeba.app
+              </a>
+            </dd>
+          </div>
+        </dl>
+      </LegalSection>
 
-          <section className="ayeba-panel mt-6 p-6">
-            <h2 className="ayeba-kicker mb-4">Hébergeur</h2>
-            <dl className="space-y-3 text-sm">
-              <div>
-                <dt className="text-white">Raison sociale</dt>
-                <dd className="text-[var(--muted)]">Vercel Inc.</dd>
-              </div>
-              <div>
-                <dt className="text-white">Adresse</dt>
-                <dd className="text-[var(--muted)]">
-                  440 N Barranca Ave #4133, Covina, CA 91723, États-Unis
-                </dd>
-              </div>
-              <div>
-                <dt className="text-white">Site</dt>
-                <dd className="text-[var(--muted)]">
-                  <a
-                    href="https://vercel.com"
-                    className="text-white underline"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    vercel.com
-                  </a>
-                </dd>
-              </div>
-            </dl>
-          </section>
+      <LegalSection title="2. Directeur de la publication">
+        <p>
+          Le directeur de la publication est le représentant légal du projet Ayeba, joignable aux
+          adresses de contact ci-dessus. Toute demande relative au contenu éditorial du site peut
+          lui être adressée.
+        </p>
+      </LegalSection>
 
-          <section className="ayeba-panel mt-6 p-6">
-            <h2 className="ayeba-kicker mb-4">Propriété intellectuelle</h2>
-            <p className="text-sm leading-relaxed text-[var(--muted)]">
-              L&apos;ensemble des éléments graphiques, textes et logiciels propres à AYEBA est
-              protégé. Toute reproduction non autorisée est interdite. Les marques et logos de tiers
-              mentionnés appartiennent à leurs propriétaires respectifs.
-            </p>
-          </section>
+      <LegalSection title="3. Hébergement">
+        <dl className="space-y-4">
+          <div>
+            <dt className="text-[var(--ink)] font-medium">Hébergeur applicatif</dt>
+            <dd>Vercel Inc.</dd>
+          </div>
+          <div>
+            <dt className="text-[var(--ink)] font-medium">Adresse</dt>
+            <dd>440 N Barranca Ave #4133, Covina, CA 91723, États-Unis</dd>
+          </div>
+          <div>
+            <dt className="text-[var(--ink)] font-medium">Site</dt>
+            <dd>
+              <a
+                href="https://vercel.com"
+                className="text-[var(--ink)] underline"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                https://vercel.com
+              </a>
+            </dd>
+          </div>
+        </dl>
+        <p>
+          Des prestataires techniques complémentaires (base de données, DNS, messagerie) peuvent
+          intervenir pour le fonctionnement du service. Les détails contractuels sont tenus à la
+          disposition des autorités compétentes sur demande motivée.
+        </p>
+      </LegalSection>
 
-          <p className="mt-8 text-center text-xs text-[var(--faint)]">
-            AYEBA · Mentions légales · ayeba.app
-          </p>
-        </div>
-      </div>
-    </>
+      <LegalSection title="4. Propriété intellectuelle">
+        <p>
+          L’ensemble des éléments constitutifs du site Ayeba (textes, interfaces, marques,
+          logiciels) est protégé par le droit de la propriété intellectuelle. Toute reproduction,
+          représentation ou adaptation non autorisée est interdite, hors exceptions légales.
+        </p>
+        <p>
+          Les marques, logos et contenus de tiers mentionnés ou indexés demeurent la propriété de
+          leurs titulaires respectifs. Leur présence dans les résultats de recherche n’implique
+          aucune affiliation sauf mention contraire.
+        </p>
+      </LegalSection>
+
+      <LegalSection title="5. Signalement de contenu">
+        <p>
+          Pour signaler un contenu illicite, une usurpation ou une URL à retirer de l’index,
+          contactez{" "}
+          <a href="mailto:abuse@ayeba.app" className="text-[var(--ink)] underline">
+            abuse@ayeba.app
+          </a>{" "}
+          ou{" "}
+          <a href="mailto:contact@ayeba.app" className="text-[var(--ink)] underline">
+            contact@ayeba.app
+          </a>{" "}
+          en précisant l’URL concernée et les motifs du signalement.
+        </p>
+      </LegalSection>
+    </LegalDocumentShell>
   );
 }
