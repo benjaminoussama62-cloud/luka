@@ -1,5 +1,6 @@
 import type { KnowledgePanel } from "../types";
 import { CULTURE_ARTICLES, SPORT_ARTICLES } from "./articles-culture-sport";
+import { ECOSYSTEM_ARTICLES } from "./articles-ecosystem";
 import { FLAGSHIP_ARTICLES } from "./articles-flagship";
 import { INSTITUTION_ARTICLES, ECONOMY_ARTICLES } from "./articles-institutions-economy";
 import { PERSONALITY_ARTICLES } from "./articles-personalities";
@@ -11,6 +12,7 @@ export { isDeepArticle } from "./enrich-live";
 export { slugifyTitle, AYEBI_CATEGORIES } from "./constants";
 
 const FLAGSHIP_MAP = new Map(FLAGSHIP_ARTICLES.map((a) => [a.slug, a]));
+const ECOSYSTEM_MAP = new Map(ECOSYSTEM_ARTICLES.map((a) => [a.slug, a]));
 
 const RAW: AyebiArticle[] = [
   ...PERSONALITY_ARTICLES,
@@ -19,11 +21,13 @@ const RAW: AyebiArticle[] = [
   ...SPORT_ARTICLES,
   ...INSTITUTION_ARTICLES,
   ...ECONOMY_ARTICLES,
+  ...ECOSYSTEM_ARTICLES,
 ];
 
 export const AYEBI_ARTICLES: AyebiArticle[] = RAW.map((a) => {
+  const ecosystem = ECOSYSTEM_MAP.get(a.slug);
   const flagship = FLAGSHIP_MAP.get(a.slug);
-  return flagship ?? a;
+  return ecosystem ?? flagship ?? a;
 });
 
 /** Corpus statique de départ (81 fiches) — modifiable par les contributeurs */
@@ -46,6 +50,13 @@ export function scoreArticle(article: AyebiArticle, query: string): number {
   }
   if (article.category === "lieu" && /\b(stade|marché|marche|ville|parc|aéroport)\b/.test(q)) score += 5;
   if (article.category === "personnalité" && /\b(président|president|ministre|footballeur|chanteur)\b/.test(q)) score += 5;
+  if (/\b(jemsa|tala|sombateka|omega|devalpha|ayeba)\b/.test(q)) {
+    const brandHit =
+      article.slug === q ||
+      article.tags.some((tag) => q.includes(tag) || tag.includes(q)) ||
+      article.title.toLowerCase().normalize("NFD").replace(/\p{M}/gu, "").includes(q);
+    if (brandHit) score += 45;
+  }
   return score;
 }
 
