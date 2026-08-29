@@ -7,12 +7,12 @@ import { liveSearch } from "@/lib/real-search";
 import { recordImpressions } from "@/lib/search-index/fts";
 import type { AlgorithmSliders } from "@/lib/types";
 
-export const maxDuration = 12;
+export const maxDuration = 10;
 
 export async function POST(req: Request) {
   try {
     const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "local";
-    if (!rateLimit(`search:${ip}`, 90, 60_000)) {
+    if (!rateLimit(`search:${ip}`, 180, 60_000)) {
       return NextResponse.json({ error: "Trop de requêtes — réessayez dans une minute." }, { status: 429 });
     }
 
@@ -41,10 +41,16 @@ export async function POST(req: Request) {
       privateMode: Boolean(body.privateMode),
     });
 
-    if (!zeroAi) {
+    // Skip LLM when SERP already has strong local hits (apps sœurs / index maison).
+    const strongLocal = result.results.some(
+      (r) =>
+        (typeof r.rankScore === "number" && r.rankScore >= 200) ||
+        /\b(jemsa|tala|sombateka|omega|ayeba|devalpha)\b/i.test(`${r.title} ${r.domain}`),
+    );
+    if (!zeroAi && !strongLocal) {
       const llmSummary = await Promise.race([
         synthesizeWithLlm(query, result.results, result.knowledge?.summary),
-        new Promise<null>((resolve) => setTimeout(() => resolve(null), 1200)),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 800)),
       ]);
       if (llmSummary) result.aiSummary = llmSummary;
     }

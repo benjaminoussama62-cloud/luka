@@ -4,6 +4,7 @@ import { indexDocument } from "../search-index/fts";
 import { indexImage } from "../verticals/images";
 import { indexProduct } from "../verticals/shopping";
 import { getDb } from "../storage/database";
+import { SISTER_SEARCH_DOCS } from "../sister-search";
 import * as cheerio from "cheerio";
 
 /** Graines mondiales + RDC — file extensible vers milliards via queue */
@@ -21,7 +22,29 @@ export function enqueueUrl(url: string, priority = 0) {
 }
 
 export function seedQueue() {
-  for (const u of GLOBAL_SEEDS) enqueueUrl(u, 10);
+  for (const u of GLOBAL_SEEDS) {
+    const sister = /jemsa\.net|to-tala\.com|sombatekaonline|omega-web\.org|devalpha1\.com|ayeba\.app/.test(
+      u,
+    );
+    enqueueUrl(u, sister ? 100 : u.includes(".cd") ? 20 : 10);
+  }
+  // Index apps sœurs immédiatement (sans attendre le crawl HTTP).
+  try {
+    for (const s of SISTER_SEARCH_DOCS) {
+      indexDocument({
+        id: s.id,
+        url: s.url,
+        domain: s.domain,
+        title: s.title,
+        body: `${s.snippet} ${s.keywords.join(" ")}`,
+        sourceType: s.sourceType,
+        credibility: s.credibility / 100,
+        localRelevant: Boolean(s.congoRelevant),
+      });
+    }
+  } catch {
+    /* ignore on Turso cold start */
+  }
 }
 
 export function queueStats() {

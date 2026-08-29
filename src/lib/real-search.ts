@@ -1,4 +1,5 @@
 import { didYouMean, searchLocalIndex } from "./ayeba-index";
+import { searchSisterApps } from "./sister-search";
 import { searchAyebiLive, searchAyebiArticlesLive } from "./ayebi/server";
 import { searchCrawlIndex } from "./crawler";
 import { panelFromQuery } from "./knowledge-graph/graph";
@@ -23,10 +24,14 @@ import type {
 } from "./types";
 
 /** Hard ceiling for any single upstream — users leave engines that feel slow. */
-const UPSTREAM_MS = 3200;
-const UPSTREAM_FAST_MS = 2200;
-/** Whole liveSearch must finish under this or the product is unusable as a default engine. */
-const SEARCH_WALL_MS = 9000;
+const UPSTREAM_MS = 1800;
+const UPSTREAM_FAST_MS = 900;
+/** Whole liveSearch must finish under this — client aborts at ~10s. */
+const SEARCH_WALL_MS = 6500;
+
+/** Full SERP memory cache (always on — never block on Turso/SQLite for this). */
+const serpMemory = new Map<string, { at: number; body: SearchResponse }>();
+const SERP_TTL_MS = 90_000;
 
 type FetchOpts = {
   zeroAi: boolean;
@@ -115,8 +120,12 @@ function isRelevantResult(r: SearchResult, query: string): boolean {
     r.sourceType === "wiki" ||
     r.sourceType === "gov" ||
     r.sourceType === "news" ||
+    r.sourceType === "tech" ||
     r.domain.includes("wikipedia") ||
-    r.url.includes("duckduckgo.com")
+    r.url.includes("duckduckgo.com") ||
+    /\b(jemsa|tala|sombateka|omega|ayeba|devalpha)\b/i.test(
+      `${r.title} ${r.domain} ${r.url}`,
+    )
   ) {
     return true;
   }
@@ -450,6 +459,16 @@ function rankAndFilter(
       if (r.sourceType === "academic") score += opts.sliders.audience * 0.2;
       if (r.sourceType === "wiki" || r.sourceType === "gov") score += opts.sliders.authority * 0.15;
       score -= r.trust.clickbaitRisk * 0.2;
+      // Preserve local / sister boosts applied before rankAndFilter.
+      const prior = r.rankScore ?? 0;
+      if (prior > 80) score += prior;
+      if (
+        /\b(jemsa\.net|to-tala\.com|sombatekaonline|omega-web\.org|devalpha1\.com|ayeba\.app)\b/i.test(
+          r.domain,
+        )
+      ) {
+        score += 120;
+      }
       return { ...r, rankScore: Math.round(score) };
     })
     .sort((a, b) => (b.rankScore ?? 0) - (a.rankScore ?? 0));
@@ -700,28 +719,55 @@ export async function liveSearch(query: string, opts: FetchOpts): Promise<Search
   const rawQuery = query.trim() || "actualité mondiale";
   const suggested = didYouMean(rawQuery);
   const q = rawQuery;
+  const serpKey = `fullserp:${q.toLowerCase()}:${opts.sliders.locality}:${opts.sliders.authority}:${opts.zeroAi ? 1 : 0}`;
+  const cached = serpMemory.get(serpKey);
+  if (cached && Date.now() - cached.at < SERP_TTL_MS) {
+    return { ...cached.body, query: rawQuery };
+  }
 
+  const built = await liveSearchCore(rawQuery, suggested, q, opts);
+  serpMemory.set(serpKey, { at: Date.now(), body: built });
+  if (serpMemory.size > 800) {
+    const oldest = [...serpMemory.entries()].sort((a, b) => a[1].at - b[1].at).slice(0, 200);
+    for (const [k] of oldest) serpMemory.delete(k);
+  }
+  return built;
+}
+
+async function liveSearchCore(
+  rawQuery: string,
+  suggested: string | undefined,
+  q: string,
+  opts: FetchOpts,
+): Promise<SearchResponse> {
   // Local index first — never wait on crawl. Users switch engines for speed + relevance.
   const wall = Date.now() + SEARCH_WALL_MS;
-  const msLeft = () => Math.max(400, wall - Date.now());
+  const msLeft = () => Math.max(200, wall - Date.now());
   const turso = getDbMode() === "turso";
 
-  const cacheKey = `serp:${q}:${opts.sliders.locality}:${opts.sliders.authority}`;
+  // Apps sœurs + index maison — sync, immédiat (corrige « jemsa sur l’accueil mais pas en SERP »).
+  const sisterHits = searchSisterApps(q);
+  const houseHits = searchLocalIndex(q);
+  const sisterFastPath = sisterHits.length > 0;
+
+  const cacheKey = `serpfts:${q}:${opts.sliders.locality}:${opts.sliders.authority}`;
   let rankedFts: Awaited<ReturnType<typeof rankHits>> = [];
   try {
-    // Memory cache only on Turso — sync SQLite store blocks the event loop.
-    if (!turso) {
-      rankedFts = (await cacheGet<Awaited<ReturnType<typeof rankHits>>>(cacheKey)) ?? [];
-    }
+    rankedFts = (await cacheGet<Awaited<ReturnType<typeof rankHits>>>(cacheKey)) ?? [];
     if (!rankedFts.length) {
       const hits = turso
-        ? await searchIndexAsync(q, 40)
+        ? await Promise.race([
+            searchIndexAsync(q, 40),
+            new Promise<Awaited<ReturnType<typeof searchIndexAsync>>>((r) =>
+              setTimeout(() => r([]), Math.min(800, msLeft())),
+            ),
+          ])
         : searchIndex(q, 40);
       rankedFts = rankHits(hits, q, {
         localityBoost: opts.sliders.locality,
         authorityBoost: opts.sliders.authority,
       });
-      if (!turso) void cacheSet(cacheKey, rankedFts, 180).catch(() => {});
+      void cacheSet(cacheKey, rankedFts, 180).catch(() => {});
     }
   } catch {
     rankedFts = [];
@@ -732,27 +778,35 @@ export async function liveSearch(query: string, opts: FetchOpts): Promise<Search
   let crawlHits: Awaited<ReturnType<typeof searchCrawlIndex>> = [];
 
   if (turso) {
-    const asyncAyebi = await searchAyebiAsync(q, 5);
-    ayebiHits = asyncAyebi.map((a) => ({
-      slug: a.slug,
-      title: a.title,
-      subtitle: "",
-      category: "lieu" as const,
-      summary: a.summary,
-      body: [],
-      facts: [],
-      tags: a.tags,
-    }));
-    if (asyncAyebi[0]) {
-      ayebiPanel = {
-        title: asyncAyebi[0].title,
-        subtitle: "Ayebi",
-        summary: asyncAyebi[0].summary,
-        facts: [{ label: "Ayebi", value: `/ayebi/${asyncAyebi[0].slug}` }],
-        sources: ["ayebi"],
-      };
+    try {
+      const asyncAyebi = await Promise.race([
+        searchAyebiAsync(q, 5),
+        new Promise<Awaited<ReturnType<typeof searchAyebiAsync>>>((r) =>
+          setTimeout(() => r([]), Math.min(600, msLeft())),
+        ),
+      ]);
+      ayebiHits = asyncAyebi.map((a) => ({
+        slug: a.slug,
+        title: a.title,
+        subtitle: "",
+        category: "lieu" as const,
+        summary: a.summary,
+        body: [],
+        facts: [],
+        tags: a.tags,
+      }));
+      if (asyncAyebi[0]) {
+        ayebiPanel = {
+          title: asyncAyebi[0].title,
+          subtitle: "Ayebi",
+          summary: asyncAyebi[0].summary,
+          facts: [{ label: "Ayebi", value: `/ayebi/${asyncAyebi[0].slug}` }],
+          sources: ["ayebi"],
+        };
+      }
+    } catch {
+      ayebiHits = [];
     }
-    // Skip sync crawl_index scan on Turso — FTS already covers indexed docs.
     crawlHits = [];
   } else {
     [ayebiPanel, ayebiHits, crawlHits] = await Promise.all([
@@ -776,14 +830,19 @@ export async function liveSearch(query: string, opts: FetchOpts): Promise<Search
     domain: h.domain,
     keywords: [] as string[],
     congoRelevant: h.localRelevant,
-    sourceType: (h.sourceType as "web" | "gov" | "news" | "wiki" | "academic") ?? "web",
+    sourceType: (h.sourceType as "web" | "gov" | "news" | "wiki" | "academic" | "tech") ?? "web",
     credibility: Math.round(h.credibility * 100),
     rankScore: h.score,
   }));
 
-  const localCount = ftsDocs.length + ayebiHits.length + crawlHits.length;
-  const richLocal = localCount >= 6;
-  const upstreamMs = Math.min(richLocal ? UPSTREAM_FAST_MS : UPSTREAM_MS, msLeft());
+  const localCount =
+    sisterHits.length + houseHits.length + ftsDocs.length + ayebiHits.length + crawlHits.length;
+  const richLocal = localCount >= 3 || sisterFastPath;
+  const skipHeavyUpstream = sisterFastPath || richLocal || msLeft() < 1500;
+  const upstreamMs = Math.min(
+    sisterFastPath ? 600 : richLocal ? UPSTREAM_FAST_MS : UPSTREAM_MS,
+    msLeft(),
+  );
 
   const [
     wikiFr,
@@ -797,19 +856,30 @@ export async function liveSearch(query: string, opts: FetchOpts): Promise<Search
     nativeMaps,
     instantAnswers,
   ] = await Promise.all([
-    settled(fetchWikipedia(q, "fr"), [], upstreamMs),
-    settled(fetchWikipedia(q, "en"), [], upstreamMs),
-    settled(fetchDuckDuckGo(q), [], upstreamMs),
+    skipHeavyUpstream && sisterFastPath
+      ? Promise.resolve([] as RawHit[])
+      : settled(fetchWikipedia(q, "fr"), [], upstreamMs),
+    skipHeavyUpstream
+      ? Promise.resolve([] as RawHit[])
+      : settled(fetchWikipedia(q, "en"), [], upstreamMs),
+    skipHeavyUpstream && sisterFastPath
+      ? Promise.resolve([] as RawHit[])
+      : settled(fetchDuckDuckGo(q), [], upstreamMs),
     // HTML scrape is slow/flaky — skip when native index already feeds the SERP.
-    richLocal || msLeft() < 1200
+    skipHeavyUpstream || msLeft() < 1000
       ? Promise.resolve([] as RawHit[])
       : settled(fetchDuckDuckGoHtml(q), [], upstreamMs),
-    settled(fetchNewsRss(q), [], upstreamMs),
-    settled(fetchWikiSummary(q), undefined, Math.min(UPSTREAM_FAST_MS, msLeft())),
-    settled(searchImagesNative(q), [], upstreamMs),
-    // Piped is unreliable — never on the critical path for default-engine UX.
+    skipHeavyUpstream
+      ? Promise.resolve([] as RawHit[])
+      : settled(fetchNewsRss(q), [], upstreamMs),
+    skipHeavyUpstream
+      ? Promise.resolve(undefined)
+      : settled(fetchWikiSummary(q), undefined, Math.min(UPSTREAM_FAST_MS, msLeft())),
+    skipHeavyUpstream
+      ? Promise.resolve([] as MediaResult[])
+      : settled(searchImagesNative(q), [], Math.min(UPSTREAM_FAST_MS, msLeft())),
     Promise.resolve([] as MediaResult[]),
-    msLeft() < 900
+    skipHeavyUpstream || msLeft() < 700
       ? Promise.resolve([] as MapPlace[])
       : settled(
           searchMapsNative(isCongoHint(q) ? `${q} République démocratique du Congo` : q),
@@ -819,7 +889,6 @@ export async function liveSearch(query: string, opts: FetchOpts): Promise<Search
     settled(resolveInstantAnswers(q), [], Math.min(UPSTREAM_FAST_MS, msLeft())),
   ]);
 
-  // silence unused when videos always empty — keep for SERP shape
   void nativeVideos;
 
   let projectedScale = 0;
@@ -834,6 +903,7 @@ export async function liveSearch(query: string, opts: FetchOpts): Promise<Search
   }
 
   const localDocs = [
+    ...sisterHits.map((d) => ({ ...d, rankScore: 500 })),
     ...ayebiHits.map((a) => ({
       id: `ayebi-${a.slug}`,
       title: `${a.title} — Ayebi`,
@@ -845,8 +915,8 @@ export async function liveSearch(query: string, opts: FetchOpts): Promise<Search
       sourceType: "wiki" as const,
       credibility: 98,
     })),
+    ...houseHits,
     ...ftsDocs,
-    ...searchLocalIndex(q),
     ...crawlHits.map((c) => ({
       id: c.id,
       title: c.title,
@@ -882,6 +952,7 @@ export async function liveSearch(query: string, opts: FetchOpts): Promise<Search
       const base = toResult(h, i, q);
       const local = localDocs.find((d) => d.url === h.url);
       if (local) {
+        const sisterBoost = sisterHits.some((s) => s.url === h.url) ? 400 : 0;
         return {
           ...base,
           trust: {
@@ -892,7 +963,11 @@ export async function liveSearch(query: string, opts: FetchOpts): Promise<Search
           sourceType: local.sourceType,
           congoRelevant: local.congoRelevant,
           sitelinks: "sitelinks" in local ? local.sitelinks : undefined,
-          rankScore: (base.rankScore ?? 0) + 15 + ("rankScore" in local ? Number(local.rankScore ?? 0) : 0),
+          rankScore:
+            (base.rankScore ?? 0) +
+            15 +
+            sisterBoost +
+            ("rankScore" in local ? Number(local.rankScore ?? 0) : 0),
         };
       }
       return base;

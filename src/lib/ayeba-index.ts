@@ -1,6 +1,11 @@
 /** Corpus + suggestions + dictionnaire Ayeba (index maison léger). */
 
 export const POPULAR_QUERIES = [
+  "Jemsa",
+  "Tala",
+  "Sombateka",
+  "Omega",
+  "Ayeba",
   "Patrice Lumumba",
   "Kinshasa",
   "Banque Centrale du Congo",
@@ -47,6 +52,12 @@ export const SPELL_DICT = [
   "bukavu",
   "matadi",
   "kisangani",
+  "jemsa",
+  "tala",
+  "sombateka",
+  "omega",
+  "ayeba",
+  "devalpha",
 ];
 
 export type IndexedDoc = {
@@ -303,12 +314,14 @@ export function didYouMean(query: string): string | undefined {
 }
 
 export function searchLocalIndex(query: string): IndexedDoc[] {
-  const tokens = query.toLowerCase().split(/\s+/).filter((t) => t.length >= 2);
-  if (!tokens.length) return [];
+  const q = query.trim().toLowerCase();
+  const tokens = q.split(/\s+/).filter((t) => t.length >= 2);
+  if (!tokens.length && q.length < 2) return [];
 
   return AYEBA_INDEX.map((doc) => {
     const hay = `${doc.title} ${doc.snippet} ${doc.keywords.join(" ")} ${doc.domain}`.toLowerCase();
     let score = 0;
+    if (q.length >= 2 && (hay.includes(q) || doc.domain.includes(q))) score += 40;
     for (const t of tokens) {
       if (doc.title.toLowerCase().includes(t)) score += 20;
       else if (hay.includes(t)) score += 10;

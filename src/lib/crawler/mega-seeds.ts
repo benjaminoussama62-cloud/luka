@@ -74,6 +74,16 @@ export const MEGA_SEEDS = [
   "https://developer.mozilla.org/",
   "https://www.w3.org/",
   "https://schema.org/",
+  // === Écosystème Ayeba (apps sœurs) ===
+  "https://jemsa.net/",
+  "https://to-tala.com/",
+  "https://sombatekaonline.com/",
+  "https://omega-web.org/",
+  "https://devalpha1.com/",
+  "https://ayeba.app/",
+  "https://ayeba.app/studio",
+  "https://ayeba.app/developers",
+  "https://ayeba.app/ayebi",
   // === Shopping RDC ===
   "https://www.jumia.cd/",
   "https://www.yango.com/",

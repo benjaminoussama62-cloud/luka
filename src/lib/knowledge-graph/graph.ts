@@ -62,7 +62,14 @@ export function relatedEntities(id: string, limit = 6) {
 }
 
 export function panelFromQuery(query: string) {
-  syncAyebiToGraph();
+  // Sync once lazily — never rewrite the full graph on every SERP (was a major latency sink).
+  try {
+    const db = getDb();
+    const count = db.prepare("SELECT COUNT(*) as c FROM kg_entities").get() as { c: number } | undefined;
+    if (!count || count.c < 8) syncAyebiToGraph();
+  } catch {
+    /* ignore */
+  }
   const entities = findEntities(query, 3);
   if (!entities.length) return null;
   const main = entities[0];
