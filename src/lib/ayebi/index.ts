@@ -35,14 +35,19 @@ export const AYEBI_SEED_ARTICLES = AYEBI_ARTICLES;
 
 export function scoreArticle(article: AyebiArticle, query: string): number {
   const q = query.toLowerCase().normalize("NFD").replace(/\p{M}/gu, "");
-  const tokens = q.split(/[\s\-_/]+/).filter((t) => t.length >= 2);
+  const qc = q.replace(/[\s._-]/g, "");
+  const tokens = q.split(/[\s\-_./]+/).filter((t) => t.length >= 2);
   let score = 0;
-  const hay = `${article.title} ${article.subtitle} ${article.summary} ${article.tags.join(" ")} ${article.slug}`
+  const hay = `${article.title} ${article.subtitle} ${article.summary} ${article.tags.join(" ")} ${article.slug} ${article.facts.map((f) => f.value).join(" ")}`
     .toLowerCase()
     .normalize("NFD")
     .replace(/\p{M}/gu, "");
 
   if (hay.includes(q)) score += 50;
+  if (qc.includes("totala") && article.slug === "tala") score += 90;
+  if (qc.includes("sombatekaonline") && article.slug === "sombateka") score += 90;
+  if (qc.includes("jemsa") && article.slug === "jemsa") score += 70;
+  if (qc.includes("omega") && article.slug === "omega") score += 70;
   for (const t of tokens) {
     if (article.slug.includes(t)) score += 28;
     if (article.tags.some((tag) => tag.includes(t) || t.includes(tag))) score += 18;

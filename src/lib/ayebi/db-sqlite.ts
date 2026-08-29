@@ -1,6 +1,7 @@
 import type { AyebiArticle, AyebiCategory, AyebiSection } from "./types";
 import { getDb, getDbMode } from "../storage/database";
 import { AYEBI_ARTICLES } from "./index";
+import { ECOSYSTEM_ARTICLES } from "./articles-ecosystem";
 
 export type AyebiRole = "reader" | "contributor" | "moderator" | "admin";
 export type PageProtection = "none" | "semi" | "full";
@@ -70,26 +71,46 @@ function indexAyebiFts(a: AyebiArticle) {
 export function importSeedIfEmpty() {
   const db = getDb();
   const c = db.prepare("SELECT COUNT(*) as n FROM ayebi_articles").get() as { n?: number } | undefined;
-  if ((c?.n ?? 0) > 0) return;
+  if ((c?.n ?? 0) > 0) {
+    syncEcosystemArticles();
+    return;
+  }
   if (getDbMode() === "memory") return;
 
   for (const a of AYEBI_ARTICLES) {
-    const now = new Date().toISOString();
-    db.prepare(
-      `INSERT INTO ayebi_articles (slug, title, subtitle, category, summary, content_json, tags_json, protection, revision, created_at, created_by, created_by_name, updated_at, updated_by, updated_by_name)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'none', 1, ?, 'system', 'Ayebi', ?, 'system', 'Ayebi')`,
-    ).run(
-      a.slug,
-      a.title,
-      a.subtitle,
-      a.category,
-      a.summary,
-      articleToJson(a),
-      JSON.stringify(a.tags),
-      now,
-      now,
-    );
-    indexAyebiFts(a);
+    upsertAyebiArticle(a);
+  }
+}
+
+function upsertAyebiArticle(a: AyebiArticle) {
+  const db = getDb();
+  const now = new Date().toISOString();
+  db.prepare(
+    `INSERT INTO ayebi_articles (slug, title, subtitle, category, summary, content_json, tags_json, protection, revision, created_at, created_by, created_by_name, updated_at, updated_by, updated_by_name)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'none', 1, ?, 'system', 'Ayebi', ?, 'system', 'Ayebi')
+     ON CONFLICT(slug) DO UPDATE SET
+       title=excluded.title, subtitle=excluded.subtitle, category=excluded.category,
+       summary=excluded.summary, content_json=excluded.content_json, tags_json=excluded.tags_json,
+       updated_at=excluded.updated_at`,
+  ).run(
+    a.slug,
+    a.title,
+    a.subtitle,
+    a.category,
+    a.summary,
+    articleToJson(a),
+    JSON.stringify(a.tags),
+    now,
+    now,
+  );
+  indexAyebiFts(a);
+}
+
+/** Met à jour les fiches apps (Jemsa, Tala…) même si la base était déjà seedée. */
+export function syncEcosystemArticles() {
+  if (getDbMode() === "memory") return;
+  for (const a of ECOSYSTEM_ARTICLES) {
+    upsertAyebiArticle(a);
   }
 }
 

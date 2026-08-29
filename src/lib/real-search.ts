@@ -1,6 +1,8 @@
 import { didYouMean, searchLocalIndex } from "./ayeba-index";
 import { searchSisterApps } from "./sister-search";
+import { searchAyebiArticles, scoreArticle } from "./ayebi/index";
 import { searchAyebiLive, searchAyebiArticlesLive } from "./ayebi/server";
+import type { AyebiArticle } from "./ayebi/types";
 import { searchCrawlIndex } from "./crawler";
 import { panelFromQuery } from "./knowledge-graph/graph";
 import { resolveInstantAnswers } from "./instant-answers";
@@ -32,6 +34,38 @@ const SEARCH_WALL_MS = 6500;
 /** Full SERP memory cache (always on — never block on Turso/SQLite for this). */
 const serpMemory = new Map<string, { at: number; body: SearchResponse }>();
 const SERP_TTL_MS = 90_000;
+
+function ayebiRichSnippet(article: AyebiArticle, max = 360): string {
+  const lead = article.sections?.[0]?.paragraphs?.[0];
+  const text = lead ? `${article.summary} ${lead}` : article.summary;
+  return text.replace(/\s+/g, " ").trim().slice(0, max);
+}
+
+function ayebiKnowledgePanel(article: AyebiArticle): KnowledgePanel {
+  return {
+    title: article.title,
+    subtitle: article.subtitle,
+    summary: ayebiRichSnippet(article, 520),
+    facts: [
+      ...article.facts.slice(0, 5),
+      { label: "Lire sur Ayebi", value: `/ayebi/${article.slug}` },
+    ],
+    sources: ["ayebi"],
+    image: article.image,
+  };
+}
+
+function officialSiteForAyebi(slug: string): string | undefined {
+  const map: Record<string, string> = {
+    jemsa: "https://jemsa.net",
+    tala: "https://to-tala.com",
+    sombateka: "https://sombatekaonline.com",
+    omega: "https://omega-web.org",
+    devalpha: "https://devalpha1.com",
+    ayeba: "https://ayeba.app",
+  };
+  return map[slug];
+}
 
 type FetchOpts = {
   zeroAi: boolean;
@@ -465,7 +499,9 @@ function rankAndFilter(
       if (
         /\b(jemsa\.net|to-tala\.com|sombatekaonline|omega-web\.org|devalpha1\.com|ayeba\.app)\b/i.test(
           r.domain,
-        )
+        ) ||
+        r.domain === "ayebi" ||
+        r.url.startsWith("/ayebi/")
       ) {
         score += 120;
       }
@@ -540,15 +576,28 @@ function buildQuestions(
   results: SearchResult[],
   news: SearchResult[],
   congo: boolean,
+  ayebiArticle?: AyebiArticle,
 ): { q: string; a: string }[] {
   const out: { q: string; a: string }[] = [];
 
-  if (knowledge?.summary) {
+  if (ayebiArticle?.sections?.length) {
+    for (const sec of ayebiArticle.sections.slice(0, 2)) {
+      const para = sec.paragraphs[0];
+      if (para) {
+        out.push({
+          q: sec.heading,
+          a: para.slice(0, 340),
+        });
+      }
+    }
+  }
+
+  if (knowledge?.summary && !out.length) {
     out.push({
       q: `Que sait-on de ${knowledge.title} ?`,
       a: knowledge.summary.slice(0, 320),
     });
-  } else if (results[0]) {
+  } else if (results[0] && !out.length) {
     out.push({
       q: `Que disent les sources principales ?`,
       a: results[0].snippet,
@@ -560,22 +609,23 @@ function buildQuestions(
       q: `Quels faits récents ressortent ?`,
       a: `${news[0].title}. ${news[0].snippet}`.slice(0, 320),
     });
-  } else if (results[1]) {
+  } else if (results[1] && out.length < 3) {
     out.push({
-      q: `Y a-t-il un complément utile ?`,
+      q: `Site officiel et compléments`,
       a: results[1].snippet,
     });
   }
 
-  if (congo) {
+  if (congo && out.length < 3) {
     out.push({
       q: `Quel est le lien avec la RDC ou l'Afrique centrale ?`,
-      a: results.find((r) => r.congoRelevant)?.snippet
-        ?? "Les sources régionales et .cd sont relevées quand elles existent ; le web mondial reste visible.",
+      a:
+        results.find((r) => r.congoRelevant)?.snippet ??
+        "Les sources régionales et .cd sont relevées quand elles existent ; le web mondial reste visible.",
     });
   }
 
-  return out.slice(0, 3);
+  return out.slice(0, 4);
 }
 
 async function fetchOpenverseImages(query: string): Promise<MediaResult[]> {
@@ -782,6 +832,16 @@ async function liveSearchCore(
   let ayebiHits: Awaited<ReturnType<typeof searchAyebiArticlesLive>> = [];
   let crawlHits: Awaited<ReturnType<typeof searchCrawlIndex>> = [];
 
+  // Ayebi en mémoire — TOUJOURS (même chemin rapide marque). C’est le contenu encyclopédique.
+  const ayebiSync = searchAyebiArticles(q, 8);
+  if (ayebiSync.length) {
+    const topScore = scoreArticle(ayebiSync[0], q);
+    ayebiHits = ayebiSync.filter((a) => scoreArticle(a, q) >= Math.max(50, topScore * 0.45));
+  }
+  if (ayebiHits[0] && scoreArticle(ayebiHits[0], q) >= 12) {
+    ayebiPanel = ayebiKnowledgePanel(ayebiHits[0]);
+  }
+
   if (turso && !sisterFastPath) {
     try {
       const asyncAyebi = await Promise.race([
@@ -790,27 +850,32 @@ async function liveSearchCore(
           setTimeout(() => r([]), Math.min(600, msLeft())),
         ),
       ]);
-      ayebiHits = asyncAyebi.map((a) => ({
-        slug: a.slug,
-        title: a.title,
-        subtitle: "",
-        category: "lieu" as const,
-        summary: a.summary,
-        body: [],
-        facts: [],
-        tags: a.tags,
-      }));
-      if (asyncAyebi[0]) {
+      const seenSlugs = new Set(ayebiHits.map((a) => a.slug));
+      for (const a of asyncAyebi) {
+        if (seenSlugs.has(a.slug)) continue;
+        seenSlugs.add(a.slug);
+        ayebiHits.push({
+          slug: a.slug,
+          title: a.title,
+          subtitle: "",
+          category: "lieu" as const,
+          summary: a.summary,
+          body: [],
+          facts: [],
+          tags: a.tags,
+        });
+      }
+      if (!ayebiPanel && asyncAyebi[0]) {
         ayebiPanel = {
           title: asyncAyebi[0].title,
           subtitle: "Ayebi",
           summary: asyncAyebi[0].summary,
-          facts: [{ label: "Ayebi", value: `/ayebi/${asyncAyebi[0].slug}` }],
+          facts: [{ label: "Lire sur Ayebi", value: `/ayebi/${asyncAyebi[0].slug}` }],
           sources: ["ayebi"],
         };
       }
     } catch {
-      ayebiHits = [];
+      /* keep sync hits */
     }
     crawlHits = [];
   } else if (!sisterFastPath) {
@@ -912,18 +977,25 @@ async function liveSearchCore(
   }
 
   const localDocs = [
-    ...sisterHits.map((d) => ({ ...d, rankScore: 500 })),
-    ...ayebiHits.map((a) => ({
+    ...ayebiHits.map((a, i) => ({
       id: `ayebi-${a.slug}`,
       title: `${a.title} — Ayebi`,
       url: `/ayebi/${a.slug}`,
-      snippet: a.summary,
+      snippet: ayebiRichSnippet(a),
       domain: "ayebi",
       keywords: a.tags,
       congoRelevant: true,
       sourceType: "wiki" as const,
-      credibility: 98,
+      credibility: 99,
+      rankScore: 680 - i * 15,
+      sitelinks: [
+        { title: "Lire la fiche", url: `/ayebi/${a.slug}` },
+        ...(officialSiteForAyebi(a.slug)
+          ? [{ title: "Site officiel", url: officialSiteForAyebi(a.slug)! }]
+          : []),
+      ],
     })),
+    ...sisterHits.map((d) => ({ ...d, rankScore: 520 })),
     ...houseHits,
     ...ftsDocs,
     ...crawlHits.map((c) => ({
@@ -987,7 +1059,7 @@ async function liveSearchCore(
     .filter((r) => isRelevantResult(r, q) || r.sourceType === "news")
     .sort((a, b) => (b.rankScore ?? 0) - (a.rankScore ?? 0));
 
-  if (results.length < 3) {
+  if (results.length < 3 && ayebiHits.length === 0 && sisterHits.length === 0) {
     results = rankAndFilter(
       [
         ...results,
@@ -1100,9 +1172,13 @@ async function liveSearchCore(
     (panel
       ? {
           title: panel.title,
-          text: panel.summary.slice(0, 360),
-          url: panel.facts.find((f) => f.label === "Lien")?.value || results[0]?.url || "#",
-          domain: panel.sources[0] || "wikipedia.org",
+          text: panel.summary.slice(0, 420),
+          url:
+            panel.facts.find((f) => f.label === "Lire sur Ayebi")?.value ??
+            panel.facts.find((f) => f.label === "Ayebi")?.value ??
+            results[0]?.url ??
+            "#",
+          domain: "ayebi",
         }
       : results[0] && isRelevantResult(results[0], q)
         ? {
@@ -1113,6 +1189,7 @@ async function liveSearchCore(
           }
         : undefined);
 
+  const topAyebi = ayebiHits[0];
   const aiSummary = buildSynthesis(q, panel, results, newsResults);
   const peopleAlsoAsk = buildQuestions(
     q,
@@ -1120,6 +1197,7 @@ async function liveSearchCore(
     results,
     newsResults,
     isCongoHint(q),
+    topAyebi,
   );
 
   const isSensitiveTopic =
