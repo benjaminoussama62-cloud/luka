@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { suggestQueries } from "@/lib/ayeba-index";
+import { scoreBrandDoc, suggestBrandQueries, BRAND_SEARCH_DOCS } from "@/lib/sister-search";
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -12,8 +13,11 @@ export async function GET(req: Request) {
     history = [];
   }
 
+  const brands = suggestBrandQueries(q);
+  const strongBrand = BRAND_SEARCH_DOCS.some((d) => scoreBrandDoc(d, q) >= 150);
+
   let wiki: string[] = [];
-  if (q.trim().length >= 2) {
+  if (q.trim().length >= 2 && !strongBrand) {
     try {
       const ctrl = new AbortController();
       const t = setTimeout(() => ctrl.abort(), 600);
@@ -32,7 +36,7 @@ export async function GET(req: Request) {
   }
 
   const local = suggestQueries(q, history);
-  const merged = [...new Set([...local.slice(0, 4), ...wiki, ...local.slice(4)])].slice(0, 10);
+  const merged = [...new Set([...brands, ...local.slice(0, 3), ...wiki, ...local.slice(3)])].slice(0, 10);
 
   if (searchParams.get("format") === "opensearch") {
     return NextResponse.json([q, merged]);

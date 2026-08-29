@@ -1,141 +1,177 @@
 import type { IndexedDoc } from "./ayeba-index";
 
-/** Apps sœurs Ayeba — toujours présentes dans l’index local (pas seulement raccourcis UI). */
-export const SISTER_SEARCH_DOCS: IndexedDoc[] = [
+/** Marques indexées — titres = le produit, pas « app sœur ». */
+export const BRAND_SEARCH_DOCS: IndexedDoc[] = [
   {
-    id: "sister-jemsa",
-    title: "JEMSA — plateforme sœur Ayeba",
+    id: "brand-jemsa",
+    title: "JEMSA",
     url: "https://jemsa.net",
     domain: "jemsa.net",
-    snippet:
-      "JEMSA est une application de l’écosystème DevAlpha / Ayeba. Accédez au service officiel jemsa.net — connexion possible avec votre compte Ayeba.",
-    keywords: [
-      "jemsa",
-      "jemsa.net",
-      "app sœur",
-      "ayeba",
-      "devalpha",
-      "rdc",
-      "congo",
-      "plateforme",
-    ],
+    snippet: "Site officiel JEMSA — jemsa.net. Service en ligne, accès direct depuis le web.",
+    keywords: ["jemsa", "jemsa.net", "jemsa net"],
     congoRelevant: true,
     sourceType: "tech",
     credibility: 99,
-    sitelinks: [
-      { title: "Ouvrir JEMSA", url: "https://jemsa.net" },
-      { title: "Compte Ayeba", url: "https://ayeba.app/compte" },
-    ],
+    sitelinks: [{ title: "jemsa.net", url: "https://jemsa.net" }],
   },
   {
-    id: "sister-tala",
-    title: "TALA — plateforme sœur Ayeba",
+    id: "brand-tala",
+    title: "Tala",
     url: "https://to-tala.com",
     domain: "to-tala.com",
-    snippet:
-      "TALA (to-tala.com) fait partie de l’écosystème Ayeba. Service sœur accessible depuis Ayeba — identité partagée via Se connecter avec Ayeba.",
-    keywords: ["tala", "to-tala", "to-tala.com", "ayeba", "app sœur", "rdc", "congo", "devalpha"],
+    snippet: "Tala — to-tala.com. Plateforme web officielle Tala.",
+    keywords: ["tala", "to-tala", "to tala", "to-tala.com", "tot tala"],
     congoRelevant: true,
     sourceType: "tech",
     credibility: 99,
-    sitelinks: [
-      { title: "Ouvrir TALA", url: "https://to-tala.com" },
-      { title: "Developers Ayeba", url: "https://ayeba.app/developers" },
-    ],
+    sitelinks: [{ title: "to-tala.com", url: "https://to-tala.com" }],
   },
   {
-    id: "sister-sombateka",
-    title: "Sombateka Online — plateforme sœur Ayeba",
+    id: "brand-sombateka",
+    title: "Sombateka Online",
     url: "https://sombatekaonline.com",
     domain: "sombatekaonline.com",
-    snippet:
-      "Sombateka Online est une application sœur de l’écosystème Ayeba. Boutique / service en ligne — jemsa, tala et sombateka partagent l’identité Ayeba.",
+    snippet: "Sombateka Online — boutique et services sur sombatekaonline.com.",
     keywords: [
       "sombateka",
       "sombatekaonline",
       "sombateka online",
-      "ayeba",
-      "app sœur",
-      "rdc",
-      "congo",
-      "shopping",
+      "sombatekaonline.com",
     ],
     congoRelevant: true,
     sourceType: "tech",
     credibility: 99,
-    sitelinks: [
-      { title: "Ouvrir Sombateka", url: "https://sombatekaonline.com" },
-      { title: "Marchés Ayeba", url: "https://ayeba.app/marches" },
-    ],
+    sitelinks: [{ title: "sombatekaonline.com", url: "https://sombatekaonline.com" }],
   },
   {
-    id: "sister-omega",
-    title: "Omega — plateforme sœur Ayeba",
+    id: "brand-omega",
+    title: "Omega",
     url: "https://omega-web.org",
     domain: "omega-web.org",
-    snippet:
-      "Omega est une plateforme sœur d’Ayeba. Connectez-vous avec votre compte Ayeba (OAuth / OpenID) pour accéder à Omega.",
-    keywords: ["omega", "omega-web", "omega-web.org", "ayeba", "oauth", "connexion", "app sœur"],
+    snippet: "Omega — omega-web.org. Site officiel de la plateforme Omega.",
+    keywords: ["omega", "omega-web", "omega web", "omega-web.org", "omegaweb"],
     congoRelevant: true,
     sourceType: "tech",
     credibility: 99,
-    sitelinks: [
-      { title: "Ouvrir Omega", url: "https://omega-web.org" },
-      { title: "Se connecter avec Ayeba", url: "https://ayeba.app/developers" },
-    ],
+    sitelinks: [{ title: "omega-web.org", url: "https://omega-web.org" }],
   },
   {
-    id: "sister-devalpha",
-    title: "DevAlpha — studio & écosystème",
+    id: "brand-devalpha",
+    title: "DevAlpha",
     url: "https://devalpha1.com",
     domain: "devalpha1.com",
-    snippet:
-      "DevAlpha regroupe les produits sœurs Ayeba, JEMSA, TALA, Sombateka et Omega. Infrastructure et identité partagée.",
-    keywords: ["devalpha", "devalpha1", "ayeba", "écosystème", "studio", "rdc"],
+    snippet: "DevAlpha — studio produits web et logiciels. Site officiel devalpha1.com.",
+    keywords: ["devalpha", "devalpha1", "dev alpha"],
     congoRelevant: true,
     sourceType: "tech",
     credibility: 98,
-    sitelinks: [{ title: "Site DevAlpha", url: "https://devalpha1.com" }],
+    sitelinks: [{ title: "devalpha1.com", url: "https://devalpha1.com" }],
   },
   {
-    id: "sister-ayeba",
-    title: "AYEBA — moteur de recherche",
+    id: "brand-ayeba",
+    title: "AYEBA",
     url: "https://ayeba.app",
     domain: "ayeba.app",
-    snippet:
-      "AYEBA : recherche mondiale avec priorité RDC. Compte unique pour JEMSA, TALA, Sombateka, Omega et les apps partenaires.",
-    keywords: ["ayeba", "recherche", "moteur", "rdc", "congo", "google", "search"],
+    snippet: "AYEBA — moteur de recherche. Recherche mondiale, priorité RDC. Studio, Ayebi, Developers.",
+    keywords: ["ayeba", "recherche", "moteur", "search"],
     congoRelevant: true,
     sourceType: "tech",
     credibility: 100,
     sitelinks: [
       { title: "Studio", url: "https://ayeba.app/studio" },
       { title: "Developers", url: "https://ayeba.app/developers" },
-      { title: "Ayebi", url: "https://ayeba.app/ayebi" },
     ],
   },
 ];
 
+/** @deprecated alias interne */
+export const SISTER_SEARCH_DOCS = BRAND_SEARCH_DOCS;
+
+function norm(s: string) {
+  return s
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .replace(/[^a-z0-9.\s-]/g, "");
+}
+
+function compact(s: string) {
+  return norm(s).replace(/[\s.-]/g, "");
+}
+
+export function scoreBrandDoc(doc: IndexedDoc, query: string) {
+  const q = norm(query);
+  const qc = compact(query);
+  if (!q && !qc) return 0;
+
+  const title = norm(doc.title);
+  const domain = doc.domain.toLowerCase();
+  const hay = `${title} ${norm(doc.snippet)} ${doc.keywords.map(norm).join(" ")} ${domain}`;
+
+  let score = 0;
+  if (qc && compact(domain) === qc) score += 500;
+  if (qc && compact(domain).includes(qc)) score += 300;
+  if (q && title === q) score += 400;
+  if (q && title.startsWith(q)) score += 250;
+  if (qc && compact(title) === qc) score += 350;
+  if (hay.includes(q)) score += 120;
+
+  for (const kw of doc.keywords) {
+    const k = norm(kw);
+    const kc = compact(kw);
+    if (qc && kc === qc) score += 200;
+    if (q && k.startsWith(q)) score += 80;
+    if (qc && kc.startsWith(qc)) score += 100;
+  }
+
+  return score;
+}
+
 export function searchSisterApps(query: string): IndexedDoc[] {
-  const q = query.trim().toLowerCase();
-  if (!q) return [];
-  const tokens = q.split(/[\s\-_/]+/).filter((t) => t.length >= 2);
-  // Aussi accepter acronymes courts (ex. DA) via match plein titre/domaine
-  const scored = SISTER_SEARCH_DOCS.map((doc) => {
-    const hay = `${doc.title} ${doc.snippet} ${doc.keywords.join(" ")} ${doc.domain}`.toLowerCase();
-    let score = 0;
-    if (hay.includes(q) || doc.domain.includes(q.replace(/\s/g, ""))) score += 80;
-    for (const t of tokens) {
-      if (doc.keywords.some((k) => k === t || k.startsWith(t))) score += 40;
-      else if (doc.title.toLowerCase().includes(t)) score += 30;
-      else if (hay.includes(t)) score += 15;
-    }
-    return { doc, score };
-  })
+  const scored = BRAND_SEARCH_DOCS.map((doc) => ({ doc, score: scoreBrandDoc(doc, query) }))
     .filter((x) => x.score > 0)
     .sort((a, b) => b.score - a.score);
 
-  return scored.map((x) => x.doc);
+  if (!scored.length) return [];
+
+  const top = scored[0].score;
+  // Match marque fort → ne pas noyer Omega sous Ayeba qui cite le mot « omega ».
+  if (top >= 200) {
+    const cut = top * 0.55;
+    return scored.filter((x) => x.score >= cut).map((x) => x.doc);
+  }
+  return scored.slice(0, 4).map((x) => x.doc);
+}
+
+export function suggestBrandQueries(query: string): string[] {
+  const q = query.trim();
+  if (q.length < 1) return [];
+
+  const scored = BRAND_SEARCH_DOCS.flatMap((doc) => {
+    const score = scoreBrandDoc(doc, q);
+    if (score <= 0) return [];
+    const out: Array<{ label: string; score: number }> = [
+      { label: doc.title, score: score + 20 },
+      { label: doc.domain, score: score - 5 },
+    ];
+    if (doc.title.toLowerCase().includes(" ")) {
+      out.push({ label: doc.title.split(" ")[0], score: score - 10 });
+    }
+    return out;
+  })
+    .sort((a, b) => b.score - a.score);
+
+  const seen = new Set<string>();
+  const labels: string[] = [];
+  for (const { label } of scored) {
+    const key = label.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    labels.push(label);
+    if (labels.length >= 5) break;
+  }
+  return labels;
 }
 
 export function isSisterQuery(query: string) {

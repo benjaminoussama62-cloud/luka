@@ -42,6 +42,13 @@ export const HOME_SHORTCUTS: HomeShortcut[] = [
     logo: "/brand/shortcuts/tala.svg",
     tint: "#eab308",
   },
+  {
+    id: "omega",
+    name: "Omega",
+    href: process.env.NEXT_PUBLIC_SHORTCUT_OMEGA || "https://omega-web.org",
+    logo: "/brand/shortcuts/omega.svg",
+    tint: "#7c3aed",
+  },
 ];
 
 const TINTS = ["#3b82f6", "#14b8a6", "#f43f5e", "#eab308", "#a78bfa", "#22d3ee"];
