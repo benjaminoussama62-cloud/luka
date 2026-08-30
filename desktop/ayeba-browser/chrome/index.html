@@ -9,32 +9,65 @@
     <link rel="stylesheet" href="./chrome.css" />
   </head>
   <body>
-    <div class="chrome">
-      <div class="tabstrip" id="tabstrip">
+    <div class="chrome" id="chromeRoot">
+      <!-- Ligne 1 : onglets (Edge) -->
+      <div class="tabstrip">
         <div class="tabs" id="tabs" role="tablist"></div>
-        <button type="button" class="icon-btn new-tab" id="btnNewTab" title="Nouvel onglet (Ctrl+T)">+</button>
-        <div class="tabstrip-spacer"></div>
+        <button type="button" class="tab-btn new-tab" id="btnNewTab" title="Nouvel onglet (Ctrl+T)" aria-label="Nouvel onglet">
+          <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden><path fill="currentColor" d="M6 1v10M1 6h10" stroke="currentColor" stroke-width="1.5"/></svg>
+        </button>
       </div>
 
+      <!-- Ligne 2 : navigation + omnibox + actions -->
       <div class="toolbar">
-        <div class="nav">
-          <button type="button" class="icon-btn" id="btnBack" title="Précédent" aria-label="Précédent">←</button>
-          <button type="button" class="icon-btn" id="btnForward" title="Suivant" aria-label="Suivant">→</button>
-          <button type="button" class="icon-btn" id="btnReload" title="Actualiser" aria-label="Actualiser">↻</button>
-          <button type="button" class="icon-btn" id="btnHome" title="Accueil Ayeba" aria-label="Accueil">⌂</button>
+        <div class="nav-group">
+          <button type="button" class="nav-btn" id="btnBack" title="Précédent" aria-label="Précédent">
+            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden><path fill="currentColor" d="M10.5 3.5 6 8l4.5 4.5-.7.7L4.6 8l5.2-5.2z"/></svg>
+          </button>
+          <button type="button" class="nav-btn" id="btnForward" title="Suivant" aria-label="Suivant">
+            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden><path fill="currentColor" d="m5.5 3.5 4.5 4.5-4.5 4.5.7.7L11.4 8 6.2 2.8z"/></svg>
+          </button>
+          <button type="button" class="nav-btn" id="btnReload" title="Actualiser (Ctrl+R)" aria-label="Actualiser">
+            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden><path fill="currentColor" d="M8 2a6 6 0 0 0-5.2 3H1v2h3.5l1.2-2.1A4 4 0 1 1 8 12V10l3 3-3 3v-2a6 6 0 1 0-6-6z"/></svg>
+          </button>
+          <button type="button" class="nav-btn" id="btnHome" title="Accueil" aria-label="Accueil">
+            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden><path fill="currentColor" d="M8 2 2 7v7h4v-4h4v4h4V7z"/></svg>
+          </button>
         </div>
 
         <form class="omnibox" id="omniForm">
-          <span class="omni-mark" aria-hidden></span>
-          <input id="omni" type="text" spellcheck="false" autocomplete="off" placeholder="Rechercher sur Ayeba ou saisir une adresse" />
+          <span class="omni-icon" id="omniIcon" aria-hidden>
+            <svg class="icon-search" width="14" height="14" viewBox="0 0 16 16"><path fill="currentColor" d="M7 2a5 5 0 1 1 0 10A5 5 0 0 1 7 2m0-1a6 6 0 1 0 3.6 10.8l3.4 3.4.7-.7-3.4-3.4A6 6 0 0 0 7 1"/></svg>
+            <svg class="icon-lock" width="12" height="14" viewBox="0 0 12 14" hidden><path fill="currentColor" d="M6 0a3 3 0 0 0-3 3v2H2v9h8V5H9V3a3 3 0 0 0-3-3m1 5H5V3a1 1 0 1 1 2 0z"/></svg>
+          </span>
+          <input id="omni" type="text" spellcheck="false" autocomplete="off" placeholder="Rechercher ou saisir une adresse web" />
           <div class="omni-progress" id="omniProgress" hidden></div>
         </form>
 
-        <div class="tools">
-          <button type="button" class="icon-btn" id="btnFav" title="Ajouter aux favoris">☆</button>
-          <button type="button" class="icon-btn" id="btnAyebi" title="Ayebi — encyclopédie RDC" aria-label="Ayebi">Ayebi</button>
-          <button type="button" class="pill-btn" id="btnMenu" title="Menu Ayeba" aria-haspopup="true" aria-expanded="false">⋯</button>
+        <div class="actions-group">
+          <button type="button" class="action-btn" id="btnFav" title="Favori" aria-label="Ajouter aux favoris">
+            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden><path fill="none" stroke="currentColor" stroke-width="1.2" d="M8 2.5 9.8 6l4 .6-2.9 2.8.7 4L8 11.8 4.4 13.4l.7-4L2.2 6.6l4-.6z"/></svg>
+          </button>
+          <button type="button" class="action-btn ayebi-btn" id="btnAyebi" title="Ayebi — encyclopédie RDC">
+            <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden><path fill="currentColor" d="M3 2h10v12H3zm1 1v10h8V3zm2 2h4v1H6zm0 2h4v1H6zm0 2h3v1H6z"/></svg>
+          </button>
+          <button type="button" class="profile-btn" id="btnProfile" title="Compte Ayeba" aria-label="Compte">
+            <span>A</span>
+          </button>
+          <button type="button" class="menu-btn" id="btnMenu" title="Menu et paramètres" aria-haspopup="true" aria-expanded="false" aria-label="Menu">
+            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden><circle cx="3" cy="8" r="1.2" fill="currentColor"/><circle cx="8" cy="8" r="1.2" fill="currentColor"/><circle cx="13" cy="8" r="1.2" fill="currentColor"/></svg>
+          </button>
         </div>
+      </div>
+
+      <!-- Ligne 3 : barre de favoris (Edge) -->
+      <div class="bookmarks" id="bookmarksBar">
+        <button type="button" data-url="https://ayeba.app/ayebi">Ayebi</button>
+        <button type="button" data-url="https://ayeba.app">Ayeba</button>
+        <button type="button" data-url="https://ayeba.app/marches">Marchés</button>
+        <button type="button" data-url="https://jemsa.net">Jemsa</button>
+        <button type="button" data-url="https://sombatekaonline.com">Sombateka</button>
+        <button type="button" data-url="https://omega-web.org">Omega</button>
       </div>
     </div>
 
@@ -53,8 +86,8 @@
       <div class="menu-sep"></div>
       <button type="button" data-act="favorites">Favoris</button>
       <button type="button" data-act="history">Historique</button>
-      <button type="button" data-act="settings">Paramètres</button>
-      <button type="button" data-act="ayebi">Ayebi — encyclopédie RDC</button>
+      <button type="button" data-act="settings">Paramètres · moteur de recherche</button>
+      <button type="button" data-act="ayebi">Ayebi</button>
       <button type="button" data-act="downloads">Téléchargements</button>
       <div class="menu-sep"></div>
       <button type="button" data-act="find">Rechercher sur la page<span>Ctrl+F</span></button>
@@ -67,7 +100,7 @@
     <div class="panel" id="panel" hidden>
       <header>
         <h3 id="panelTitle">Favoris</h3>
-        <button type="button" class="icon-btn" id="panelClose">×</button>
+        <button type="button" class="nav-btn" id="panelClose" aria-label="Fermer">×</button>
       </header>
       <div class="panel-body" id="panelBody"></div>
     </div>

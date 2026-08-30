@@ -3431,3 +3431,14 @@ select option {
   color: var(--ink);
 }
 
+.store-badge-link {
+  display: inline-block;
+  line-height: 0;
+  opacity: 0.92;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+.store-badge-link:hover {
+  opacity: 1;
+  transform: translateY(-1px);
+}
+

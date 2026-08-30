@@ -15,6 +15,11 @@
     btnNewTab: document.getElementById("btnNewTab"),
     btnFav: document.getElementById("btnFav"),
     btnAyebi: document.getElementById("btnAyebi"),
+    btnProfile: document.getElementById("btnProfile"),
+    bookmarksBar: document.getElementById("bookmarksBar"),
+    omniIcon: document.getElementById("omniIcon"),
+    iconSearch: document.querySelector(".icon-search"),
+    iconLock: document.querySelector(".icon-lock"),
     zoomLabel: document.getElementById("zoomLabel"),
     panel: document.getElementById("panel"),
     panelTitle: document.getElementById("panelTitle"),
@@ -88,6 +93,12 @@
     return state.searchEngines.find((e) => e.id === id)?.name || "Ayeba";
   }
 
+  function updateOmniIcon(url) {
+    const secure = url && url.startsWith("https://");
+    if (els.iconSearch) els.iconSearch.hidden = secure;
+    if (els.iconLock) els.iconLock.hidden = !secure;
+  }
+
   function renderChrome() {
     renderTabs();
     els.btnBack.disabled = !state.canGoBack;
@@ -95,7 +106,8 @@
     els.progress.hidden = !state.loading;
     els.zoomLabel.textContent = `${Math.round((state.zoomFactor || 1) * 100)}%`;
     if (!omniDirty) els.omni.value = displayUrl(state.url);
-    els.omni.placeholder = `Rechercher sur ${engineLabel(state.searchEngine)} ou saisir une adresse`;
+    els.omni.placeholder = `Rechercher avec ${engineLabel(state.searchEngine)} ou saisir une adresse`;
+    updateOmniIcon(state.url);
   }
 
   function closeMenus() {
@@ -173,12 +185,15 @@
   els.btnReload.addEventListener("click", (e) => api.invoke("nav:reload", e.shiftKey));
   els.btnHome.addEventListener("click", () => api.invoke("nav:home"));
   els.btnAyebi.addEventListener("click", () => api.invoke("nav:ayebi"));
+  els.btnProfile.addEventListener("click", () => api.invoke("nav:go", "https://ayeba.app/compte"));
+  els.bookmarksBar?.addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-url]");
+    if (btn) api.invoke("nav:go", btn.dataset.url);
+  });
   els.btnFav.addEventListener("click", async () => {
     await api.invoke("fav:add");
-    els.btnFav.textContent = "★";
-    setTimeout(() => {
-      els.btnFav.textContent = "☆";
-    }, 900);
+    els.btnFav.classList.add("fav-saved");
+    setTimeout(() => els.btnFav.classList.remove("fav-saved"), 800);
   });
 
   els.omni.addEventListener("input", () => {

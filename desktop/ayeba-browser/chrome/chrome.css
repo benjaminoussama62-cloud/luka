@@ -1,15 +1,14 @@
 :root {
-  --bg: #07080c;
-  --bg-2: #10121a;
-  --ink: #f5f5f7;
-  --muted: #9aa0ae;
-  --line: rgba(255, 255, 255, 0.1);
-  --cyan: #00b4ff;
-  --cyan-soft: rgba(0, 180, 255, 0.16);
-  --orange: #e85d04;
-  --glass: rgba(255, 255, 255, 0.05);
-  --radius: 10px;
-  --font: "Segoe UI", "Inter", system-ui, sans-serif;
+  --chrome-bg: #202020;
+  --chrome-bg-2: #2b2b2b;
+  --chrome-tab: #323232;
+  --chrome-tab-active: #3a3a3a;
+  --ink: #f3f3f3;
+  --muted: #adadad;
+  --line: rgba(255, 255, 255, 0.08);
+  --accent: #00b4ff;
+  --accent-soft: rgba(0, 180, 255, 0.15);
+  --font: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
 }
 
 * { box-sizing: border-box; }
@@ -18,32 +17,35 @@ html, body {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: var(--bg);
+  background: var(--chrome-bg);
   color: var(--ink);
   font-family: var(--font);
   user-select: none;
+  -webkit-font-smoothing: antialiased;
 }
 
 .chrome {
-  height: 94px;
   display: flex;
   flex-direction: column;
-  background: linear-gradient(180deg, #12141c 0%, #0a0b10 100%);
+  background: var(--chrome-bg);
   border-bottom: 1px solid var(--line);
 }
 
+/* ── Tabs (Edge) ── */
 .tabstrip {
   display: flex;
   align-items: flex-end;
-  gap: 6px;
-  height: 40px;
+  gap: 0;
+  height: 38px;
   padding: 6px 8px 0;
+  background: var(--chrome-bg);
 }
 
 .tabs {
   display: flex;
-  gap: 4px;
+  gap: 2px;
   min-width: 0;
+  flex: 1;
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -53,28 +55,33 @@ html, body {
   display: flex;
   align-items: center;
   gap: 8px;
-  min-width: 140px;
-  max-width: 220px;
+  min-width: 120px;
+  max-width: 240px;
   height: 32px;
-  padding: 0 8px 0 10px;
+  padding: 0 10px 0 12px;
   border: 0;
-  border-radius: 10px 10px 0 0;
-  background: rgba(255,255,255,0.035);
+  border-radius: 8px 8px 0 0;
+  background: transparent;
   color: var(--muted);
   cursor: pointer;
+  transition: background 0.12s ease;
 }
+.tab:hover { background: rgba(255, 255, 255, 0.06); }
 .tab.active {
-  background: linear-gradient(180deg, rgba(0,180,255,0.18), rgba(255,255,255,0.08));
+  background: var(--chrome-tab-active);
   color: var(--ink);
-  box-shadow: inset 0 1px 0 rgba(0,180,255,0.45);
+  box-shadow: inset 0 -2px 0 var(--accent);
 }
 .tab-fav {
-  width: 14px;
-  height: 14px;
-  border-radius: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
   object-fit: cover;
-  background: var(--cyan-soft);
-  flex: 0 0 auto;
+  flex-shrink: 0;
+}
+.tab-fav:not(img) {
+  display: inline-block;
+  background: var(--accent-soft);
 }
 .tab-title {
   flex: 1;
@@ -83,88 +90,120 @@ html, body {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 400;
 }
 .tab-close {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   border: 0;
-  border-radius: 999px;
+  border-radius: 4px;
   background: transparent;
   color: inherit;
-  opacity: 0.55;
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0;
   cursor: pointer;
+  flex-shrink: 0;
 }
-.tab-close:hover { opacity: 1; background: rgba(255,255,255,0.12); }
+.tab:hover .tab-close,
+.tab.active .tab-close { opacity: 0.6; }
+.tab-close:hover { opacity: 1; background: rgba(255, 255, 255, 0.12); }
 
-.tabstrip-spacer { flex: 1; }
+.tab-btn.new-tab {
+  width: 28px;
+  height: 28px;
+  margin-bottom: 2px;
+  margin-left: 4px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+.tab-btn.new-tab:hover { background: rgba(255, 255, 255, 0.08); color: var(--ink); }
 
+/* ── Toolbar ── */
 .toolbar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  height: 54px;
-  padding: 0 10px 8px;
+  gap: 6px;
+  height: 48px;
+  padding: 0 10px;
+  background: var(--chrome-tab-active);
 }
 
-.nav, .tools { display: flex; align-items: center; gap: 4px; }
+.nav-group, .actions-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
 
-.icon-btn, .pill-btn {
+.nav-btn, .action-btn, .menu-btn {
+  width: 32px;
   height: 32px;
-  min-width: 32px;
-  border: 1px solid transparent;
-  border-radius: 999px;
+  border: 0;
+  border-radius: 6px;
   background: transparent;
   color: var(--ink);
-  font-size: 14px;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+.nav-btn:hover, .action-btn:hover, .menu-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+.nav-btn:disabled { opacity: 0.35; cursor: default; }
+.nav-btn:disabled:hover { background: transparent; }
+
+.action-btn.fav-saved { color: #fbbf24; }
+
+
+.profile-btn {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #00b4ff, #e85d04);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
   cursor: pointer;
 }
-.icon-btn:hover, .pill-btn:hover {
-  background: rgba(255,255,255,0.07);
-  border-color: var(--line);
-}
-.icon-btn:disabled {
-  opacity: 0.28;
-  cursor: default;
-}
-.new-tab {
-  margin-bottom: 2px;
-  font-size: 18px;
-  font-weight: 400;
-}
-.pill-btn {
-  width: 36px;
-  font-size: 18px;
-  letter-spacing: 1px;
-  background: rgba(255,255,255,0.05);
-  border-color: var(--line);
-}
+.profile-btn:hover { filter: brightness(1.08); }
 
+.menu-btn { margin-left: 2px; }
+
+/* ── Omnibox (Edge) ── */
 .omnibox {
   position: relative;
   flex: 1;
   display: flex;
   align-items: center;
-  height: 36px;
-  padding: 0 12px 0 14px;
+  height: 34px;
+  min-width: 0;
+  padding: 0 14px;
   border-radius: 999px;
-  border: 1px solid var(--line);
-  background: rgba(255,255,255,0.045);
-  backdrop-filter: blur(12px);
+  border: 1px solid transparent;
+  background: var(--chrome-bg);
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
 .omnibox:focus-within {
-  border-color: rgba(0,180,255,0.55);
-  box-shadow: 0 0 0 3px rgba(0,180,255,0.12);
+  border-color: rgba(0, 180, 255, 0.5);
+  box-shadow: 0 0 0 1px rgba(0, 180, 255, 0.25);
+  background: #1a1a1a;
 }
-.omni-mark {
-  width: 8px;
-  height: 8px;
-  margin-right: 10px;
-  border-radius: 999px;
-  background: var(--cyan);
-  box-shadow: 0 0 12px rgba(0,180,255,0.75);
-  flex: 0 0 auto;
+.omni-icon {
+  display: grid;
+  place-items: center;
+  margin-right: 8px;
+  color: var(--muted);
+  flex-shrink: 0;
 }
+.omni-icon .icon-lock[hidden],
+.omni-icon .icon-search[hidden] { display: none; }
 #omni {
   flex: 1;
   min-width: 0;
@@ -172,7 +211,7 @@ html, body {
   outline: none;
   background: transparent;
   color: var(--ink);
-  font-size: 13.5px;
+  font-size: 13px;
 }
 #omni::placeholder { color: var(--muted); }
 .omni-progress {
@@ -182,26 +221,54 @@ html, body {
   bottom: 0;
   height: 2px;
   border-radius: 999px;
-  background: linear-gradient(90deg, transparent, var(--cyan), var(--orange), transparent);
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
   background-size: 200% 100%;
-  animation: progress 1s linear infinite;
+  animation: omni-load 0.9s linear infinite;
 }
-@keyframes progress {
-  to { background-position: -200% 0; }
+@keyframes omni-load { to { background-position: -200% 0; } }
+
+/* ── Bookmarks bar ── */
+.bookmarks {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 30px;
+  padding: 0 10px;
+  background: var(--chrome-bg);
+  border-top: 1px solid var(--line);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.bookmarks::-webkit-scrollbar { display: none; }
+.bookmarks button {
+  flex-shrink: 0;
+  height: 24px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11.5px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.bookmarks button:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--ink);
 }
 
+/* ── Menu / panels ── */
 .menu {
   position: fixed;
-  top: 78px;
+  top: 108px;
   right: 10px;
-  z-index: 40;
-  width: 280px;
-  padding: 8px;
-  border-radius: 14px;
+  z-index: 50;
+  width: 300px;
+  padding: 6px;
+  border-radius: 8px;
   border: 1px solid var(--line);
-  background: rgba(16, 18, 26, 0.96);
-  box-shadow: 0 24px 60px rgba(0,0,0,0.55);
-  backdrop-filter: blur(16px);
+  background: #2d2d2d;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
 }
 .menu button {
   width: 100%;
@@ -213,8 +280,8 @@ html, body {
   background: transparent;
   color: var(--ink);
   text-align: left;
-  padding: 10px 12px;
-  border-radius: 10px;
+  padding: 9px 12px;
+  border-radius: 6px;
   font-size: 13px;
   cursor: pointer;
 }
@@ -223,12 +290,8 @@ html, body {
   font-style: normal;
   font-size: 11px;
 }
-.menu button:hover { background: rgba(255,255,255,0.06); }
-.menu-sep {
-  height: 1px;
-  margin: 6px 8px;
-  background: var(--line);
-}
+.menu button:hover { background: rgba(255, 255, 255, 0.06); }
+.menu-sep { height: 1px; margin: 4px 8px; background: var(--line); }
 .menu-zoom {
   display: flex;
   align-items: center;
@@ -237,33 +300,29 @@ html, body {
   color: var(--muted);
   font-size: 13px;
 }
-.menu-zoom > div {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
+.menu-zoom > div { display: flex; align-items: center; gap: 6px; }
 .menu-zoom button {
   width: 28px;
   height: 28px;
   padding: 0;
   justify-content: center;
-  border-radius: 999px;
-  background: rgba(255,255,255,0.05);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .panel {
   position: fixed;
-  top: 94px;
+  top: 116px;
   right: 10px;
-  z-index: 35;
-  width: min(360px, calc(100vw - 20px));
-  max-height: min(420px, calc(100vh - 120px));
+  z-index: 45;
+  width: min(380px, calc(100vw - 20px));
+  max-height: min(440px, calc(100vh - 130px));
   display: flex;
   flex-direction: column;
-  border-radius: 14px;
+  border-radius: 8px;
   border: 1px solid var(--line);
-  background: rgba(12, 14, 20, 0.97);
-  box-shadow: 0 24px 60px rgba(0,0,0,0.5);
+  background: #2d2d2d;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
   overflow: hidden;
 }
 .panel header {
@@ -273,11 +332,8 @@ html, body {
   padding: 12px 12px 8px;
   border-bottom: 1px solid var(--line);
 }
-.panel h3 { margin: 0; font-size: 14px; }
-.panel-body {
-  overflow: auto;
-  padding: 8px;
-}
+.panel h3 { margin: 0; font-size: 14px; font-weight: 600; }
+.panel-body { overflow: auto; padding: 6px; }
 .panel-item {
   width: 100%;
   display: flex;
@@ -285,13 +341,13 @@ html, body {
   gap: 2px;
   padding: 10px;
   border: 0;
-  border-radius: 10px;
+  border-radius: 6px;
   background: transparent;
   color: var(--ink);
   text-align: left;
   cursor: pointer;
 }
-.panel-item:hover { background: rgba(255,255,255,0.06); }
+.panel-item:hover { background: rgba(255, 255, 255, 0.06); }
 .panel-item strong { font-size: 13px; }
 .panel-item span {
   color: var(--muted);
@@ -300,66 +356,44 @@ html, body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.panel-empty {
-  padding: 18px 10px;
-  color: var(--muted);
-  font-size: 13px;
-  text-align: center;
+.panel-empty { padding: 18px; color: var(--muted); font-size: 13px; text-align: center; }
+.panel-lead { margin: 0 0 10px; font-size: 12px; line-height: 1.5; color: var(--muted); }
+.settings-engine.active {
+  border: 1px solid rgba(0, 180, 255, 0.45);
+  background: rgba(0, 180, 255, 0.08);
 }
 
 .findbar {
   position: fixed;
-  top: 102px;
+  top: 116px;
   right: 16px;
-  z-index: 45;
+  z-index: 55;
   display: flex;
   gap: 6px;
   padding: 8px;
-  border-radius: 12px;
+  border-radius: 8px;
   border: 1px solid var(--line);
-  background: rgba(16,18,26,0.96);
-  box-shadow: 0 16px 40px rgba(0,0,0,0.45);
+  background: #2d2d2d;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
 }
 .findbar input {
   width: 220px;
   height: 32px;
-  border-radius: 999px;
+  border-radius: 6px;
   border: 1px solid var(--line);
-  background: rgba(255,255,255,0.05);
+  background: #1a1a1a;
   color: var(--ink);
   padding: 0 12px;
   outline: none;
+  font-size: 13px;
 }
 .findbar button {
   height: 32px;
-  border-radius: 999px;
+  border-radius: 6px;
   border: 1px solid var(--line);
-  background: rgba(255,255,255,0.05);
+  background: rgba(255, 255, 255, 0.05);
   color: var(--ink);
   padding: 0 12px;
   cursor: pointer;
-}
-
-#btnAyebi {
-  height: 30px;
-  padding: 0 10px;
-  border-radius: 999px;
-  border: 1px solid rgba(0,180,255,0.35);
-  background: rgba(0,180,255,0.12);
-  color: var(--ink);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  cursor: pointer;
-}
-
-.panel-lead {
-  margin: 0 0 10px;
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--muted);
-}
-.settings-engine.active {
-  border-color: rgba(0,180,255,0.45);
-  background: rgba(0,180,255,0.08);
+  font-size: 13px;
 }

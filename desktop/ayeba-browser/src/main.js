@@ -81,7 +81,7 @@ const HISTORY_FILE = path.join(DATA_DIR, "history.json");
 const FAV_FILE = path.join(DATA_DIR, "favorites.json");
 const SETTINGS_FILE = path.join(DATA_DIR, "settings.json");
 
-const CHROME_H = 94;
+const CHROME_H = 118;
 const windows = new Set();
 
 function ensureData() {
