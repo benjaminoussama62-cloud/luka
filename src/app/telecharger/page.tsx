@@ -5,8 +5,8 @@ import { AyebaWordmark } from "@/components/brand/AyebaIcon";
 import { SiteFooter } from "@/components/search/SiteFooter";
 
 export const metadata: Metadata = {
-  title: "Télécharger AYEBA pour Windows",
-  description: "Installez AYEBA Browser pour Windows en un clic. Gratuit.",
+  title: "Télécharger AYEBA",
+  description: "Navigateur Windows (Edge-like) et app mobile (Safari-like). Moteur Ayeba, Ayebi toujours accessible.",
   openGraph: {
     title: "Télécharger AYEBA Browser",
     description: "Installez le navigateur Ayeba pour Windows. Gratuit.",
@@ -14,7 +14,7 @@ export const metadata: Metadata = {
   },
 };
 
-const VERSION = process.env.NEXT_PUBLIC_BROWSER_VERSION || "1.0.3";
+const VERSION = process.env.NEXT_PUBLIC_BROWSER_VERSION || "1.0.4";
 
 const SETUP_URL =
   process.env.NEXT_PUBLIC_BROWSER_SETUP_URL ||
@@ -40,13 +40,20 @@ export default function TelechargerPage() {
 
         <main className="flex flex-1 flex-col items-center text-center">
           <h1 className="max-w-lg font-[family-name:var(--font-brand)] text-[clamp(2.2rem,7vw,3.4rem)] font-semibold leading-[1.05] tracking-[-0.04em] text-[var(--ink)]">
-            Installer AYEBA sur Windows
+            AYEBA — navigateur + recherche
           </h1>
 
           <p className="mt-5 max-w-md text-[1.02rem] leading-relaxed text-[var(--muted)]">
-            Fichier d’installation classique (.exe) — pas besoin d’extraire un ZIP. Raccourci Bureau +
-            menu Démarrer.
+            PC : navigateur Edge-like avec Ayeba par défaut. Mobile : expérience Safari-like — Google ou Yandex
+            au choix, Ayebi toujours là.
           </p>
+
+          <section className="mt-12 w-full max-w-md text-left">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--ink)]">Windows (PC)</h2>
+            <p className="mt-2 text-sm text-[var(--muted)]">
+              Onglets Chromium, barre d’adresse, favoris, paramètres moteur (Ayeba · Google · Yandex).
+            </p>
+          </section>
 
           <a
             href={SETUP_URL}
@@ -71,6 +78,18 @@ export default function TelechargerPage() {
               AYEBA-Portable-{VERSION}.zip
             </a>
           </p>
+
+          <section className="mt-14 w-full max-w-md rounded-2xl border border-[var(--line)] bg-white/[0.03] p-6 text-left">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--ink)]">Mobile (Safari-like)</h2>
+            <p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">
+              Sur téléphone : ouvrez <strong className="text-[var(--ink)]">ayeba.app</strong> → menu navigateur
+              → « Ajouter à l’écran d’accueil » (Safari iOS / Chrome Android). L’app combine recherche + onglets
+              + bouton Ayebi permanent.
+            </p>
+            <Link href="/?app=1" className="ayeba-ghost mt-4 inline-flex px-4 py-2 text-xs">
+              Ouvrir l’app mobile
+            </Link>
+          </section>
         </main>
 
         <div className="mt-20">

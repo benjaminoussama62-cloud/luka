@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState, type CSSProperties, type FormEvent } from "react";
+import { isMobileApp } from "@/lib/mobile-app";
+import { useBrowserShell } from "@/lib/browser-shell";
 
 export type HomeShortcut = {
   id: string;
@@ -81,8 +83,12 @@ function loadCustom(): HomeShortcut[] {
   }
 }
 
-function openShortcut(href: string) {
-  // Vrai navigateur (comme Yandex) — pas de fausse barre d’onglets dans la page
+function openShortcut(href: string, openWebTab?: (url: string, title?: string) => void) {
+  const inApp = typeof window !== "undefined" && (isMobileApp() || openWebTab);
+  if (inApp && openWebTab) {
+    openWebTab(href);
+    return;
+  }
   window.open(href, "_blank", "noopener,noreferrer");
 }
 
@@ -92,6 +98,8 @@ export function HomeShortcuts() {
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
   const [error, setError] = useState("");
+  const { openWebTab } = useBrowserShell();
+  const useInApp = typeof window !== "undefined" && isMobileApp();
 
   useEffect(() => {
     setCustom(loadCustom());
@@ -157,7 +165,7 @@ export function HomeShortcuts() {
                 } as CSSProperties
               }
               title={s.name}
-              onClick={() => openShortcut(s.href)}
+              onClick={() => openShortcut(s.href, useInApp ? openWebTab : undefined)}
             >
               <span className="ayeba-shortcut-logo-wrap" aria-hidden>
                 {/* eslint-disable-next-line @next/next/no-img-element */}

@@ -13,6 +13,7 @@ import { isMobileApp } from "@/lib/mobile-app";
 import { useAyeba } from "@/lib/store";
 import type { MapPlace, MediaResult, SearchTab, ShopItem } from "@/lib/types";
 import { AlgorithmSliders } from "./AlgorithmSliders";
+import { SearchEngineSettings } from "@/components/settings/SearchEngineSettings";
 import { CodeExecutor } from "./CodeExecutor";
 import { CommunityIndex } from "./CommunityIndex";
 import { DeepResearchPanel } from "./DeepResearchPanel";
@@ -67,7 +68,8 @@ function KnowledgeCard() {
   const k = response?.knowledge;
   if (!k) return null;
   const top = response?.results[0];
-  const ayebiLink = k.facts.find((f) => f.label === "Ayebi")?.value;
+  const ayebiLink = k.facts.find((f) => f.label === "Ayebi" || f.label === "Lire sur Ayebi")?.value;
+  const wikiLink = k.facts.find((f) => f.label === "Wikipédia")?.value;
   const isAyebi = k.sources.includes("ayebi");
   return (
     <aside className="ayeba-panel animate-rise overflow-hidden">
@@ -82,21 +84,30 @@ function KnowledgeCard() {
         <h3 className="mt-3 font-[family-name:var(--font-display)] text-[24px] font-medium tracking-[-0.03em] text-[var(--ink)]">{k.title}</h3>
         <p className="mt-1 text-sm text-[var(--faint)]">{k.subtitle}</p>
         <p className="mt-4 text-[14px] leading-[1.75] text-[var(--muted)]">{k.summary}</p>
-        {k.facts.filter((f) => f.label !== "Ayebi").length ? (
+        {k.facts.filter((f) => !["Ayebi", "Lire sur Ayebi", "Wikipédia"].includes(f.label)).length ? (
           <dl className="mt-4 space-y-2 border-t border-[var(--line)] pt-4">
-            {k.facts.filter((f) => f.label !== "Ayebi").map((f) => (
-              <div key={f.label} className="flex justify-between gap-3 text-xs">
-                <dt className="text-[var(--faint)]">{f.label}</dt>
-                <dd className="text-right text-[var(--muted)]">{f.value}</dd>
-              </div>
-            ))}
+            {k.facts
+              .filter((f) => !["Ayebi", "Lire sur Ayebi", "Wikipédia"].includes(f.label))
+              .map((f) => (
+                <div key={f.label} className="flex justify-between gap-3 text-xs">
+                  <dt className="text-[var(--faint)]">{f.label}</dt>
+                  <dd className="text-right text-[var(--muted)]">{f.value}</dd>
+                </div>
+              ))}
           </dl>
         ) : null}
-        {ayebiLink ? (
-          <a href={ayebiLink} className="ayeba-pill mt-5 inline-block px-4 py-2 text-xs">
-            Lire sur Ayebi
-          </a>
-        ) : null}
+        <div className="mt-5 flex flex-wrap gap-2">
+          {ayebiLink ? (
+            <a href={ayebiLink} className="ayeba-pill px-4 py-2 text-xs">
+              Lire sur Ayebi
+            </a>
+          ) : null}
+          {wikiLink ? (
+            <a href={wikiLink} target="_blank" rel="noreferrer" className="ayeba-pill px-4 py-2 text-xs">
+              Wikipédia
+            </a>
+          ) : null}
+        </div>
         {top && !isAyebi ? <TrustMeters trust={top.trust} /> : null}
       </div>
     </aside>
@@ -359,7 +370,7 @@ export function AyebaApp() {
 function AyebaAppBody() {
   const { hasSearched, response, searching, searchError, search, tab, setTab, splitScreen, resetHome, setDeepResearchOpen } = useAyeba();
   const { t } = useI18n();
-  const { activeTab, openHomeTab } = useBrowserShell();
+  const { activeTab, openHomeTab, webGoBack, webGoForward, navigateWebTab, activateTab, tabs } = useBrowserShell();
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -375,12 +386,27 @@ function AyebaAppBody() {
   }, [resetHome, openHomeTab]);
 
   if (activeTab.kind === "web") {
+    const webTab = activeTab;
     return (
       <>
         <Stage />
         <div className="relative z-10 flex min-h-dvh flex-col">
           <AppTabBar />
-          <InAppBrowser url={activeTab.url} title={activeTab.title} />
+          <InAppBrowser
+            url={webTab.url}
+            title={webTab.title}
+            canGoBack={webTab.historyIndex > 0}
+            canGoForward={webTab.historyIndex < webTab.history.length - 1}
+            onBack={webGoBack}
+            onForward={webGoForward}
+            onNavigate={(u) => navigateWebTab(u)}
+            onHome={() => {
+              const homeTab = tabs.find((t) => t.kind === "home");
+              if (homeTab) activateTab(homeTab.id);
+              else openHomeTab();
+              resetHome();
+            }}
+          />
         </div>
         <Modals />
       </>
@@ -396,6 +422,7 @@ function AyebaAppBody() {
             <HomeSplashGate
               header={
                 <>
+                  <SearchEngineSettings compact />
                   <LangSwitch />
                   <ProfileMenu />
                 </>
@@ -422,6 +449,14 @@ function AyebaAppBody() {
               <SearchBar />
             </div>
             <div className="ayeba-serp-actions flex shrink-0 items-center gap-1.5 sm:gap-2">
+              {typeof window !== "undefined" && isMobileApp() ? (
+                <>
+                  <SearchEngineSettings compact />
+                  <a href="/ayebi" className="ayeba-ghost px-2 py-1.5 text-xs">
+                    Ayebi
+                  </a>
+                </>
+              ) : null}
               <div className="ayeba-serp-lang">
                 <LangSwitch />
               </div>

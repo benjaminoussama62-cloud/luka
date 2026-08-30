@@ -66,12 +66,20 @@ if (!gotLock) {
 
 nativeTheme.themeSource = "dark";
 
-const AYEBA_SEARCH = "https://ayeba.app/?q=";
+const {
+  DEFAULT_ENGINE,
+  buildSearchUrl,
+  normalizeOmni: normalizeOmniForEngine,
+  engineList,
+  isEngine,
+} = require("./search-engines");
+
 const HOME_URL = pathToFileURL(path.join(__dirname, "..", "newtab", "index.html")).href;
 const CHROME_URL = pathToFileURL(path.join(__dirname, "..", "chrome", "index.html")).href;
 const DATA_DIR = path.join(app.getPath("userData"), "data");
 const HISTORY_FILE = path.join(DATA_DIR, "history.json");
 const FAV_FILE = path.join(DATA_DIR, "favorites.json");
+const SETTINGS_FILE = path.join(DATA_DIR, "settings.json");
 
 const CHROME_H = 94;
 const windows = new Set();
@@ -80,6 +88,25 @@ function ensureData() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
   if (!fs.existsSync(HISTORY_FILE)) fs.writeFileSync(HISTORY_FILE, "[]");
   if (!fs.existsSync(FAV_FILE)) fs.writeFileSync(FAV_FILE, "[]");
+  if (!fs.existsSync(SETTINGS_FILE)) {
+    fs.writeFileSync(SETTINGS_FILE, JSON.stringify({ searchEngine: DEFAULT_ENGINE }, null, 2));
+  }
+}
+
+function readSettings() {
+  const raw = readJson(SETTINGS_FILE, { searchEngine: DEFAULT_ENGINE });
+  const searchEngine = isEngine(raw.searchEngine) ? raw.searchEngine : DEFAULT_ENGINE;
+  return { searchEngine };
+}
+
+function writeSettings(patch) {
+  const next = { ...readSettings(), ...patch };
+  if (!isEngine(next.searchEngine)) next.searchEngine = DEFAULT_ENGINE;
+  writeJson(SETTINGS_FILE, next);
+  for (const state of windows) {
+    if (state.pushChromeState) state.pushChromeState();
+  }
+  return next;
 }
 
 function readJson(file, fallback) {
@@ -125,11 +152,9 @@ function canForward(wc) {
 function normalizeOmni(input) {
   const raw = String(input || "").trim();
   if (!raw) return HOME_URL;
-  if (/^(https?|file|ayeba):\/\//i.test(raw)) return raw;
-  if (raw.includes(" ") || !raw.includes(".")) {
-    return `${AYEBA_SEARCH}${encodeURIComponent(raw)}`;
-  }
-  return `https://${raw}`;
+  const { searchEngine } = readSettings();
+  const target = normalizeOmniForEngine(raw, searchEngine);
+  return target || HOME_URL;
 }
 
 function revealWindow(win) {
@@ -218,6 +243,7 @@ function createBrowserWindow() {
 
   function pushChromeState() {
     const active = state.tabs.find((t) => t.id === state.activeId);
+    const settings = readSettings();
     emitChrome("browser:state", {
       tabs: tabSnapshot(),
       activeId: state.activeId,
@@ -227,8 +253,12 @@ function createBrowserWindow() {
       canGoBack: active ? canBack(active.view.webContents) : false,
       canGoForward: active ? canForward(active.view.webContents) : false,
       zoomFactor: active && !active.view.webContents.isDestroyed() ? active.view.webContents.getZoomFactor() : 1,
+      searchEngine: settings.searchEngine,
+      searchEngines: engineList(),
     });
   }
+
+  state.pushChromeState = pushChromeState;
 
   function showTab(id) {
     for (const t of state.tabs) {
@@ -479,9 +509,20 @@ function createBrowserWindow() {
           `Version ${app.getVersion()}\n` +
           "Navigateur + recherche mondiale.\n" +
           "https://ayeba.app\n\n" +
-          "Onglets Chromium réels — comme Edge, pensé Ayeba.",
+          "Onglets Chromium réels — comme Edge, pensé Ayeba.\n" +
+          "Ayebi : encyclopédie RDC — toujours sur ayeba.app/ayebi",
         buttons: ["OK"],
       });
+    },
+    "settings:get": () => ({ ...readSettings(), engines: engineList() }),
+    "settings:set": (_e, patch) => writeSettings(patch || {}),
+    "settings:search-url": (_e, query) => {
+      const { searchEngine } = readSettings();
+      return buildSearchUrl(query, searchEngine);
+    },
+    "nav:ayebi": () => {
+      const t = activeTab();
+      if (t) t.view.webContents.loadURL("https://ayeba.app/ayebi");
     },
   };
 
@@ -516,6 +557,10 @@ function bindIpc() {
     "shell:open-external",
     "window:new",
     "app:about",
+    "settings:get",
+    "settings:set",
+    "settings:search-url",
+    "nav:ayebi",
   ];
 
   for (const channel of channels) {
@@ -527,10 +572,20 @@ function bindIpc() {
     });
   }
 
-  ipcMain.handle("app:get-paths", () => ({
-    home: HOME_URL,
-    searchBase: AYEBA_SEARCH,
-  }));
+  ipcMain.handle("app:get-paths", () => {
+    const { searchEngine } = readSettings();
+    return {
+      home: HOME_URL,
+      searchBase: `${buildSearchUrl("", searchEngine).replace(/=$/, "")}=`,
+      searchEngine,
+      engines: engineList(),
+    };
+  });
+
+  ipcMain.handle("settings:search-url-global", (_e, query) => {
+    const { searchEngine } = readSettings();
+    return buildSearchUrl(query, searchEngine);
+  });
 }
 
 app.whenReady().then(() => {

@@ -14,6 +14,7 @@
     btnHome: document.getElementById("btnHome"),
     btnNewTab: document.getElementById("btnNewTab"),
     btnFav: document.getElementById("btnFav"),
+    btnAyebi: document.getElementById("btnAyebi"),
     zoomLabel: document.getElementById("zoomLabel"),
     panel: document.getElementById("panel"),
     panelTitle: document.getElementById("panelTitle"),
@@ -25,7 +26,17 @@
     findClose: document.getElementById("findClose"),
   };
 
-  let state = { tabs: [], activeId: null, url: "", loading: false, canGoBack: false, canGoForward: false, zoomFactor: 1 };
+  let state = {
+    tabs: [],
+    activeId: null,
+    url: "",
+    loading: false,
+    canGoBack: false,
+    canGoForward: false,
+    zoomFactor: 1,
+    searchEngine: "ayeba",
+    searchEngines: [],
+  };
   let omniDirty = false;
 
   function displayUrl(url) {
@@ -73,6 +84,10 @@
     }
   }
 
+  function engineLabel(id) {
+    return state.searchEngines.find((e) => e.id === id)?.name || "Ayeba";
+  }
+
   function renderChrome() {
     renderTabs();
     els.btnBack.disabled = !state.canGoBack;
@@ -80,11 +95,37 @@
     els.progress.hidden = !state.loading;
     els.zoomLabel.textContent = `${Math.round((state.zoomFactor || 1) * 100)}%`;
     if (!omniDirty) els.omni.value = displayUrl(state.url);
+    els.omni.placeholder = `Rechercher sur ${engineLabel(state.searchEngine)} ou saisir une adresse`;
   }
 
   function closeMenus() {
     els.menu.hidden = true;
     els.btnMenu.setAttribute("aria-expanded", "false");
+  }
+
+  async function showSettings() {
+    closeMenus();
+    els.panel.hidden = false;
+    els.panelTitle.textContent = "Paramètres";
+    const data = await api.invoke("settings:get");
+    const engines = data?.engines || state.searchEngines || [];
+    const current = data?.searchEngine || state.searchEngine || "ayeba";
+    els.panelBody.innerHTML = `
+      <p class="panel-lead">Moteur par défaut dans la barre d’adresse. Ayebi reste sur ayeba.app/ayebi — comme Wikipedia mondial.</p>
+      <div class="settings-engines" role="radiogroup"></div>
+    `;
+    const group = els.panelBody.querySelector(".settings-engines");
+    for (const eng of engines) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = `panel-item settings-engine${eng.id === current ? " active" : ""}`;
+      b.innerHTML = `<strong>${escapeHtml(eng.name)}</strong><span>${eng.id === "ayeba" ? "Recherche + Ayebi + Wikipedia" : "Recherche externe — Ayebi toujours disponible"}</span>`;
+      b.addEventListener("click", async () => {
+        await api.invoke("settings:set", { searchEngine: eng.id });
+        els.panel.hidden = true;
+      });
+      group.appendChild(b);
+    }
   }
 
   async function showList(kind) {
@@ -131,6 +172,7 @@
   els.btnForward.addEventListener("click", () => api.invoke("nav:forward"));
   els.btnReload.addEventListener("click", (e) => api.invoke("nav:reload", e.shiftKey));
   els.btnHome.addEventListener("click", () => api.invoke("nav:home"));
+  els.btnAyebi.addEventListener("click", () => api.invoke("nav:ayebi"));
   els.btnFav.addEventListener("click", async () => {
     await api.invoke("fav:add");
     els.btnFav.textContent = "★";
@@ -173,6 +215,8 @@
     if (act === "zoom-out") api.invoke("zoom:step", -0.1);
     if (act === "favorites") showList("favorites");
     if (act === "history") showList("history");
+    if (act === "settings") showSettings();
+    if (act === "ayebi") api.invoke("nav:ayebi");
     if (act === "downloads") api.invoke("shell:open-downloads");
     if (act === "find") openFind();
     if (act === "print") api.invoke("page:print");
@@ -182,7 +226,7 @@
       alert("Données de navigation effacées.");
     }
     if (act === "about") api.invoke("app:about");
-    if (!["favorites", "history", "find"].includes(act)) closeMenus();
+    if (!["favorites", "history", "find", "settings"].includes(act)) closeMenus();
   });
 
   els.panelClose.addEventListener("click", () => {
@@ -205,6 +249,10 @@
   window.addEventListener("keydown", (e) => {
     const mod = e.ctrlKey || e.metaKey;
     if (!mod) return;
+    if (e.key.toLowerCase() === "w") {
+      e.preventDefault();
+      api.invoke("tabs:close", state.activeId);
+    }
     if (e.key.toLowerCase() === "t") {
       e.preventDefault();
       api.invoke("tabs:new");

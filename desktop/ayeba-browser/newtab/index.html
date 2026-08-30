@@ -54,11 +54,11 @@
       }
       .tiles {
         margin: 1.65rem auto 0; display: grid;
-        grid-template-columns: repeat(4, 108px); justify-content: center; gap: 0.9rem;
+        grid-template-columns: repeat(5, 108px); justify-content: center; gap: 0.9rem;
         width: max-content; max-width: 100%;
       }
-      @media (max-width: 520px) {
-        .tiles { grid-template-columns: repeat(2, 108px); }
+      @media (max-width: 620px) {
+        .tiles { grid-template-columns: repeat(3, 108px); }
       }
       .tile {
         width: 108px; height: 116px; display: flex; flex-direction: column;
@@ -68,6 +68,7 @@
         transition: transform 0.18s ease;
       }
       .tile:hover { transform: translateY(-3px); }
+      .tile.ayebi { background: linear-gradient(180deg, #1a1a1f, #0a0a0d); color: #f5f0e8; }
       .logo {
         width: 46px; height: 46px; border-radius: 12px; overflow: hidden;
         display: grid; place-items: center; background: #111; color: #fff; font-weight: 800;
@@ -91,33 +92,44 @@
         <button type="submit">Rechercher</button>
       </form>
       <div class="tiles" id="tiles"></div>
-      <p class="foot">Navigateur Ayeba · onglets Chromium · ayeba.app</p>
+      <p class="foot">Navigateur Ayeba · Ayebi = Wikipedia congolaise · Paramètres → moteur au choix</p>
     </main>
     <script>
       const SHORTCUTS = [
+        { name: "Ayebi", href: "https://ayeba.app/ayebi", logo: "", tint: "#1c1917", letter: "A", ayebi: true },
         { name: "JEMSA", href: "https://jemsa.net", logo: "https://ayeba.app/brand/shortcuts/jemsa.svg", tint: "#2563eb", letter: "J" },
-        { name: "SOMBATEKAONLE", href: "https://sombatekaonline.com", logo: "https://ayeba.app/brand/shortcuts/sombateka.png", tint: "#0f766e", letter: "S" },
-        { name: "DEVALPHA1", href: "https://devalpha1.com", logo: "https://ayeba.app/brand/shortcuts/devalpha1.svg", tint: "#dc2626", letter: "D" },
+        { name: "SOMBATEKA", href: "https://sombatekaonline.com", logo: "https://ayeba.app/brand/shortcuts/sombateka.png", tint: "#0f766e", letter: "S" },
+        { name: "OMEGA", href: "https://omega-web.org", logo: "https://ayeba.app/brand/shortcuts/omega.png", tint: "#0a0a0b", letter: "Ω" },
         { name: "TALA", href: "https://to-tala.com", logo: "https://ayeba.app/brand/shortcuts/tala.svg", tint: "#ca8a04", letter: "T" },
       ];
       const tiles = document.getElementById("tiles");
       for (const s of SHORTCUTS) {
         const a = document.createElement("a");
-        a.className = "tile";
+        a.className = "tile" + (s.ayebi ? " ayebi" : "");
         a.href = s.href;
         a.title = s.name;
-        a.innerHTML = `<span class="logo" style="background:${s.tint}"><img src="${s.logo}" alt="" onerror="this.remove();this.parentNode.textContent='${s.letter}'"/></span><span class="name">${s.name}</span>`;
+        const logoInner = s.logo
+          ? `<img src="${s.logo}" alt="" onerror="this.remove();this.parentNode.textContent='${s.letter}'"/>`
+          : s.letter;
+        a.innerHTML = `<span class="logo" style="background:${s.tint}">${logoInner}</span><span class="name">${s.name}</span>`;
         tiles.appendChild(a);
+      }
+      async function goSearch(q) {
+        const query = String(q || "").trim();
+        if (!query) return;
+        if (/^https?:\/\//i.test(query) || (!query.includes(" ") && query.includes("."))) {
+          window.location.href = /^https?:\/\//i.test(query) ? query : `https://${query}`;
+          return;
+        }
+        if (window.ayebaTab?.search) {
+          await window.ayebaTab.search(query);
+          return;
+        }
+        window.location.href = `https://ayeba.app/?q=${encodeURIComponent(query)}`;
       }
       document.getElementById("searchForm").addEventListener("submit", (e) => {
         e.preventDefault();
-        const q = document.getElementById("q").value.trim();
-        if (!q) return;
-        if (/^https?:\/\//i.test(q) || (!q.includes(" ") && q.includes("."))) {
-          window.location.href = /^https?:\/\//i.test(q) ? q : `https://${q}`;
-          return;
-        }
-        window.location.href = `https://ayeba.app/?q=${encodeURIComponent(q)}`;
+        void goSearch(document.getElementById("q").value);
       });
     </script>
   </body>

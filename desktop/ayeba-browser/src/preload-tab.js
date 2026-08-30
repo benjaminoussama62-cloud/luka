@@ -2,9 +2,11 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("ayebaTab", {
   openInAyeba: (url) => ipcRenderer.invoke("shell:open-external", url),
-  search: (q) => {
+  search: async (q) => {
     const query = String(q || "").trim();
     if (!query) return;
-    window.location.href = `https://ayeba.app/?q=${encodeURIComponent(query)}`;
+    const url = await ipcRenderer.invoke("settings:search-url-global", query);
+    if (url) window.location.href = url;
   },
+  getSettings: () => ipcRenderer.invoke("settings:search-url-global", "").then(() => ipcRenderer.invoke("app:get-paths")),
 });

@@ -881,9 +881,8 @@ async function liveSearchCore(
     }
     crawlHits = [];
   } else if (!sisterFastPath) {
-    [, ayebiHits, crawlHits] = await Promise.all([
-      Promise.resolve(undefined),
-      Promise.resolve().then(() => searchAyebiArticlesLive(q, 5)),
+    const [liveHits, crawl] = await Promise.all([
+      searchAyebiArticlesLive(q, 5),
       Promise.resolve().then(() => {
         try {
           return searchCrawlIndex(q);
@@ -892,7 +891,14 @@ async function liveSearchCore(
         }
       }),
     ]);
-    ayebiHits = ayebiHits.filter((a) => isStrongAyebiMatch(scoreArticle(a, q), a, q));
+    const seenSlugs = new Set(ayebiHits.map((a) => a.slug));
+    for (const a of liveHits) {
+      if (seenSlugs.has(a.slug)) continue;
+      if (!isStrongAyebiMatch(scoreArticle(a, q), a, q)) continue;
+      seenSlugs.add(a.slug);
+      ayebiHits.push(a);
+    }
+    crawlHits = crawl;
     if (!ayebiPanel && ayebiHits[0] && !navSite) {
       ayebiPanel = ayebiKnowledgePanel(ayebiHits[0]);
     }
@@ -982,7 +988,7 @@ async function liveSearchCore(
         domain: "ayebi",
         keywords: a.tags,
         congoRelevant: isCongoHint(q) || a.category === "lieu",
-        sourceType: "wiki" as const,
+        sourceType: "local" as const,
         credibility: 99,
         rankScore: Math.min(420, 180 + rel * 2) - i * 8,
         sitelinks: [
@@ -1074,6 +1080,13 @@ async function liveSearchCore(
   )
     .filter((r) => isRelevantResult(r, q) || r.sourceType === "news" || r.url.includes("duckduckgo.com"))
     .sort((a, b) => (b.rankScore ?? 0) - (a.rankScore ?? 0));
+
+  const bestAyebi = results.find((r) => r.domain === "ayebi" || r.url.startsWith("/ayebi/"));
+  const bestWiki = results.find((r) => r.domain.includes("wikipedia.org"));
+  if (bestAyebi || bestWiki) {
+    const rest = results.filter((r) => r !== bestAyebi && r !== bestWiki);
+    results = [...(bestAyebi ? [bestAyebi] : []), ...(bestWiki ? [bestWiki] : []), ...rest];
+  }
 
   if (results.length < 3 && !ayebiPanel && ayebiHits.length === 0 && sisterHits.length === 0) {
     results = rankAndFilter(
@@ -1183,6 +1196,24 @@ async function liveSearchCore(
       ? knowledge
       : undefined);
 
+  let knowledgePanel = panel;
+  if (
+    ayebiPanel &&
+    knowledge &&
+    !factualIntent &&
+    relevanceScore(`${knowledge.title} ${knowledge.summary}`, q) >= 35
+  ) {
+    const wikiUrl = knowledge.facts.find((f) => f.label === "Lien" || f.label === "Wikipédia")?.value;
+    knowledgePanel = {
+      ...ayebiPanel,
+      facts: [
+        ...ayebiPanel.facts.filter((f) => f.label !== "Wikipédia"),
+        ...(wikiUrl ? [{ label: "Wikipédia", value: wikiUrl }] : []),
+      ],
+      sources: [...new Set([...ayebiPanel.sources, "wikipedia"])],
+    };
+  }
+
   const topWeb = results.find(
     (r) =>
       r.domain !== "ayebi" &&
@@ -1216,17 +1247,17 @@ async function liveSearchCore(
           url: navSite.url,
           domain: navSite.domain,
         }
-      : panel && relevanceScore(`${panel.title} ${panel.summary}`, q) >= ayebiPanelMinScore(q)
+      : knowledgePanel && relevanceScore(`${knowledgePanel.title} ${knowledgePanel.summary}`, q) >= ayebiPanelMinScore(q)
         ? {
-            title: panel.title,
-            text: panel.summary.slice(0, 420),
+            title: knowledgePanel.title,
+            text: knowledgePanel.summary.slice(0, 420),
             url:
-              panel.facts.find((f) => f.label === "Lire sur Ayebi")?.value ??
-              panel.facts.find((f) => f.label === "Ayebi")?.value ??
+              knowledgePanel.facts.find((f) => f.label === "Lire sur Ayebi")?.value ??
+              knowledgePanel.facts.find((f) => f.label === "Ayebi")?.value ??
               topWeb?.url ??
               results[0]?.url ??
               "#",
-            domain: panel.facts.some((f) => f.label === "Lire sur Ayebi") ? "ayebi" : topWeb?.domain ?? "ayeba",
+            domain: knowledgePanel.facts.some((f) => f.label === "Lire sur Ayebi") ? "ayebi" : topWeb?.domain ?? "ayeba",
           }
         : topWeb
           ? {
@@ -1245,10 +1276,10 @@ async function liveSearchCore(
             : undefined);
 
   const topAyebi = ayebiHits[0];
-  const aiSummary = buildSynthesis(q, panel, results, newsResults);
+  const aiSummary = buildSynthesis(q, knowledgePanel, results, newsResults);
   const peopleAlsoAsk = buildQuestions(
     q,
-    panel,
+    knowledgePanel,
     results,
     newsResults,
     isCongoHint(q),
@@ -1313,7 +1344,7 @@ async function liveSearchCore(
     ],
     related: relatedFrom(q, results),
     peopleAlsoAsk,
-    knowledge: panel,
+    knowledge: knowledgePanel,
     featuredSnippet,
     instantAnswer: instantAnswers[0],
     instantAnswers: instantAnswers.length ? instantAnswers : undefined,
