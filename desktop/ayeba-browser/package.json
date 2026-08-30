@@ -10,7 +10,9 @@
     "start": "electron .",
     "dev": "electron . --enable-logging",
     "pack": "electron-builder --dir",
-    "dist": "node scripts/build-portable.js",
+    "dist": "node scripts/build-installer.js",
+    "dist:portable": "node scripts/build-portable.js",
+    "dist:all": "node scripts/build-installer.js && node scripts/build-portable.js",
     "dist:nsis": "electron-builder --win nsis",
     "dist:dir": "electron-builder --win dir"
   },

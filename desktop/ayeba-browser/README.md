@@ -24,15 +24,24 @@ npm start
 npm run dist
 ```
 
-Sortie : `dist/AYEBA-Portable-1.0.0.zip`
+Sortie installateur : `dist/AYEBA-Setup-1.0.4.exe` (téléchargement direct sur ayeba.app/telecharger)
+
+Sortie portable (option avancée) : `dist/AYEBA-Portable-1.0.4.zip`
+
+```bash
+npm run dist          # installateur .exe (recommandé)
+npm run dist:portable # ZIP portable
+npm run dist:all      # les deux
+```
 
 ### Publier une release GitHub (obligatoire pour le bouton public)
 
 1. Ouvre https://github.com/benjaminoussama62-cloud/luka/releases/new  
-2. Tag : `browser-v1.0.0` (ou version suivante)  
-3. Titre : `AYEBA Browser 1.0.0`  
-4. Joins le fichier `desktop/ayeba-browser/dist/AYEBA-Portable-1.0.0.zip`  
-5. Publie la release  
+2. Tag : `browser-v1.0.4` (ou version suivante)  
+3. Titre : `AYEBA Browser 1.0.4`  
+4. Joins **`desktop/ayeba-browser/dist/AYEBA-Setup-1.0.4.exe`** (installateur — priorité)  
+5. Joins optionnellement `AYEBA-Portable-1.0.4.zip`  
+6. Publie la release  
 
-Le bouton sur ayeba.app pointe vers :
-`https://github.com/benjaminoussama62-cloud/luka/releases/latest/download/AYEBA-Portable-1.0.0.zip`
+Le bouton sur ayeba.app télécharge directement :
+`https://github.com/benjaminoussama62-cloud/luka/releases/latest/download/AYEBA-Setup-1.0.4.exe`

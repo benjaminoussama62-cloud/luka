@@ -56,7 +56,7 @@ export function SearchEngineSettings({ compact = false }: { compact?: boolean })
               </button>
             ))}
             <p className="ayeba-engine-note">
-              Ayebi (encyclopédie RDC) reste toujours disponible — comme Wikipedia mondial.
+              Ayebi (encyclopédie RDC) et Wikipédia (mondial) sont deux sources séparées — les deux peuvent apparaître.
             </p>
           </div>
         ) : null}

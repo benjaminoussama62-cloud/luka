@@ -1197,21 +1197,24 @@ async function liveSearchCore(
       : undefined);
 
   let knowledgePanel = panel;
+  let wikipediaKnowledge: KnowledgePanel | undefined;
   if (
     ayebiPanel &&
     knowledge &&
     !factualIntent &&
     relevanceScore(`${knowledge.title} ${knowledge.summary}`, q) >= 35
   ) {
-    const wikiUrl = knowledge.facts.find((f) => f.label === "Lien" || f.label === "Wikipédia")?.value;
-    knowledgePanel = {
-      ...ayebiPanel,
-      facts: [
-        ...ayebiPanel.facts.filter((f) => f.label !== "Wikipédia"),
-        ...(wikiUrl ? [{ label: "Wikipédia", value: wikiUrl }] : []),
-      ],
-      sources: [...new Set([...ayebiPanel.sources, "wikipedia"])],
-    };
+    // Ayebi et Wikipedia restent deux encyclopédies distinctes — pas un seul panneau mixte.
+    knowledgePanel = ayebiPanel;
+    wikipediaKnowledge = knowledge;
+  } else if (
+    !ayebiPanel &&
+    knowledge &&
+    !factualIntent &&
+    knowledge.sources.some((s) => s.includes("wikipedia"))
+  ) {
+    knowledgePanel = undefined;
+    wikipediaKnowledge = knowledge;
   }
 
   const topWeb = results.find(
@@ -1345,6 +1348,7 @@ async function liveSearchCore(
     related: relatedFrom(q, results),
     peopleAlsoAsk,
     knowledge: knowledgePanel,
+    wikipediaKnowledge,
     featuredSnippet,
     instantAnswer: instantAnswers[0],
     instantAnswers: instantAnswers.length ? instantAnswers : undefined,

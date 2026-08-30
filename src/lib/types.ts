@@ -185,7 +185,10 @@ export type SearchResponse = {
   community: CommunityPost[];
   related: string[];
   peopleAlsoAsk: { q: string; a: string }[];
+  /** Panneau Ayebi (encyclopédie RDC) — distinct de Wikipedia. */
   knowledge?: KnowledgePanel;
+  /** Panneau Wikipedia mondial — affiché à côté d’Ayebi, jamais fusionné. */
+  wikipediaKnowledge?: KnowledgePanel;
   featuredSnippet?: FeaturedSnippet;
   instantAnswer?: InstantAnswer;
   instantAnswers?: InstantAnswer[];

@@ -69,7 +69,6 @@ function KnowledgeCard() {
   if (!k) return null;
   const top = response?.results[0];
   const ayebiLink = k.facts.find((f) => f.label === "Ayebi" || f.label === "Lire sur Ayebi")?.value;
-  const wikiLink = k.facts.find((f) => f.label === "Wikipédia")?.value;
   const isAyebi = k.sources.includes("ayebi");
   return (
     <aside className="ayeba-panel animate-rise overflow-hidden">
@@ -80,14 +79,14 @@ function KnowledgeCard() {
         <div className="h-1.5 w-full bg-gradient-to-r from-[var(--red)] via-[#8a8a96] to-transparent" />
       )}
       <div className="p-5">
-        <p className="ayeba-kicker ayeba-kicker-accent">{isAyebi ? "Ayebi · RDC" : t("context")}</p>
+        <p className="ayeba-kicker ayeba-kicker-accent">{isAyebi ? "Ayebi · encyclopédie RDC" : t("context")}</p>
         <h3 className="mt-3 font-[family-name:var(--font-display)] text-[24px] font-medium tracking-[-0.03em] text-[var(--ink)]">{k.title}</h3>
         <p className="mt-1 text-sm text-[var(--faint)]">{k.subtitle}</p>
         <p className="mt-4 text-[14px] leading-[1.75] text-[var(--muted)]">{k.summary}</p>
-        {k.facts.filter((f) => !["Ayebi", "Lire sur Ayebi", "Wikipédia"].includes(f.label)).length ? (
+        {k.facts.filter((f) => !["Ayebi", "Lire sur Ayebi"].includes(f.label)).length ? (
           <dl className="mt-4 space-y-2 border-t border-[var(--line)] pt-4">
             {k.facts
-              .filter((f) => !["Ayebi", "Lire sur Ayebi", "Wikipédia"].includes(f.label))
+              .filter((f) => !["Ayebi", "Lire sur Ayebi"].includes(f.label))
               .map((f) => (
                 <div key={f.label} className="flex justify-between gap-3 text-xs">
                   <dt className="text-[var(--faint)]">{f.label}</dt>
@@ -96,19 +95,46 @@ function KnowledgeCard() {
               ))}
           </dl>
         ) : null}
-        <div className="mt-5 flex flex-wrap gap-2">
-          {ayebiLink ? (
-            <a href={ayebiLink} className="ayeba-pill px-4 py-2 text-xs">
-              Lire sur Ayebi
-            </a>
-          ) : null}
-          {wikiLink ? (
-            <a href={wikiLink} target="_blank" rel="noreferrer" className="ayeba-pill px-4 py-2 text-xs">
-              Wikipédia
-            </a>
-          ) : null}
-        </div>
+        {ayebiLink ? (
+          <a href={ayebiLink} className="ayeba-pill mt-5 inline-block px-4 py-2 text-xs">
+            Lire sur Ayebi
+          </a>
+        ) : null}
         {top && !isAyebi ? <TrustMeters trust={top.trust} /> : null}
+      </div>
+    </aside>
+  );
+}
+
+function WikipediaCard() {
+  const { response } = useAyeba();
+  const { openWebTab } = useBrowserShell();
+  const k = response?.wikipediaKnowledge;
+  if (!k) return null;
+  const wikiUrl = k.facts.find((f) => f.label === "Lien")?.value;
+  return (
+    <aside className="ayeba-panel animate-rise mt-4 overflow-hidden">
+      {k.image ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={k.image} alt="" className="h-36 w-full object-cover" />
+      ) : (
+        <div className="h-1.5 w-full bg-gradient-to-r from-[#3366cc] via-[#8a8a96] to-transparent" />
+      )}
+      <div className="p-5">
+        <p className="ayeba-kicker mb-1">Wikipédia · encyclopédie mondiale</p>
+        <p className="text-[11px] text-[var(--faint)]">Source distincte d’Ayebi — complémentaire, pas identique.</p>
+        <h3 className="mt-3 font-[family-name:var(--font-display)] text-[20px] font-medium text-[var(--ink)]">{k.title}</h3>
+        <p className="mt-1 text-sm text-[var(--faint)]">{k.subtitle}</p>
+        <p className="mt-3 text-[14px] leading-[1.7] text-[var(--muted)]">{k.summary.slice(0, 320)}…</p>
+        {wikiUrl ? (
+          <button
+            type="button"
+            className="ayeba-pill mt-4 px-4 py-2 text-xs"
+            onClick={() => openWebTab(wikiUrl, k.title)}
+          >
+            Lire sur Wikipédia
+          </button>
+        ) : null}
       </div>
     </aside>
   );
@@ -477,7 +503,7 @@ function AyebaAppBody() {
           {searching ? <div className="progress-shimmer w-full" /> : null}
         </header>
 
-        <div className={`ayeba-serp-body ${response?.knowledge ? "ayeba-serp-body-with-aside" : ""}`}>
+        <div className={`ayeba-serp-body ${response?.knowledge || response?.wikipediaKnowledge ? "ayeba-serp-body-with-aside" : ""}`}>
           <div className="ayeba-serp-main">
             <SerpMeta />
             {searching && !response ? (
@@ -522,9 +548,10 @@ function AyebaAppBody() {
               </button>
             ) : null}
           </div>
-          {response?.knowledge ? (
+          {response?.knowledge || response?.wikipediaKnowledge ? (
             <aside className="ayeba-serp-aside">
-              {tab === "web" ? <KnowledgeCard /> : null}
+              {tab === "web" && response?.knowledge ? <KnowledgeCard /> : null}
+              {tab === "web" && response?.wikipediaKnowledge ? <WikipediaCard /> : null}
               <AlgorithmSliders />
             </aside>
           ) : null}
