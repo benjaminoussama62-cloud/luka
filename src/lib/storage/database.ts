@@ -519,6 +519,149 @@ function migrate(db: AyebaDatabase) {
 
     CREATE INDEX IF NOT EXISTS idx_oauth_tokens_user ON oauth_access_tokens(user_id, client_id);
 
+    CREATE TABLE IF NOT EXISTS developer_api_keys (
+      id TEXT PRIMARY KEY,
+      client_id TEXT NOT NULL REFERENCES oauth_clients(client_id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      key_prefix TEXT NOT NULL,
+      key_hash TEXT NOT NULL UNIQUE,
+      scopes TEXT NOT NULL DEFAULT '',
+      last_used_at TEXT,
+      expires_at TEXT,
+      revoked_at TEXT,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_developer_api_keys_client ON developer_api_keys(client_id);
+
+    CREATE TABLE IF NOT EXISTS developer_service_accounts (
+      id TEXT PRIMARY KEY,
+      client_id TEXT NOT NULL REFERENCES oauth_clients(client_id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      token_hash TEXT NOT NULL UNIQUE,
+      scopes TEXT NOT NULL DEFAULT '',
+      last_used_at TEXT,
+      revoked_at TEXT,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_service_accounts_client ON developer_service_accounts(client_id);
+
+    CREATE TABLE IF NOT EXISTS developer_webhooks (
+      id TEXT PRIMARY KEY,
+      client_id TEXT NOT NULL REFERENCES oauth_clients(client_id) ON DELETE CASCADE,
+      url TEXT NOT NULL,
+      secret_hash TEXT NOT NULL,
+      events TEXT NOT NULL DEFAULT '[]',
+      active INTEGER NOT NULL DEFAULT 1,
+      failure_count INTEGER NOT NULL DEFAULT 0,
+      last_delivery_at TEXT,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_developer_webhooks_client ON developer_webhooks(client_id);
+
+    CREATE TABLE IF NOT EXISTS developer_usage_daily (
+      client_id TEXT NOT NULL,
+      day TEXT NOT NULL,
+      requests INTEGER NOT NULL DEFAULT 0,
+      errors INTEGER NOT NULL DEFAULT 0,
+      latency_ms INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (client_id, day)
+    );
+
+    CREATE TABLE IF NOT EXISTS developer_quotas (
+      client_id TEXT PRIMARY KEY REFERENCES oauth_clients(client_id) ON DELETE CASCADE,
+      daily_requests INTEGER NOT NULL DEFAULT 10000,
+      monthly_requests INTEGER NOT NULL DEFAULT 250000,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS ayebi_watchlists (
+      user_id TEXT NOT NULL,
+      slug TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (user_id, slug)
+    );
+
+    CREATE TABLE IF NOT EXISTS ayebi_revision_votes (
+      user_id TEXT NOT NULL,
+      slug TEXT NOT NULL,
+      revision INTEGER NOT NULL,
+      value INTEGER NOT NULL CHECK (value IN (-1, 1)),
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (user_id, slug, revision)
+    );
+
+    CREATE TABLE IF NOT EXISTS ayebi_templates (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL UNIQUE,
+      description TEXT NOT NULL DEFAULT '',
+      schema_json TEXT NOT NULL,
+      required_fields_json TEXT NOT NULL DEFAULT '[]',
+      created_by TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS ayebi_categories (
+      id TEXT PRIMARY KEY,
+      parent_id TEXT REFERENCES ayebi_categories(id) ON DELETE SET NULL,
+      slug TEXT NOT NULL UNIQUE,
+      label TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS ayebi_translations (
+      slug TEXT NOT NULL,
+      language TEXT NOT NULL,
+      title TEXT NOT NULL,
+      subtitle TEXT NOT NULL DEFAULT '',
+      summary TEXT NOT NULL,
+      content_json TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'machine',
+      translator_id TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (slug, language)
+    );
+
+    CREATE TABLE IF NOT EXISTS ayebi_citations (
+      id TEXT PRIMARY KEY,
+      slug TEXT NOT NULL,
+      revision INTEGER NOT NULL,
+      citation_key TEXT NOT NULL,
+      title TEXT NOT NULL,
+      url TEXT NOT NULL,
+      publisher TEXT NOT NULL DEFAULT '',
+      published_at TEXT,
+      accessed_at TEXT NOT NULL,
+      author TEXT NOT NULL DEFAULT '',
+      created_by TEXT NOT NULL,
+      UNIQUE(slug, revision, citation_key)
+    );
+    CREATE INDEX IF NOT EXISTS idx_ayebi_citations_slug ON ayebi_citations(slug);
+
+    CREATE TABLE IF NOT EXISTS ayebi_spam_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id TEXT NOT NULL,
+      action TEXT NOT NULL,
+      fingerprint TEXT NOT NULL,
+      score INTEGER NOT NULL,
+      reasons_json TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_ayebi_spam_user ON ayebi_spam_events(user_id, created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS ayebi_bots (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      owner_id TEXT NOT NULL,
+      event TEXT NOT NULL,
+      config_json TEXT NOT NULL,
+      active INTEGER NOT NULL DEFAULT 1,
+      last_run_at TEXT,
+      created_at TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS oauth_refresh_tokens (
       token_hash TEXT PRIMARY KEY,
       access_token_hash TEXT NOT NULL,
@@ -558,6 +701,32 @@ function migrate(db: AyebaDatabase) {
       backup_codes_json TEXT NOT NULL DEFAULT '[]',
       updated_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS admin_audit_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      actor_id TEXT NOT NULL,
+      action TEXT NOT NULL,
+      target_type TEXT NOT NULL DEFAULT '',
+      target_id TEXT NOT NULL DEFAULT '',
+      detail TEXT NOT NULL DEFAULT '',
+      ip TEXT,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_admin_audit_created ON admin_audit_log(created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS support_tickets (
+      id TEXT PRIMARY KEY,
+      user_id TEXT,
+      email TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      message TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'open',
+      priority TEXT NOT NULL DEFAULT 'normal',
+      assigned_to TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_support_tickets_status ON support_tickets(status, created_at DESC);
   `);
 
   migrateOAuthColumns(db);
@@ -571,6 +740,7 @@ function migrateOAuthColumns(db: AyebaDatabase) {
     "ALTER TABLE oauth_clients ADD COLUMN verified INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE oauth_clients ADD COLUMN tier TEXT NOT NULL DEFAULT 'public'",
     "ALTER TABLE oauth_clients ADD COLUMN website_url TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE oauth_access_tokens ADD COLUMN last_used_at TEXT",
   ];
   for (const sql of alters) {
     try {

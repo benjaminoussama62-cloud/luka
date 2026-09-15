@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import Link from "next/link";
 import { CursorGradient } from "@/components/effects/CursorGradient";
 import { GradientStage } from "@/components/effects/GradientStage";
 import { LoginModal, ProfileMenu } from "@/components/auth/AuthUI";
@@ -478,9 +479,9 @@ function AyebaAppBody() {
               {typeof window !== "undefined" && isMobileApp() ? (
                 <>
                   <SearchEngineSettings compact />
-                  <a href="/ayebi" className="ayeba-ghost px-2 py-1.5 text-xs">
+                  <Link href="/ayebi" className="ayeba-ghost px-2 py-1.5 text-xs">
                     Ayebi
-                  </a>
+                  </Link>
                 </>
               ) : null}
               <div className="ayeba-serp-lang">

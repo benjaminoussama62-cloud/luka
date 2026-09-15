@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { AYEBI_STATS } from "@/lib/ayebi";
 import { useAyeba } from "@/lib/store";
 import { useMarket } from "@/lib/market-context";
@@ -39,9 +40,9 @@ export function InternationalTools() {
         <a href="/marches" className="ayeba-ghost rounded-full px-4 py-2 text-xs normal-case">
           Tous les marchés
         </a>
-        <a href="/ayebi" className="ayeba-ghost rounded-full px-4 py-2 text-xs normal-case">
+        <Link href="/ayebi" className="ayeba-ghost rounded-full px-4 py-2 text-xs normal-case">
           Ayebi ({AYEBI_STATS.total} fiches)
-        </a>
+        </Link>
       </div>
     </section>
   );

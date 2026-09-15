@@ -26,7 +26,7 @@ export function AyebiBrowser({ articles }: { articles: AyebiArticle[] }) {
   }, [articles]);
 
   const filtered = useMemo(() => {
-    let list = cat === "all" ? articles : articles.filter((a) => a.category === cat);
+    const list = cat === "all" ? articles : articles.filter((a) => a.category === cat);
     const s = q.trim().toLowerCase();
     if (!s) return list;
     return list.filter((a) => {

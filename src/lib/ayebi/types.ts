@@ -30,6 +30,16 @@ export type AyebiArticle = {
   image?: string;
   tags: string[];
   relatedSlugs?: string[];
+  citations?: AyebiCitation[];
+};
+
+export type AyebiCitation = {
+  key: string;
+  title: string;
+  url: string;
+  publisher?: string;
+  publishedAt?: string;
+  author?: string;
 };
 
 export function ayebi(

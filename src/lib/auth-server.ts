@@ -3,7 +3,7 @@ import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import type { DbUser } from "./db";
 import { findUserByEmail, findUserById, getUsers, saveUsers } from "./db";
-import { migrateAllUsersFromJson, syncUserToSqlite } from "./users-sqlite";
+import { syncUserToSqlite } from "./users-sqlite";
 
 export const SESSION_COOKIE = "ayeba_session";
 const SESSION_DAYS = 30;
@@ -14,6 +14,7 @@ export type SessionUser = {
   email: string;
   avatarColor: string;
   provider: "email" | "google" | "github" | "microsoft" | "apple";
+  role: DbUser["role"];
 };
 
 function secretKey() {
@@ -62,6 +63,7 @@ export function toSessionUser(u: DbUser): SessionUser {
     email: u.email,
     avatarColor: u.avatarColor,
     provider: u.provider,
+    role: u.role,
   };
 }
 
@@ -106,6 +108,7 @@ export async function registerUser(email: string, password: string, name?: strin
     avatarColor: COLORS[Math.floor(Math.random() * COLORS.length)],
     provider: "email",
     createdAt: new Date().toISOString(),
+    role: "contributor",
   };
   const users = await getUsers();
   await saveUsers([...users, user]);
@@ -146,6 +149,7 @@ export async function upsertOAuthUser(profile: {
       avatarColor: brandColors[profile.provider] ?? "#e85d04",
       provider: profile.provider,
       createdAt: new Date().toISOString(),
+      role: "contributor",
     };
     await saveUsers([...users, user]);
   } else {

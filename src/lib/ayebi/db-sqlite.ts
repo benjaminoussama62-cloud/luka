@@ -35,6 +35,7 @@ function articleToJson(a: AyebiArticle) {
     facts: a.facts,
     image: a.image,
     relatedSlugs: a.relatedSlugs,
+    citations: a.citations,
   });
 }
 
@@ -53,6 +54,7 @@ function jsonToArticle(row: Record<string, unknown>): AyebiArticle {
     image: content.image,
     tags: JSON.parse(String(row.tags_json || "[]")) as string[],
     relatedSlugs: content.relatedSlugs,
+    citations: content.citations,
   };
 }
 

@@ -16,6 +16,7 @@ import { searchVideosNative } from "../src/lib/verticals/videos";
 import { searchMapsNative } from "../src/lib/verticals/maps";
 import { buildNativeShopping } from "../src/lib/verticals/shopping";
 import { liveSearch } from "../src/lib/real-search";
+import { revokeInactiveTokens } from "../src/lib/oauth-provider/tokens";
 
 const args = new Set(process.argv.slice(2));
 const quick = args.has("--quick");
@@ -69,6 +70,7 @@ async function main() {
   }
 
   console.log("\n[3] Stats infra");
+  console.log("  Inactive OAuth tokens revoked:", revokeInactiveTokens());
   const idx = indexStats();
   const queue = queueStats();
   const cache = cacheStats();

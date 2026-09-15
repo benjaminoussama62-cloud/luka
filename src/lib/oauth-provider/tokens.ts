@@ -3,9 +3,11 @@ import { findUserById } from "@/lib/db";
 import { generateOpaqueToken, hashToken } from "./crypto";
 import { createIdToken } from "./oidc";
 import type { TokenResponse } from "./types";
+import { dispatchDeveloperWebhook } from "@/lib/developers/webhooks";
 
 const ACCESS_TTL_SEC = 3600;
 const REFRESH_TTL_SEC = 30 * 24 * 3600;
+const INACTIVE_TOKEN_DAYS = 90;
 
 export async function issueTokens(input: {
   clientId: string;
@@ -39,6 +41,12 @@ export async function issueTokens(input: {
     refreshExp,
     now.toISOString(),
   );
+
+  void dispatchDeveloperWebhook(input.clientId, "oauth.token_issued", {
+    userId: input.userId,
+    scope: input.scope,
+    expiresAt: accessExp,
+  });
 
   const response: TokenResponse = {
     access_token: accessToken,
@@ -89,7 +97,25 @@ export function resolveAccessToken(token: string): {
   if (!row || row.revoked_at) return null;
   if (new Date(row.expires_at).getTime() < Date.now()) return null;
 
+  db.prepare("UPDATE oauth_access_tokens SET last_used_at = ? WHERE token_hash = ?").run(
+    new Date().toISOString(),
+    hash,
+  );
+
   return { userId: row.user_id, clientId: row.client_id, scope: row.scope };
+}
+
+export function revokeInactiveTokens() {
+  const cutoff = new Date(Date.now() - INACTIVE_TOKEN_DAYS * 86400000).toISOString();
+  const db = getDb();
+  const now = new Date().toISOString();
+  const access = db.prepare(
+    "UPDATE oauth_access_tokens SET revoked_at = ? WHERE revoked_at IS NULL AND COALESCE(last_used_at, created_at) < ?",
+  ).run(now, cutoff) as { changes?: number };
+  const refresh = db.prepare(
+    "UPDATE oauth_refresh_tokens SET revoked_at = ? WHERE revoked_at IS NULL AND created_at < ?",
+  ).run(now, cutoff) as { changes?: number };
+  return { accessTokens: access.changes ?? 0, refreshTokens: refresh.changes ?? 0 };
 }
 
 export async function refreshAccessToken(input: {
@@ -135,6 +161,10 @@ export function revokeToken(token: string) {
   const db = getDb();
   const hash = hashToken(token);
   const now = new Date().toISOString();
+  const row = db.prepare("SELECT client_id FROM oauth_access_tokens WHERE token_hash = ?").get(hash) as
+    | { client_id: string }
+    | undefined;
   db.prepare("UPDATE oauth_access_tokens SET revoked_at = ? WHERE token_hash = ?").run(now, hash);
   db.prepare("UPDATE oauth_refresh_tokens SET revoked_at = ? WHERE token_hash = ?").run(now, hash);
+  if (row) void dispatchDeveloperWebhook(row.client_id, "oauth.token_revoked", { tokenHash: hash });
 }

@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { FormEvent, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AYEBI_CATEGORIES, slugifyTitle } from "@/lib/ayebi/constants";

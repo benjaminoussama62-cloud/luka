@@ -12,6 +12,7 @@ export type DbUser = {
   avatarColor: string;
   provider: "email" | "google" | "github" | "microsoft" | "apple";
   createdAt: string;
+  role: "reader" | "contributor" | "moderator" | "admin" | "superadmin" | "support";
 };
 
 export type CrawlDoc = {
@@ -31,7 +32,7 @@ type UsersFile = { users: DbUser[] };
 type CrawlFile = { docs: CrawlDoc[]; lastRun?: string };
 type HistoryFile = { byUser: Record<string, string[]> };
 
-function useSqliteStore() {
+function shouldUseSqliteStore() {
   // Prefer durable SQLite/Turso for auth + history on every environment.
   return true;
 }
@@ -44,6 +45,7 @@ function rowToUser(row: {
   avatar_color: string;
   provider: string;
   created_at: string;
+  role?: string;
 }): DbUser {
   return {
     id: row.id,
@@ -53,6 +55,7 @@ function rowToUser(row: {
     avatarColor: row.avatar_color,
     provider: row.provider as DbUser["provider"],
     createdAt: row.created_at,
+    role: (row.role || "contributor") as DbUser["role"],
   };
 }
 
@@ -93,10 +96,10 @@ async function writeJson<T>(file: string, data: T) {
 }
 
 export async function getUsers(): Promise<DbUser[]> {
-  if (useSqliteStore()) {
+  if (shouldUseSqliteStore()) {
     const rows = getDb()
       .prepare(
-        "SELECT id, name, email, password_hash, avatar_color, provider, created_at FROM users ORDER BY created_at",
+        "SELECT id, name, email, password_hash, avatar_color, provider, role, created_at FROM users ORDER BY created_at",
       )
       .all() as Array<{
       id: string;
@@ -106,6 +109,7 @@ export async function getUsers(): Promise<DbUser[]> {
       avatar_color: string;
       provider: string;
       created_at: string;
+      role: string;
     }>;
     if (rows.length > 0) return rows.map(rowToUser);
 
@@ -156,10 +160,10 @@ export async function saveUsers(users: DbUser[]) {
 }
 
 export async function findUserByEmail(email: string) {
-  if (useSqliteStore()) {
+  if (shouldUseSqliteStore()) {
     const row = getDb()
       .prepare(
-        "SELECT id, name, email, password_hash, avatar_color, provider, created_at FROM users WHERE lower(email) = lower(?)",
+        "SELECT id, name, email, password_hash, avatar_color, provider, role, created_at FROM users WHERE lower(email) = lower(?)",
       )
       .get(email) as
       | {
@@ -170,6 +174,7 @@ export async function findUserByEmail(email: string) {
           avatar_color: string;
           provider: string;
           created_at: string;
+          role: string;
         }
       | undefined;
     if (row) return rowToUser(row);
@@ -179,10 +184,10 @@ export async function findUserByEmail(email: string) {
 }
 
 export async function findUserById(id: string) {
-  if (useSqliteStore()) {
+  if (shouldUseSqliteStore()) {
     const row = getDb()
       .prepare(
-        "SELECT id, name, email, password_hash, avatar_color, provider, created_at FROM users WHERE id = ?",
+        "SELECT id, name, email, password_hash, avatar_color, provider, role, created_at FROM users WHERE id = ?",
       )
       .get(id) as
       | {
@@ -193,6 +198,7 @@ export async function findUserById(id: string) {
           avatar_color: string;
           provider: string;
           created_at: string;
+          role: string;
         }
       | undefined;
     if (row) return rowToUser(row);
@@ -211,7 +217,7 @@ export async function saveCrawlIndex(docs: CrawlDoc[], lastRun?: string) {
 }
 
 export async function getSearchHistory(userId: string): Promise<string[]> {
-  if (useSqliteStore()) {
+  if (shouldUseSqliteStore()) {
     const rows = getDb()
       .prepare(
         "SELECT query FROM search_history WHERE user_id = ? ORDER BY created_at DESC LIMIT 40",
@@ -231,7 +237,7 @@ export async function getSearchHistory(userId: string): Promise<string[]> {
 }
 
 export async function pushSearchHistory(userId: string, query: string) {
-  if (useSqliteStore()) {
+  if (shouldUseSqliteStore()) {
     const db = getDb();
     db.prepare("DELETE FROM search_history WHERE user_id = ? AND query = ?").run(userId, query);
     db.prepare(

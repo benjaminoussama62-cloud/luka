@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { AyebaWordmark } from "@/components/brand/AyebaIcon";
 import { OAuthButton } from "@/components/auth/OAuthLogos";
 import { useAuth } from "@/lib/auth";
@@ -262,10 +263,10 @@ export function ProfileMenu() {
               <span className="ayeba-profile-link-label">Compte Ayeba</span>
               <span className="ayeba-profile-link-hint">Apps connectées · 2FA</span>
             </a>
-            <a href="/studio/app" className="ayeba-profile-link" role="menuitem">
+            <Link href="/studio/app" className="ayeba-profile-link" role="menuitem">
               <span className="ayeba-profile-link-label">Ayeba Studio</span>
               <span className="ayeba-profile-link-hint">Webmaster · Radar</span>
-            </a>
+            </Link>
             <a href="/telecharger" className="ayeba-profile-link" role="menuitem">
               <span className="ayeba-profile-link-label">Télécharger AYEBA</span>
               <span className="ayeba-profile-link-hint">Navigateur Windows</span>

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useAyeba } from "@/lib/store";
 import { useMarket } from "@/lib/market-context";
 import type { InstantAnswer } from "@/lib/types";
@@ -77,9 +78,9 @@ export function AyebiSerpRail() {
     <section className="ayeba-panel mb-8 p-5 animate-rise">
       <div className="mb-4 flex items-center justify-between">
         <p className="ayeba-kicker ayeba-kicker-accent">Ayebi · encyclopédie RDC</p>
-        <a href="/ayebi" className="text-xs text-[var(--link)]">
+        <Link href="/ayebi" className="text-xs text-[var(--link)]">
           Toutes les fiches
-        </a>
+        </Link>
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         {hits.map((r) => (

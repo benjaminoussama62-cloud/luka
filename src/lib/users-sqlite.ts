@@ -3,7 +3,7 @@ import type { AyebiRole } from "./ayebi/db-sqlite";
 import { roleFromUser } from "./ayebi/permissions";
 import { getDb } from "./storage/database";
 
-export function syncUserToSqlite(user: DbUser, role: AyebiRole = "contributor") {
+export function syncUserToSqlite(user: DbUser, role: DbUser["role"] = user.role) {
   getDb()
     .prepare(
       `INSERT INTO users (id, name, email, password_hash, avatar_color, provider, role, created_at)

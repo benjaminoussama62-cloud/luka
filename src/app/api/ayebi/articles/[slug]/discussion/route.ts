@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { authorFromSession } from "@/lib/ayebi/author";
 import { addTalkMessage, getTalkMessages } from "@/lib/ayebi/server";
 import { getSessionFromCookies } from "@/lib/auth-server";
+import { assessSpam } from "@/lib/ayebi/platform";
 
 export async function GET(_req: Request, ctx: { params: Promise<{ slug: string }> }) {
   const { slug } = await ctx.params;
@@ -20,6 +20,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
   const message = String(body.message ?? "").trim();
   if (message.length < 4) {
     return NextResponse.json({ error: "Message trop court." }, { status: 400 });
+  }
+
+  const moderation = assessSpam({ userId: session.id, action: "discussion.create", content: message, ip: req.headers.get("x-forwarded-for") || undefined });
+  if (!moderation.allowed) {
+    return NextResponse.json({ error: "Message bloqué par la modération anti-spam.", reasons: moderation.reasons }, { status: 429 });
   }
 
   addTalkMessage(slug, { id: session.id, name: session.name }, message);
