@@ -12,8 +12,8 @@ let schemaReady = false;
 export function ensurePaymentsSchema() {
   if (schemaReady) return;
   const db = getDb();
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS payment_events (
+  for (const stmt of [
+    `CREATE TABLE IF NOT EXISTS payment_events (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       provider TEXT NOT NULL,
       event_id TEXT NOT NULL,
@@ -22,9 +22,15 @@ export function ensurePaymentsSchema() {
       payload TEXT NOT NULL DEFAULT '{}',
       processed_at TEXT NOT NULL,
       UNIQUE(provider, event_id)
-    );
-    CREATE INDEX IF NOT EXISTS idx_payment_events_tx ON payment_events(transaction_id);
-  `);
+    )`,
+    "CREATE INDEX IF NOT EXISTS idx_payment_events_tx ON payment_events(transaction_id)",
+  ]) {
+    try {
+      db.exec(stmt);
+    } catch (e) {
+      console.warn("[db] payments schema statement skipped:", (e as Error).message);
+    }
+  }
   for (const col of [
     "ALTER TABLE transactions ADD COLUMN provider TEXT",
     "ALTER TABLE transactions ADD COLUMN provider_ref TEXT",

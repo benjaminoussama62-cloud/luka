@@ -121,8 +121,26 @@ export function currentDbMode() {
   return _dbMode ?? getDbMode();
 }
 
+/**
+ * Runs each schema statement independently. A statement failing against a
+ * drifted production table (e.g. an index on a column added later, or a
+ * CREATE TABLE whose shape changed) must not abort the rest of the schema —
+ * the column migrations below heal the drift.
+ */
+export function applySchemaStatements(db: AyebaDatabase, schema: string) {
+  for (const raw of schema.split(";")) {
+    const stmt = raw.trim();
+    if (!stmt) continue;
+    try {
+      db.exec(stmt);
+    } catch (e) {
+      console.warn("[db] schema statement skipped:", (e as Error).message);
+    }
+  }
+}
+
 function migrate(db: AyebaDatabase) {
-  db.exec(`
+  applySchemaStatements(db, `
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -663,11 +681,23 @@ function migrate(db: AyebaDatabase) {
   migrateOAuthColumns(db);
   migrateSignalColumns(db);
   migrateDeveloperColumns(db);
-  seedCategories(db);
-  seedMlWeights(db);
-  seedOAuthClients(db);
-  applyEnterpriseSchema(db);
-  applyAdminSchema(db);
+  migrateUserRows(db);
+  createIndexes(db);
+  // Seeding and extended schemas are best-effort: a failure must never abort
+  // database initialization (a throw here drops the app to a memory database).
+  for (const step of [
+    seedCategories,
+    seedMlWeights,
+    seedOAuthClients,
+    applyEnterpriseSchema,
+    applyAdminSchema,
+  ]) {
+    try {
+      step(db);
+    } catch (e) {
+      console.warn("[db] init step skipped:", (e as Error).message);
+    }
+  }
 }
 
 function migrateAyebiColumns(db: AyebaDatabase) {
@@ -685,6 +715,11 @@ function migrateAyebiColumns(db: AyebaDatabase) {
 
 function migrateOAuthColumns(db: AyebaDatabase) {
   const alters = [
+    "ALTER TABLE oauth_clients ADD COLUMN client_secret_hash TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE oauth_clients ADD COLUMN description TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE oauth_clients ADD COLUMN logo_url TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE oauth_clients ADD COLUMN client_type TEXT NOT NULL DEFAULT 'confidential'",
+    "ALTER TABLE oauth_clients ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE oauth_clients ADD COLUMN verified INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE oauth_clients ADD COLUMN tier TEXT NOT NULL DEFAULT 'public'",
     "ALTER TABLE oauth_clients ADD COLUMN website_url TEXT NOT NULL DEFAULT ''",
@@ -705,14 +740,112 @@ function migrateOAuthColumns(db: AyebaDatabase) {
   }
 }
 
-/** Developers console: link OAuth clients to projects + granular scopes. */
+/**
+ * users table drift: `role` is in the CREATE but older deployments' tables
+ * lack it — every INSERT naming `role` (logins, registers, upserts) fails.
+ * Also heals NULL/empty names that break upserts and the client shell.
+ */
+function migrateUserRows(db: AyebaDatabase) {
+  try {
+    db.exec("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'contributor'");
+  } catch {
+    /* column exists */
+  }
+  try {
+    db.exec(
+      "UPDATE users SET name = substr(email, 1, instr(email, '@') - 1) WHERE name IS NULL OR trim(name) = ''",
+    );
+  } catch {
+    /* table may not exist yet */
+  }
+}
+
+/**
+ * Developers console: link OAuth clients to projects + granular scopes.
+ * The developer_* tables shipped in an earlier deployment with a different
+ * shape, so every column the code needs is healed here — a missing column
+ * would otherwise break both the console and any index referencing it.
+ */
 function migrateDeveloperColumns(db: AyebaDatabase) {
   const alters = [
     "ALTER TABLE oauth_clients ADD COLUMN project_id TEXT",
     "ALTER TABLE oauth_clients ADD COLUMN scopes TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE developer_projects ADD COLUMN owner_user_id TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE developer_projects ADD COLUMN name TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE developer_projects ADD COLUMN status TEXT NOT NULL DEFAULT 'active'",
+    "ALTER TABLE developer_projects ADD COLUMN created_at TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE developer_api_keys ADD COLUMN project_id TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE developer_api_keys ADD COLUMN owner_user_id TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE developer_api_keys ADD COLUMN name TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE developer_api_keys ADD COLUMN key_prefix TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE developer_api_keys ADD COLUMN key_hash TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE developer_api_keys ADD COLUMN api_scopes TEXT NOT NULL DEFAULT '[\"search\"]'",
+    "ALTER TABLE developer_api_keys ADD COLUMN restrictions_json TEXT NOT NULL DEFAULT '{}'",
+    "ALTER TABLE developer_api_keys ADD COLUMN quota_per_day INTEGER NOT NULL DEFAULT 1000",
+    "ALTER TABLE developer_api_keys ADD COLUMN status TEXT NOT NULL DEFAULT 'active'",
+    "ALTER TABLE developer_api_keys ADD COLUMN created_at TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE developer_api_keys ADD COLUMN last_used_at TEXT",
+    "ALTER TABLE developer_api_logs ADD COLUMN key_id TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE developer_api_logs ADD COLUMN project_id TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE developer_api_logs ADD COLUMN endpoint TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE developer_api_logs ADD COLUMN status_code INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE developer_api_logs ADD COLUMN latency_ms INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE developer_api_logs ADD COLUMN ip TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE developer_api_logs ADD COLUMN created_at TEXT NOT NULL DEFAULT ''",
   ];
   for (const sql of alters) {
     try { db.exec(sql); } catch { /* column exists */ }
+  }
+}
+
+/**
+ * All secondary indexes, created AFTER the column migrations so a drifted
+ * table (missing a column the index references) is healed first. Each index
+ * is optional — a failure is logged, never fatal.
+ */
+function createIndexes(db: AyebaDatabase) {
+  const indexes = [
+    "CREATE INDEX IF NOT EXISTS idx_crawl_domain ON crawl_documents(domain)",
+    "CREATE INDEX IF NOT EXISTS idx_crawl_recrawl ON crawl_documents(recrawl_after)",
+    "CREATE INDEX IF NOT EXISTS idx_queue_status ON crawl_queue(status, priority DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_doclinks_target ON document_links(target_domain, target_url)",
+    "CREATE INDEX IF NOT EXISTS idx_doclinks_source ON document_links(source_domain)",
+    "CREATE INDEX IF NOT EXISTS idx_talk_slug ON ayebi_talk(slug)",
+    "CREATE INDEX IF NOT EXISTS idx_watchlist_user ON ayebi_watchlist(user_id)",
+    "CREATE INDEX IF NOT EXISTS idx_watchlist_slug ON ayebi_watchlist(slug)",
+    "CREATE INDEX IF NOT EXISTS idx_views_slug ON ayebi_page_views(slug)",
+    "CREATE INDEX IF NOT EXISTS idx_flags_slug ON ayebi_flags(slug)",
+    "CREATE INDEX IF NOT EXISTS idx_flags_status ON ayebi_flags(status)",
+    "CREATE INDEX IF NOT EXISTS idx_kg_edges_from ON kg_edges(from_id)",
+    "CREATE INDEX IF NOT EXISTS idx_kg_edges_to ON kg_edges(to_id)",
+    "CREATE INDEX IF NOT EXISTS idx_cache_expires ON cache_store(expires_at)",
+    "CREATE INDEX IF NOT EXISTS idx_history_user ON search_history(user_id, created_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_imp_domain_time ON impression_signals(domain, shown_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_imp_query_domain ON impression_signals(query, domain)",
+    "CREATE INDEX IF NOT EXISTS idx_studio_sites_user ON studio_sites(user_id)",
+    "CREATE INDEX IF NOT EXISTS idx_studio_urls_site ON studio_site_urls(site_id)",
+    "CREATE INDEX IF NOT EXISTS idx_trace_site_time ON trace_events(site_id, created_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_trace_path ON trace_events(site_id, path)",
+    "CREATE INDEX IF NOT EXISTS idx_yield_site_day ON yield_stats_daily(site_id, day DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_velocity_site ON velocity_audits(site_id, created_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_radar_daily_domain ON radar_daily(domain, day DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_oauth_clients_owner ON oauth_clients(owner_user_id)",
+    "CREATE INDEX IF NOT EXISTS idx_oauth_codes_client ON oauth_authorization_codes(client_id, expires_at)",
+    "CREATE INDEX IF NOT EXISTS idx_oauth_tokens_user ON oauth_access_tokens(user_id, client_id)",
+    "CREATE INDEX IF NOT EXISTS idx_oauth_audit_client ON oauth_audit_log(client_id, created_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_oauth_audit_user ON oauth_audit_log(user_id, created_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_dev_projects_owner ON developer_projects(owner_user_id)",
+    "CREATE INDEX IF NOT EXISTS idx_dev_keys_project ON developer_api_keys(project_id)",
+    "CREATE INDEX IF NOT EXISTS idx_dev_keys_owner ON developer_api_keys(owner_user_id)",
+    "CREATE INDEX IF NOT EXISTS idx_dev_logs_project ON developer_api_logs(project_id, created_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_dev_logs_key ON developer_api_logs(key_id, created_at DESC)",
+  ];
+  for (const sql of indexes) {
+    try {
+      db.exec(sql);
+    } catch (e) {
+      console.warn("[db] index skipped:", (e as Error).message);
+    }
   }
 }
 

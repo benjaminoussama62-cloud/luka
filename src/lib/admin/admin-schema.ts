@@ -285,5 +285,13 @@ export function applyAdminSchema(db: { exec(sql: string): unknown }) {
   for (const sql of migrations) {
     try { db.exec(sql); } catch {}
   }
-  db.exec(ADMIN_SCHEMA);
+  for (const raw of ADMIN_SCHEMA.split(";")) {
+    const stmt = raw.trim();
+    if (!stmt) continue;
+    try {
+      db.exec(stmt);
+    } catch (e) {
+      console.warn("[db] admin schema statement skipped:", (e as Error).message);
+    }
+  }
 }

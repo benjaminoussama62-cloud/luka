@@ -3,6 +3,8 @@
  * Multi-tenant, scalable architecture for high-volume ad serving
  */
 
+import type { AyebaDatabase } from "../storage/database";
+
 export const AYEBA_STUDIO_SCHEMA = `
 -- ADVERTISER MANAGEMENT
 CREATE TABLE IF NOT EXISTS advertisers (
@@ -707,8 +709,24 @@ CREATE TABLE IF NOT EXISTS campaign_keywords (
 CREATE INDEX IF NOT EXISTS idx_campaign_keywords ON campaign_keywords(campaign_id);
 `;
 
-export function applyEnterpriseSchema(db: any) {
-  db.exec(AYEBA_STUDIO_SCHEMA);
+/**
+ * Runs each schema statement independently so a statement failing against a
+ * drifted production table does not abort the rest of the schema.
+ */
+function execStatements(db: AyebaDatabase, schema: string) {
+  for (const raw of schema.split(";")) {
+    const stmt = raw.trim();
+    if (!stmt || stmt.startsWith("--") && !stmt.includes("\n")) continue;
+    try {
+      db.exec(stmt);
+    } catch (e) {
+      console.warn("[db] enterprise schema statement skipped:", (e as Error).message);
+    }
+  }
+}
+
+export function applyEnterpriseSchema(db: AyebaDatabase) {
+  execStatements(db, AYEBA_STUDIO_SCHEMA);
   // Column migrations for databases created before these columns existed.
   const migrations = [
     "ALTER TABLE trace_sessions ADD COLUMN gclid TEXT",
