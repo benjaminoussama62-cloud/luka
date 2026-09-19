@@ -9,6 +9,7 @@ const {
   dialog,
   nativeTheme,
 } = require("electron");
+const { autoUpdater } = require("electron-updater");
 const path = require("path");
 const fs = require("fs");
 const { pathToFileURL } = require("url");
@@ -55,7 +56,9 @@ process.on("unhandledRejection", (reason) => {
   log(`unhandledRejection: ${reason?.stack || reason}`);
 });
 
-app.commandLine.appendSwitch("disable-features", "BlockInsecurePrivateNetworkRequests");
+if (process.platform === "win32") {
+  app.commandLine.appendSwitch("enable-transparent-visuals");
+}
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
@@ -81,8 +84,18 @@ const HISTORY_FILE = path.join(DATA_DIR, "history.json");
 const FAV_FILE = path.join(DATA_DIR, "favorites.json");
 const SETTINGS_FILE = path.join(DATA_DIR, "settings.json");
 
-const CHROME_H = 118;
+const CHROME_H = 126;
+
+/** Téléchargements récents (Edge-like flyout). */
+const downloadLog = [];
+
+function pushAllChrome() {
+  for (const state of windows) {
+    if (state.pushChromeState) state.pushChromeState();
+  }
+}
 const windows = new Set();
+const permissionDecisions = new Map();
 
 function ensureData() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -210,16 +223,25 @@ function createBrowserWindow() {
     },
   });
   state.chrome = chrome;
+  chrome.webContents.setBackgroundColor("#00000000");
   win.contentView.addChildView(chrome);
   chrome.webContents.loadURL(CHROME_URL);
 
+  function raiseChrome() {
+    if (win.isDestroyed() || chrome.webContents.isDestroyed()) return;
+    try {
+      win.contentView.removeChildView(chrome);
+      win.contentView.addChildView(chrome);
+    } catch {}
+  }
+
   function layout() {
     const { width, height } = win.getContentBounds();
-    chrome.setBounds({ x: 0, y: 0, width, height: CHROME_H });
-    const tab = state.tabs.find((t) => t.id === state.activeId);
-    if (tab) {
-      tab.view.setBounds({ x: 0, y: CHROME_H, width, height: Math.max(0, height - CHROME_H) });
+    chrome.setBounds({ x: 0, y: 0, width, height });
+    for (const t of state.tabs) {
+      t.view.setBounds({ x: 0, y: CHROME_H, width, height: Math.max(0, height - CHROME_H) });
     }
+    raiseChrome();
   }
 
   function emitChrome(channel, payload) {
@@ -254,7 +276,17 @@ function createBrowserWindow() {
       canGoForward: active ? canForward(active.view.webContents) : false,
       zoomFactor: active && !active.view.webContents.isDestroyed() ? active.view.webContents.getZoomFactor() : 1,
       searchEngine: settings.searchEngine,
-      searchEngines: engineList(),
+      searchEngines: engineList().map(({ id, name }) => ({ id, name })),
+      downloads: downloadLog.slice(0, 12).map((d) => ({
+        id: d.id,
+        filename: d.filename,
+        url: d.url,
+        path: d.path,
+        state: d.state,
+        received: d.received,
+        total: d.total,
+        at: d.at,
+      })),
     });
   }
 
@@ -496,6 +528,11 @@ function createBrowserWindow() {
     "shell:open-downloads": () => {
       shell.openPath(app.getPath("downloads"));
     },
+    "downloads:list": () => downloadLog.slice(0, 20),
+    "downloads:open": (_e, filePath) => {
+      if (typeof filePath === "string" && filePath) shell.openPath(filePath);
+    },
+    "downloads:show-folder": () => shell.openPath(app.getPath("downloads")),
     "shell:open-external": (_e, url) => {
       if (typeof url === "string" && /^https?:/i.test(url)) shell.openExternal(url);
     },
@@ -514,7 +551,7 @@ function createBrowserWindow() {
         buttons: ["OK"],
       });
     },
-    "settings:get": () => ({ ...readSettings(), engines: engineList() }),
+    "settings:get": () => ({ ...readSettings(), engines: engineList().map(({ id, name }) => ({ id, name })) }),
     "settings:set": (_e, patch) => writeSettings(patch || {}),
     "settings:search-url": (_e, query) => {
       const { searchEngine } = readSettings();
@@ -554,6 +591,9 @@ function bindIpc() {
     "history:clear",
     "data:clear",
     "shell:open-downloads",
+    "downloads:list",
+    "downloads:open",
+    "downloads:show-folder",
     "shell:open-external",
     "window:new",
     "app:about",
@@ -578,7 +618,7 @@ function bindIpc() {
       home: HOME_URL,
       searchBase: `${buildSearchUrl("", searchEngine).replace(/=$/, "")}=`,
       searchEngine,
-      engines: engineList(),
+      engines: engineList().map(({ id, name }) => ({ id, name })),
     };
   });
 
@@ -592,8 +632,89 @@ app.whenReady().then(() => {
   log(`ready v${app.getVersion()} userData=${app.getPath("userData")}`);
   ensureData();
   Menu.setApplicationMenu(null);
-  session.defaultSession.setPermissionRequestHandler((_wc, _perm, cb) => cb(false));
+  session.defaultSession.setPermissionRequestHandler(async (webContents, permission, callback, details) => {
+    const requestingUrl = details?.requestingUrl || webContents.getURL();
+    let origin;
+    try {
+      origin = new URL(requestingUrl).origin;
+    } catch {
+      callback(false);
+      return;
+    }
+    if (!origin.startsWith("https://")) {
+      callback(false);
+      return;
+    }
+    const supported = new Set(["media", "geolocation", "notifications", "fullscreen"]);
+    if (!supported.has(permission)) {
+      callback(false);
+      return;
+    }
+    const key = `${origin}:${permission}`;
+    if (permissionDecisions.has(key)) {
+      callback(permissionDecisions.get(key));
+      return;
+    }
+    const result = await dialog.showMessageBox({
+      type: "question",
+      buttons: ["Refuser", "Autoriser"],
+      defaultId: 0,
+      cancelId: 0,
+      title: "Autorisation du site",
+      message: `${new URL(origin).hostname} demande l'accès à ${permission}.`,
+    });
+    const allowed = result.response === 1;
+    permissionDecisions.set(key, allowed);
+    callback(allowed);
+  });
+  session.defaultSession.setPermissionCheckHandler((_webContents, permission, requestingOrigin) => {
+    return permissionDecisions.get(`${requestingOrigin}:${permission}`) === true;
+  });
   bindIpc();
+
+  if (app.isPackaged) {
+    autoUpdater.on("error", (error) => log(`auto-update error: ${error?.message || error}`));
+    autoUpdater.on("update-downloaded", async () => {
+      const result = await dialog.showMessageBox({
+        type: "info",
+        buttons: ["Redémarrer maintenant", "Plus tard"],
+        defaultId: 0,
+        cancelId: 1,
+        title: "Mise à jour AYEBA disponible",
+        message: "La mise à jour est prête à être installée.",
+      });
+      if (result.response === 0) autoUpdater.quitAndInstall();
+    });
+    autoUpdater.checkForUpdatesAndNotify().catch((error) => log(`auto-update check failed: ${error?.message || error}`));
+  }
+
+  session.defaultSession.on("will-download", (_event, item) => {
+    const entry = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      filename: item.getFilename(),
+      url: item.getURL(),
+      path: "",
+      state: "progressing",
+      received: 0,
+      total: item.getTotalBytes(),
+      at: Date.now(),
+    };
+    downloadLog.unshift(entry);
+    if (downloadLog.length > 40) downloadLog.length = 40;
+    item.on("updated", (_e, state) => {
+      entry.state = state;
+      entry.received = item.getReceivedBytes();
+      entry.total = item.getTotalBytes();
+      pushAllChrome();
+    });
+    item.on("done", (_e, state) => {
+      entry.state = state;
+      entry.path = item.getSavePath();
+      entry.received = item.getTotalBytes();
+      pushAllChrome();
+    });
+    pushAllChrome();
+  });
 
   app.on("second-instance", () => {
     log("second-instance → focus existing window");

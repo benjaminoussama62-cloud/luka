@@ -1,6 +1,6 @@
 {
   "name": "ayeba-browser",
-  "version": "1.0.5",
+  "version": "1.0.7",
   "private": true,
   "description": "AYEBA — navigateur et moteur de recherche (Windows)",
   "author": "Ayeba",
@@ -32,9 +32,17 @@
       "package.json"
     ],
     "win": {
-      "target": ["nsis"],
+      "target": [
+        "nsis"
+      ],
       "icon": "assets/icon.ico",
       "artifactName": "AYEBA-Setup-${version}.${ext}"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "benjaminoussama62-cloud",
+      "repo": "luka",
+      "releaseType": "release"
     },
     "nsis": {
       "oneClick": false,
@@ -51,5 +59,8 @@
     "electron": "^37.2.0",
     "electron-builder": "^26.0.12",
     "png-to-ico": "^2.1.8"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.9"
   }
 }

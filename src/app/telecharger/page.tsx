@@ -8,15 +8,15 @@ import { SiteFooter } from "@/components/search/SiteFooter";
 export const metadata: Metadata = {
   title: "Télécharger AYEBA",
   description:
-    "AYEBA Browser pour Windows, AYEBA pour iOS et Android. Navigateur complet, moteur de recherche mondial, Ayebi intégré.",
+    "AYEBA, l'expérience de recherche et de navigation pensée pour le web mondial et l'Afrique centrale.",
   openGraph: {
     title: "Télécharger AYEBA",
-    description: "Windows · App Store · Google Play",
+    description: "Une expérience AYEBA cohérente sur Windows, iOS et Android.",
     url: "https://ayeba.app/telecharger",
   },
 };
 
-const VERSION = process.env.NEXT_PUBLIC_BROWSER_VERSION || "1.0.5";
+const VERSION = process.env.NEXT_PUBLIC_BROWSER_VERSION || "1.0.4";
 const FILENAME = `AYEBA-Setup-${VERSION}.exe`;
 const SETUP_URL =
   process.env.NEXT_PUBLIC_BROWSER_SETUP_URL ||
@@ -28,23 +28,24 @@ const PLAY_STORE_URL =
 
 const APP_STORE_URL =
   process.env.NEXT_PUBLIC_APP_STORE_URL || "https://ayeba.app/?app=1";
+const PORTABLE_URL = process.env.NEXT_PUBLIC_BROWSER_DOWNLOAD_URL;
 
 const FEATURES = [
   {
-    title: "Navigateur complet",
-    body: "Onglets Chromium, favoris, historique, zoom, impression, recherche sur la page — architecture Edge-like pour Windows.",
+    title: "Navigation maîtrisée",
+    body: "Onglets Chromium, favoris, historique, zoom, impression et recherche dans la page réunis dans une interface claire.",
   },
   {
-    title: "Moteur Ayeba intégré",
-    body: "Recherche mondiale par défaut. Google ou Yandex en alternative via Paramètres — Ayebi reste accessible.",
+    title: "Une recherche qui comprend le contexte",
+    body: "Le web mondial, les sources locales et les réponses Ayebi se rencontrent dans une même expérience de recherche.",
   },
   {
-    title: "Ayebi · encyclopédie RDC",
-    body: "Wikipedia congolaise, distincte de Wikipédia mondial. Les deux coexistent dans les résultats.",
+    title: "Le savoir de la RDC au premier plan",
+    body: "Ayebi valorise les connaissances, les lieux, les personnalités et les réalités de la République démocratique du Congo.",
   },
   {
-    title: "Écosystème DevAlpha",
-    body: "Raccourcis Jemsa, Sombateka, Omega, Tala, DevAlpha — accès direct depuis le nouvel onglet.",
+    title: "Un écosystème connecté",
+    body: "Jemsa, Sombateka, Omega, Tala et les services DevAlpha restent accessibles depuis un espace cohérent.",
   },
 ];
 
@@ -65,12 +66,12 @@ export default function TelechargerPage() {
         <main className="flex flex-1 flex-col gap-14">
           {/* Windows */}
           <section className="text-center">
-            <p className="ayeba-kicker ayeba-kicker-accent">Desktop · Windows 10/11</p>
+            <p className="ayeba-kicker ayeba-kicker-accent">Windows 10 et Windows 11</p>
             <h1 className="mt-3 font-[family-name:var(--font-brand)] text-[clamp(2.2rem,7vw,3.2rem)] font-semibold tracking-[-0.04em] text-[var(--ink)]">
               AYEBA Browser
             </h1>
             <p className="mx-auto mt-4 max-w-lg text-[1.02rem] leading-relaxed text-[var(--muted)]">
-              Navigateur natif Chromium — installateur {FILENAME}. Même logique que Chrome, Edge ou Cursor.
+              Une expérience Chromium rapide et stable, conçue pour travailler, découvrir et retrouver le web sans friction.
             </p>
             <a
               href={SETUP_URL}
@@ -79,7 +80,7 @@ export default function TelechargerPage() {
             >
               Télécharger pour Windows
             </a>
-            <p className="mt-3 text-xs text-[var(--faint)]">v{VERSION} · 64 bits · NSIS</p>
+            <p className="mt-3 text-xs text-[var(--faint)]">Version {VERSION} · Windows 64 bits</p>
           </section>
 
           {/* Features */}
@@ -96,11 +97,10 @@ export default function TelechargerPage() {
           <section id="mobile" className="ayeba-panel p-6 sm:p-8">
             <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
               <div className="max-w-md text-left">
-                <p className="ayeba-kicker ayeba-kicker-accent">Mobile</p>
-                <h2 className="mt-2 text-xl font-semibold text-[var(--ink)]">AYEBA pour iOS & Android</h2>
+                <p className="ayeba-kicker ayeba-kicker-accent">Une même signature, partout</p>
+                <h2 className="mt-2 text-xl font-semibold text-[var(--ink)]">AYEBA sur mobile</h2>
                 <p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">
-                  Application native Capacitor — recherche Safari-like, onglets, Ayebi permanent. Moteur au choix
-                  (Ayeba, Google, Yandex).
+                  Une interface pensée pour le tactile, les connexions mobiles et les écrans compacts, avec la même identité et le même accès au web.
                 </p>
               </div>
               <div className="flex flex-col items-center gap-4 sm:items-end">
@@ -142,16 +142,14 @@ export default function TelechargerPage() {
           </section>
 
           <p className="text-center text-xs text-[var(--faint)]">
-            <a
-              href={
-                process.env.NEXT_PUBLIC_BROWSER_DOWNLOAD_URL ||
-                `https://github.com/benjaminoussama62-cloud/luka/releases/latest/download/AYEBA-Portable-${VERSION}.zip`
-              }
-              className="text-[var(--link)] hover:underline"
-            >
-              Archive portable ZIP
-            </a>
-            {" · "}
+            {PORTABLE_URL ? (
+              <>
+                <a href={PORTABLE_URL} className="text-[var(--link)] hover:underline">
+                  Version portable ZIP
+                </a>
+                {" · "}
+              </>
+            ) : null}
             <Link href="/mentions-legales" className="text-[var(--link)] hover:underline">
               Confidentialité
             </Link>
