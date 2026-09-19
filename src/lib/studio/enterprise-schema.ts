@@ -632,8 +632,53 @@ CREATE TABLE IF NOT EXISTS aether_action_history (
 
 CREATE INDEX IF NOT EXISTS idx_aether_actions_site ON aether_action_history(site_id);
 CREATE INDEX IF NOT EXISTS idx_aether_actions_insight ON aether_action_history(insight_id);
+
+-- TRACE ATTRIBUTION (multi-touch)
+CREATE TABLE IF NOT EXISTS attribution_touchpoints (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id TEXT NOT NULL,
+  site_id TEXT NOT NULL,
+  touchpoint_type TEXT NOT NULL DEFAULT 'direct',
+  source TEXT NOT NULL DEFAULT '',
+  medium TEXT NOT NULL DEFAULT '',
+  campaign TEXT NOT NULL DEFAULT '',
+  content TEXT NOT NULL DEFAULT '',
+  term TEXT NOT NULL DEFAULT '',
+  referrer TEXT NOT NULL DEFAULT '',
+  page_url TEXT NOT NULL DEFAULT '',
+  position INTEGER NOT NULL DEFAULT 1,
+  is_conversion INTEGER NOT NULL DEFAULT 0,
+  conversion_value REAL NOT NULL DEFAULT 0,
+  duration_sec INTEGER NOT NULL DEFAULT 0,
+  timestamp TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_attribution_site ON attribution_touchpoints(site_id);
+CREATE INDEX IF NOT EXISTS idx_attribution_session ON attribution_touchpoints(session_id);
+CREATE INDEX IF NOT EXISTS idx_attribution_timestamp ON attribution_touchpoints(timestamp DESC);
 `;
 
 export function applyEnterpriseSchema(db: any) {
   db.exec(AYEBA_STUDIO_SCHEMA);
+  // Column migrations for databases created before these columns existed.
+  const migrations = [
+    "ALTER TABLE trace_sessions ADD COLUMN gclid TEXT",
+    "ALTER TABLE trace_sessions ADD COLUMN fbclid TEXT",
+    "ALTER TABLE trace_sessions ADD COLUMN is_first_visit INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE trace_sessions ADD COLUMN session_quality REAL NOT NULL DEFAULT 0",
+    "ALTER TABLE trace_sessions ADD COLUMN ad_blocker INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE trace_sessions ADD COLUMN javascript_enabled INTEGER NOT NULL DEFAULT 1",
+    "ALTER TABLE trace_sessions ADD COLUMN cookies_enabled INTEGER NOT NULL DEFAULT 1",
+    "ALTER TABLE trace_sessions ADD COLUMN screen_resolution TEXT",
+    "ALTER TABLE trace_sessions ADD COLUMN language TEXT",
+    "ALTER TABLE trace_sessions ADD COLUMN timezone TEXT",
+    "ALTER TABLE trace_sessions ADD COLUMN user_agent TEXT",
+    "ALTER TABLE trace_events_enhanced ADD COLUMN custom_dimensions TEXT NOT NULL DEFAULT '{}'",
+    "ALTER TABLE velocity_metrics_detailed ADD COLUMN form_factor TEXT",
+    "ALTER TABLE velocity_metrics_detailed ADD COLUMN scores TEXT NOT NULL DEFAULT '{}'",
+    "ALTER TABLE velocity_metrics_detailed ADD COLUMN audits TEXT NOT NULL DEFAULT '[]'",
+  ];
+  for (const sql of migrations) {
+    try { db.exec(sql); } catch { /* column already exists */ }
+  }
 }

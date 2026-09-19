@@ -46,9 +46,9 @@ export class RadarEnterpriseV2 {
     const stats = db
       .prepare(
         `SELECT SUM(clicks) as clicks, SUM(impressions) as impressions,
-                SUM(position_sum) / SUM(position_count) as avg_pos,
-                SUM(CASE WHEN position < 4 THEN clicks ELSE 0 END) as top3_clicks,
-                SUM(CASE WHEN position < 4 THEN impressions ELSE 0 END) as top3_impressions
+                CAST(SUM(position_sum) AS REAL) / NULLIF(SUM(position_count), 0) as avg_pos,
+                SUM(CASE WHEN position_count > 0 AND position_sum * 1.0 / position_count < 4 THEN clicks ELSE 0 END) as top3_clicks,
+                SUM(CASE WHEN position_count > 0 AND position_sum * 1.0 / position_count < 4 THEN impressions ELSE 0 END) as top3_impressions
          FROM radar_daily
          WHERE domain = ? AND day >= ?`,
       )
@@ -146,9 +146,9 @@ export class RadarEnterpriseV2 {
     const stats = db
       .prepare(
         `SELECT SUM(clicks) as clicks, SUM(impressions) as impressions,
-                AVG(position) as avg_position,
-                MIN(position) as best_position,
-                MAX(position) as worst_position
+                CAST(SUM(position_sum) AS REAL) / NULLIF(SUM(position_count), 0) as avg_position,
+                MIN(CASE WHEN position_count > 0 THEN position_sum * 1.0 / position_count END) as best_position,
+                MAX(CASE WHEN position_count > 0 THEN position_sum * 1.0 / position_count END) as worst_position
          FROM radar_daily
          WHERE url = ? AND day >= ?`,
       )
@@ -437,9 +437,9 @@ export class RadarEnterpriseV2 {
         `SELECT query,
                 SUM(clicks) as clicks,
                 SUM(impressions) as impressions,
-                SUM(position_sum) / SUM(position_count) as avg_pos,
-                SUM(CASE WHEN position < 4 THEN clicks ELSE 0 END) as top3_clicks,
-                SUM(CASE WHEN position < 4 THEN impressions ELSE 0 END) as top3_impressions
+                CAST(SUM(position_sum) AS REAL) / NULLIF(SUM(position_count), 0) as avg_pos,
+                SUM(CASE WHEN position_count > 0 AND position_sum * 1.0 / position_count < 4 THEN clicks ELSE 0 END) as top3_clicks,
+                SUM(CASE WHEN position_count > 0 AND position_sum * 1.0 / position_count < 4 THEN impressions ELSE 0 END) as top3_impressions
          FROM radar_daily
          WHERE domain = ? AND day >= ? AND query != ''
          GROUP BY query

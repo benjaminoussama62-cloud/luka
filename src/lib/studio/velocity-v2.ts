@@ -507,16 +507,19 @@ export class VelocityEnterpriseV2 {
     const now = new Date().toISOString();
 
     db.prepare(
-      `INSERT INTO velocity_audits (
-        id, site_id, url, timestamp, form_factor, scores, metrics,
-        audits, opportunities, diagnostics, passed_audits, failed_audits, warnings
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO velocity_metrics_detailed (
+        id, site_id, url, timestamp, form_factor, overall_score, performance_score,
+        scores, metrics, audits, opportunities, diagnostics,
+        passed_audits, failed_audits, warnings
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       auditId,
       siteId,
       url,
       now,
-      results.scores.formFactor,
+      results.scores.formFactor ?? null,
+      results.scores.overall ?? 0,
+      results.scores.performance ?? null,
       JSON.stringify(results.scores),
       JSON.stringify(results.metrics),
       JSON.stringify(results.audits),
@@ -565,7 +568,7 @@ export class VelocityEnterpriseV2 {
     const rows = db
       .prepare(
         `SELECT id, url, timestamp, scores, metrics
-         FROM velocity_audits
+         FROM velocity_metrics_detailed
          ${whereClause}
          ORDER BY timestamp DESC`,
       )

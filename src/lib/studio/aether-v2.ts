@@ -63,7 +63,7 @@ export class AetherEnterpriseV2 {
     // Gather data from all services with ML analysis
     const radarData = radarEnterpriseV2.getOverview(site.id, site.domain);
     const traceData = traceEnterpriseV2.getRealTimeAnalytics(site.id, 30);
-    const yieldData = this.getYieldOverview(site.id);
+    const yieldData = this.getYieldOverview(site.id, site.domain);
     const velocityData = velocityEnterpriseV2.getOverview(site.id);
 
     // Calculate health score with ML weighting
@@ -895,14 +895,14 @@ export class AetherEnterpriseV2 {
   /**
    * Get Yield overview
    */
-  private getYieldOverview(siteId: string): any {
+  private getYieldOverview(siteId: string, domain: string): any {
     const db = getDb();
     const overview = db
       .prepare(
         `SELECT * FROM publisher_sites
-         WHERE site_id = ? AND status = 'active'`,
+         WHERE domain = ? AND status = 'active'`,
       )
-      .get(siteId) as any;
+      .get(domain) as any;
 
     if (!overview) {
       return { enabled: false };

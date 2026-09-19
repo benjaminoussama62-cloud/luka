@@ -335,12 +335,12 @@ export class TraceEnterpriseV2 {
          ORDER BY views DESC
          LIMIT 10`,
       )
-      .all(siteId, since, siteId, since) as Array<any>;
+      .all(since, siteId, since) as Array<any>;
 
     // Top referrers with type classification
     const topReferrers = db
       .prepare(
-        `SELECT referrer, COUNT(DISTINCT session_id) as sessions, COUNT(*) as views
+        `SELECT referrer, COUNT(DISTINCT id) as sessions, COUNT(*) as views
          FROM trace_sessions
          WHERE site_id = ? AND started_at >= ? AND referrer != ''
          GROUP BY referrer
@@ -531,10 +531,10 @@ export class TraceEnterpriseV2 {
     // Traffic forecast based on historical patterns
     const hourlyPattern = db
       .prepare(
-        `SELECT EXTRACT(HOUR FROM started_at) as hour, COUNT(*) as sessions
+        `SELECT CAST(strftime('%H', started_at) AS INTEGER) as hour, COUNT(*) as sessions
          FROM trace_sessions
          WHERE site_id = ? AND started_at >= ?
-         GROUP BY EXTRACT(HOUR FROM started_at)
+         GROUP BY strftime('%H', started_at)
          ORDER BY hour`,
       )
       .get(siteId, new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()) as { hour: number; sessions: number };
@@ -544,10 +544,10 @@ export class TraceEnterpriseV2 {
     // Peak hours detection
     const peakHours = db
       .prepare(
-        `SELECT EXTRACT(HOUR FROM started_at) as hour, COUNT(*) as sessions
+        `SELECT CAST(strftime('%H', started_at) AS INTEGER) as hour, COUNT(*) as sessions
          FROM trace_sessions
          WHERE site_id = ? AND started_at >= ?
-         GROUP BY EXTRACT(HOUR FROM started_at)
+         GROUP BY strftime('%H', started_at)
          ORDER BY sessions DESC
          LIMIT 3`,
       )
@@ -734,7 +734,7 @@ export class TraceEnterpriseV2 {
 
       const cohortUsers = db
         .prepare(
-          `SELECT COUNT(DISTINCT session_id) as c
+          `SELECT COUNT(DISTINCT id) as c
            FROM trace_sessions
            WHERE site_id = ? AND started_at >= ? AND started_at <= ?`,
         )
@@ -748,7 +748,7 @@ export class TraceEnterpriseV2 {
 
         const returningUsers = db
           .prepare(
-            `SELECT COUNT(DISTINCT s1.session_id) as c
+            `SELECT COUNT(DISTINCT s1.id) as c
              FROM trace_sessions s1
              JOIN trace_sessions s2 ON s1.user_id = s2.user_id
              WHERE s1.site_id = ? AND s1.started_at >= ? AND s1.started_at <= ?
