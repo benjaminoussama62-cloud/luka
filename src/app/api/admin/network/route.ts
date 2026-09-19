@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/admin/auth";
+import { requireSection } from "@/lib/admin/auth";
 import { getDb } from "@/lib/storage/database";
 import { SISTER_AD_APPS } from "@/lib/ads/sister-access";
 
@@ -7,7 +7,7 @@ export const runtime = "nodejs";
 
 /** GET /api/admin/network — Yield ad network: advertisers, publishers, campaigns, requests. */
 export async function GET() {
-  const auth = await requireAdmin();
+  const auth = await requireSection("network");
   if (auth instanceof NextResponse) return auth;
 
   const db = getDb();

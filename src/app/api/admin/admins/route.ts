@@ -1,5 +1,7 @@
+import { randomBytes, randomUUID } from "node:crypto";
+import bcrypt from "bcryptjs";
 import { NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/admin/auth";
+import { requireSection } from "@/lib/admin/auth";
 import { adminCore } from "@/lib/admin/admin-core";
 import { getDb } from "@/lib/storage/database";
 import type { AdminRole } from "@/lib/admin/admin-types";
@@ -14,7 +16,7 @@ function isSuperAdmin(admin: { role: string } | null) {
 
 /** GET /api/admin/admins — list admin team (super_admin only). */
 export async function GET() {
-  const auth = await requireAdmin();
+  const auth = await requireSection("team");
   if (auth instanceof NextResponse) return auth;
 
   const { users } = adminCore.listAdminUsers({ limit: 200 });
@@ -28,12 +30,9 @@ export async function GET() {
  * { action: "delete", id }
  */
 export async function POST(req: Request) {
-  const auth = await requireAdmin();
+  const auth = await requireSection("team");
   if (auth instanceof NextResponse) return auth;
-  if (!auth.admin) {
-    return NextResponse.json({ error: "compte admin non provisionné" }, { status: 409 });
-  }
-  if (!isSuperAdmin(auth.admin)) {
+  if (!auth.admin || !isSuperAdmin(auth.admin)) {
     return NextResponse.json({ error: "Réservé au super_admin" }, { status: 403 });
   }
 
@@ -52,26 +51,41 @@ export async function POST(req: Request) {
     if (!email || !role || !ROLES.includes(role as AdminRole)) {
       return NextResponse.json({ error: "email et rôle valide requis" }, { status: 400 });
     }
-    const user = getDb()
+    const db = getDb();
+    const cleanEmail = email.trim().toLowerCase();
+    const now = new Date().toISOString();
+
+    // The super_admin hands the password to the person — a fresh one is
+    // generated on every provisioning (existing passwords are replaced).
+    const temporaryPassword = `Ayeba-${randomBytes(9).toString("base64url")}!${randomBytes(2).toString("hex")}`;
+    const hash = bcrypt.hashSync(temporaryPassword, 12);
+
+    let user = db
       .prepare("SELECT id, name FROM users WHERE email = ?")
-      .get(email.trim().toLowerCase()) as { id: string; name: string } | undefined;
+      .get(cleanEmail) as { id: string; name: string } | undefined;
     if (!user) {
-      return NextResponse.json(
-        { error: "Aucun compte utilisateur avec cet email — la personne doit d'abord créer un compte Ayeba" },
-        { status: 409 },
-      );
+      const uid = randomUUID();
+      db.prepare(
+        `INSERT INTO users (id, name, email, password_hash, avatar_color, provider, role, created_at)
+         VALUES (?, ?, ?, ?, '#e85d04', 'email', 'contributor', ?)`,
+      ).run(uid, name?.trim() || cleanEmail.split("@")[0], cleanEmail, hash, now);
+      user = { id: uid, name: name?.trim() || cleanEmail.split("@")[0] };
+    } else {
+      db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(hash, user.id);
     }
+
     if (adminCore.getAdminByUserId(user.id)) {
       return NextResponse.json({ error: "Cet utilisateur est déjà admin" }, { status: 409 });
     }
     const created = adminCore.createAdminUser({
       userId: user.id,
       name: name?.trim() || user.name,
-      email: email.trim().toLowerCase(),
+      email: cleanEmail,
       role: role as AdminRole,
       departments: departments ?? [],
     });
-    return NextResponse.json({ ok: true, admin: created });
+    // Returned once — the super_admin transmits it to the new admin.
+    return NextResponse.json({ ok: true, admin: created, temporaryPassword });
   }
 
   if (!id || typeof id !== "string") {

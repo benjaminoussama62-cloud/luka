@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/admin/auth";
+import { requireSection } from "@/lib/admin/auth";
 import { adminCore } from "@/lib/admin/admin-core";
 
 export const runtime = "nodejs";
 
 /** GET /api/admin/audit — audit trail, active alerts, pending tasks. */
 export async function GET(req: Request) {
-  const auth = await requireAdmin();
+  const auth = await requireSection("audit");
   if (auth instanceof NextResponse) return auth;
 
   const url = new URL(req.url);
@@ -29,7 +29,7 @@ export async function GET(req: Request) {
  * { action: "resolve_alert"|"process_task", id }
  */
 export async function POST(req: Request) {
-  const auth = await requireAdmin();
+  const auth = await requireSection("audit");
   if (auth instanceof NextResponse) return auth;
   if (!auth.admin) {
     return NextResponse.json({ error: "compte admin non provisionné" }, { status: 409 });

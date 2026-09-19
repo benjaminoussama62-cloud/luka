@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/admin/auth";
+import { requireSection } from "@/lib/admin/auth";
 import { getDb } from "@/lib/storage/database";
 
 export const runtime = "nodejs";
@@ -8,7 +8,7 @@ export const runtime = "nodejs";
  * GET /api/admin/content — Ayebi encyclopedia, Studio sites, OAuth clients.
  */
 export async function GET() {
-  const auth = await requireAdmin();
+  const auth = await requireSection("content");
   if (auth instanceof NextResponse) return auth;
 
   const db = getDb();

@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/admin/auth";
+import { hasAdminPermission, requireSection } from "@/lib/admin/auth";
 import { moderationSystem } from "@/lib/admin/moderation-system";
 
 export const runtime = "nodejs";
 
 /** GET /api/admin/moderation?status=&type= — moderation queue + stats. */
 export async function GET(req: Request) {
-  const auth = await requireAdmin();
+  const auth = await requireSection("moderation");
   if (auth instanceof NextResponse) return auth;
 
   const url = new URL(req.url);
@@ -23,7 +23,7 @@ export async function GET(req: Request) {
  * { action: "approve"|"reject"|"under_review", itemId, notes? }
  */
 export async function POST(req: Request) {
-  const auth = await requireAdmin();
+  const auth = await requireSection("moderation");
   if (auth instanceof NextResponse) return auth;
   if (!auth.admin) {
     return NextResponse.json({ error: "compte admin non provisionné" }, { status: 409 });
@@ -38,6 +38,18 @@ export async function POST(req: Request) {
   };
   if (!itemId || typeof itemId !== "string") {
     return NextResponse.json({ error: "itemId requis" }, { status: 400 });
+  }
+
+  const permFor =
+    action === "approve" ? "moderation.approve" :
+    action === "reject" ? "moderation.reject" :
+    action === "under_review" ? "moderation.view" : null;
+  if (!permFor) {
+    return NextResponse.json({ error: "action invalide" }, { status: 400 });
+  }
+  if (!hasAdminPermission(auth.admin, auth.envListed, permFor) &&
+      !hasAdminPermission(auth.admin, auth.envListed, "moderation.all")) {
+    return NextResponse.json({ error: "Permission insuffisante" }, { status: 403 });
   }
 
   let item;

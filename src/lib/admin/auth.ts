@@ -6,7 +6,7 @@
 import { NextResponse } from "next/server";
 import { getSessionFromCookies, type SessionUser } from "@/lib/auth-server";
 import { getDb } from "@/lib/storage/database";
-import type { AdminUser } from "./admin-types";
+import type { AdminRole, AdminUser } from "./admin-types";
 
 export function adminEmails(): Set<string> {
   return new Set(
@@ -58,4 +58,70 @@ export async function requireAdmin(): Promise<
     return NextResponse.json({ error: "Accès réservé aux administrateurs" }, { status: 403 });
   }
   return { user, admin };
+}
+
+/* ---------- section-level authorization ---------- */
+
+export type AdminSection =
+  | "overview"
+  | "users"
+  | "moderation"
+  | "support"
+  | "billing"
+  | "network"
+  | "content"
+  | "audit"
+  | "team"
+  | "chat";
+
+/** Which back-office sections each role may open. super_admin sees all. */
+export const SECTION_ROLES: Record<AdminSection, AdminRole[]> = {
+  overview: ["super_admin", "manager", "support", "moderator", "analyst"],
+  users: ["super_admin"],
+  moderation: ["super_admin", "manager", "moderator", "support"],
+  support: ["super_admin", "manager", "support"],
+  billing: ["super_admin", "manager"],
+  network: ["super_admin", "manager"],
+  content: ["super_admin", "manager", "moderator"],
+  audit: ["super_admin"],
+  team: ["super_admin"],
+  chat: ["super_admin", "manager", "support", "moderator", "analyst"],
+};
+
+/** Effective role: provisioned admin role, or super_admin for env-listed admins. */
+function effectiveRole(admin: AdminUser | null, envListed: boolean): AdminRole | null {
+  if (admin) return admin.role;
+  return envListed ? "super_admin" : null;
+}
+
+export function canAccessSection(admin: AdminUser | null, envListed: boolean, section: AdminSection): boolean {
+  const role = effectiveRole(admin, envListed);
+  return role !== null && SECTION_ROLES[section].includes(role);
+}
+
+/** Sections visible to this admin — drives the sidebar. */
+export function allowedSections(admin: AdminUser | null, envListed: boolean): AdminSection[] {
+  return (Object.keys(SECTION_ROLES) as AdminSection[]).filter((s) =>
+    canAccessSection(admin, envListed, s),
+  );
+}
+
+/** True when the admin may perform write actions (approve/reject/reply). */
+export function hasAdminPermission(admin: AdminUser | null, envListed: boolean, permission: string): boolean {
+  if (envListed && !admin) return true; // env-listed = super_admin
+  if (!admin) return false;
+  return admin.permissions.includes("all") || admin.permissions.includes(permission);
+}
+
+/** requireAdmin + section authorization. Returns auth or an error response. */
+export async function requireSection(
+  section: AdminSection,
+): Promise<{ user: SessionUser; admin: AdminUser | null; envListed: boolean } | NextResponse> {
+  const auth = await requireAdmin();
+  if (auth instanceof NextResponse) return auth;
+  const envListed = isAdminEmail(auth.user.email);
+  if (!canAccessSection(auth.admin, envListed, section)) {
+    return NextResponse.json({ error: "Section non autorisée pour ton rôle" }, { status: 403 });
+  }
+  return { ...auth, envListed };
 }

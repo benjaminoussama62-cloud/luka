@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/admin/auth";
+import { requireSection } from "@/lib/admin/auth";
 import { adminCore } from "@/lib/admin/admin-core";
 import { getDb } from "@/lib/storage/database";
 
@@ -7,7 +7,7 @@ export const runtime = "nodejs";
 
 /** GET /api/admin/billing — financial overview + invoices + transactions. */
 export async function GET() {
-  const auth = await requireAdmin();
+  const auth = await requireSection("billing");
   if (auth instanceof NextResponse) return auth;
 
   const db = getDb();

@@ -169,6 +169,18 @@ CREATE TABLE IF NOT EXISTS admin_notifications (
 CREATE INDEX IF NOT EXISTS idx_notifications_admin ON admin_notifications(admin_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_read ON admin_notifications(read);
 CREATE INDEX IF NOT EXISTS idx_notifications_created ON admin_notifications(created_at DESC);
+
+-- ADMIN TEAM CHAT (Rocket.Chat-style internal messaging)
+CREATE TABLE IF NOT EXISTS admin_chat_messages (
+  id TEXT PRIMARY KEY,
+  channel TEXT NOT NULL,
+  admin_id TEXT NOT NULL,
+  admin_name TEXT NOT NULL,
+  message TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_chat_channel ON admin_chat_messages(channel, created_at);
 `;
 
 export function applyAdminSchema(db: { exec(sql: string): unknown }) {

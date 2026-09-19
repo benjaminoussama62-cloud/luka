@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/admin/auth";
+import { requireSection } from "@/lib/admin/auth";
 import { adminDashboard } from "@/lib/admin/admin-dashboard";
 import type { AdminUser } from "@/lib/admin/admin-types";
 
@@ -7,7 +7,7 @@ export const runtime = "nodejs";
 
 /** GET /api/admin/dashboard — aggregated back-office dashboard. */
 export async function GET() {
-  const auth = await requireAdmin();
+  const auth = await requireSection("overview");
   if (auth instanceof NextResponse) return auth;
 
   const admin: AdminUser =

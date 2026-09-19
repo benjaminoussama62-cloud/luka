@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 /* ---------- types ---------- */
 
@@ -29,7 +29,8 @@ type Tab =
   | "network"
   | "content"
   | "audit"
-  | "team";
+  | "team"
+  | "chat";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "Vue d'ensemble" },
@@ -41,6 +42,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "content", label: "Contenu & accès" },
   { id: "audit", label: "Journal & alertes" },
   { id: "team", label: "Équipe admin" },
+  { id: "chat", label: "Chat équipe" },
 ];
 
 /* ---------- helpers ---------- */
@@ -157,12 +159,15 @@ export function AdminConsole({
   adminName,
   adminEmail,
   adminRole,
+  sections,
 }: {
   adminName: string;
   adminEmail: string;
   adminRole: string;
+  sections: string[];
 }) {
-  const [tab, setTab] = useState<Tab>("overview");
+  const visibleTabs = TABS.filter((t) => sections.includes(t.id));
+  const [tab, setTab] = useState<Tab>((visibleTabs[0]?.id ?? "overview") as Tab);
   const [dash, setDash] = useState<Dashboard | null>(null);
   const [data, setData] = useState<Row>({});
   const [busy, setBusy] = useState(false);
@@ -174,6 +179,15 @@ export function AdminConsole({
   const [userQuery, setUserQuery] = useState("");
   const [newAdminEmail, setNewAdminEmail] = useState("");
   const [newAdminRole, setNewAdminRole] = useState("support");
+  const [newAdminPassword, setNewAdminPassword] = useState<string | null>(null);
+
+  // chat state
+  const [chatChannel, setChatChannel] = useState("team");
+  const [chatMessages, setChatMessages] = useState<Row[]>([]);
+  const [chatMembers, setChatMembers] = useState<Row[]>([]);
+  const [chatMe, setChatMe] = useState("");
+  const [chatInput, setChatInput] = useState("");
+  const chatLastTs = useRef("");
 
   const flash = (m: string) => {
     setNotice(m);
@@ -209,6 +223,32 @@ export function AdminConsole({
     return () => clearTimeout(id);
   }, [tab, loadTab]);
 
+  // Poll chat messages while the chat tab is open (serverless-safe: no websockets).
+  useEffect(() => {
+    if (tab !== "chat") return;
+    let alive = true;
+    const channelParam = (c: string) =>
+      c === "team" ? "team" : `dm:${[chatMe, c].sort().join(":")}`;
+    const pull = async (after?: string) => {
+      const d = await api<{
+        messages: Row[]; members: Row[]; me: string;
+      }>(`/api/admin/chat?channel=${encodeURIComponent(channelParam(chatChannel))}${after ? `&after=${encodeURIComponent(after)}` : ""}`);
+      if (!d || !alive) return;
+      setChatMe(d.me);
+      setChatMembers(d.members);
+      setChatMessages((prev) => (after ? [...prev, ...d.messages] : d.messages));
+      const newest = d.messages[d.messages.length - 1];
+      if (newest) chatLastTs.current = String(newest.created_at);
+    };
+    chatLastTs.current = "";
+    void Promise.resolve().then(() => pull());
+    const iv = setInterval(() => {
+      void pull(chatLastTs.current || undefined);
+    }, 4000);
+    return () => { alive = false; clearInterval(iv); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, chatChannel]);
+
   const act = async (path: string, body: Row, okMsg: string) => {
     const res = await post(path, body);
     if (res) {
@@ -237,7 +277,7 @@ export function AdminConsole({
           <h1 className="text-lg font-semibold">Back Office</h1>
         </div>
         <nav className="flex-1 space-y-1">
-          {TABS.map((t) => (
+          {visibleTabs.map((t) => (
             <button
               key={t.id}
               onClick={() => { setTab(t.id); setTicket(null); }}
@@ -638,8 +678,21 @@ export function AdminConsole({
                 onSubmit={(e) => {
                   e.preventDefault();
                   if (!newAdminEmail.trim()) return;
-                  void act("/api/admin/admins", { action: "create", email: newAdminEmail.trim(), role: newAdminRole }, "Admin ajouté");
-                  setNewAdminEmail("");
+                  void (async () => {
+                    const res = await post("/api/admin/admins", {
+                      action: "create",
+                      email: newAdminEmail.trim(),
+                      role: newAdminRole,
+                    });
+                    if (res) {
+                      setNewAdminPassword((res.temporaryPassword as string) ?? null);
+                      flash("Admin ajouté");
+                      setNewAdminEmail("");
+                      await loadTab("team");
+                    } else {
+                      flash("Échec — email invalide, déjà admin, ou droits insuffisants");
+                    }
+                  })();
                 }}
               >
                 <input
@@ -660,7 +713,17 @@ export function AdminConsole({
                 </select>
                 <Btn onClick={() => undefined}>Ajouter</Btn>
               </form>
-              <p className="mt-2 text-xs opacity-50">La personne doit avoir un compte Ayeba existant. Le rôle super_admin donne toutes les permissions.</p>
+              {newAdminPassword ? (
+                <div
+                  className="mt-3 rounded-lg p-3 text-sm"
+                  style={{ background: "rgba(34,197,94,0.10)", border: "1px solid #22c55e55" }}
+                >
+                  <p className="font-medium">Mot de passe provisoire (affiché une seule fois) :</p>
+                  <p className="mt-1 select-all font-mono">{newAdminPassword}</p>
+                  <p className="mt-1 text-xs opacity-60">Transmets-le à la personne — il ne sera plus visible après fermeture.</p>
+                </div>
+              ) : null}
+              <p className="mt-2 text-xs opacity-50">Un compte est créé si nécessaire ; un mot de passe provisoire est généré à chaque ajout. Le rôle super_admin donne toutes les permissions.</p>
             </div>
             <div className="ayeba-panel p-4">
               <p className="ayeba-kicker mb-3">Administrateurs</p>
@@ -690,6 +753,97 @@ export function AdminConsole({
                 ])}
                 empty="Aucun administrateur"
               />
+            </div>
+          </section>
+        )}
+
+        {tab === "chat" && (
+          <section className="space-y-4">
+            <header>
+              <h2 className="text-xl font-semibold">Chat équipe</h2>
+              <p className="text-sm opacity-60">Messagerie interne des administrateurs — canal équipe et messages directs</p>
+            </header>
+            <div className="grid gap-4 lg:grid-cols-[220px_1fr]">
+              <div className="ayeba-panel p-3">
+                <p className="ayeba-kicker mb-2">Canaux</p>
+                <button
+                  onClick={() => setChatChannel("team")}
+                  className="mb-1 w-full rounded-lg px-3 py-2 text-left text-sm"
+                  style={chatChannel === "team" ? { background: "rgba(232,93,4,0.16)" } : { opacity: 0.7 }}
+                >
+                  # équipe
+                </button>
+                <p className="ayeba-kicker mb-2 mt-4">Messages directs</p>
+                {chatMembers.filter((m) => m.id !== chatMe).map((m) => (
+                  <button
+                    key={s(m.id)}
+                    onClick={() => setChatChannel(s(m.id))}
+                    className="mb-1 w-full rounded-lg px-3 py-2 text-left text-sm"
+                    style={chatChannel === m.id ? { background: "rgba(232,93,4,0.16)" } : { opacity: 0.7 }}
+                  >
+                    {s(m.name)} <span className="text-xs opacity-50">· {s(m.role)}</span>
+                  </button>
+                ))}
+                {chatMembers.filter((m) => m.id !== chatMe).length === 0 && (
+                  <p className="px-3 py-2 text-xs opacity-50">Aucun autre admin</p>
+                )}
+              </div>
+              <div className="ayeba-panel flex flex-col p-4" style={{ minHeight: 420 }}>
+                <div className="mb-3 border-b pb-2 text-sm font-medium" style={{ borderColor: "var(--line)" }}>
+                  {chatChannel === "team"
+                    ? "# équipe"
+                    : `@ ${s(chatMembers.find((m) => m.id === chatChannel)?.name, "…")}`}
+                </div>
+                <div className="flex-1 space-y-2 overflow-y-auto" style={{ maxHeight: 380 }}>
+                  {chatMessages.length === 0 && (
+                    <p className="py-8 text-center text-sm opacity-50">Aucun message — lance la conversation.</p>
+                  )}
+                  {chatMessages.map((m) => {
+                    const mine = m.admin_id === chatMe;
+                    return (
+                      <div key={s(m.id)} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
+                        <div
+                          className="max-w-[75%] rounded-xl px-3 py-2 text-sm"
+                          style={{
+                            background: mine ? "rgba(232,93,4,0.18)" : "rgba(255,255,255,0.05)",
+                            border: `1px solid ${mine ? "#e85d0433" : "var(--line)"}`,
+                          }}
+                        >
+                          {!mine && <p className="text-xs font-medium opacity-60">{s(m.admin_name)}</p>}
+                          <p>{s(m.message)}</p>
+                          <p className="mt-0.5 text-right text-[10px] opacity-40">{dt(m.created_at)}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <form
+                  className="mt-3 flex gap-2"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const msg = chatInput.trim();
+                    if (!msg) return;
+                    setChatInput("");
+                    void (async () => {
+                      const res = await post("/api/admin/chat", {
+                        to: chatChannel === "team" ? "team" : chatChannel,
+                        message: msg,
+                      }) as { message?: Row } | null;
+                      if (res?.message) setChatMessages((prev) => [...prev, res.message as Row]);
+                      else flash("Envoi échoué");
+                    })();
+                  }}
+                >
+                  <input
+                    className="ayeba-input flex-1"
+                    placeholder="Message…"
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    maxLength={2000}
+                  />
+                  <Btn onClick={() => undefined}>Envoyer</Btn>
+                </form>
+              </div>
             </div>
           </section>
         )}

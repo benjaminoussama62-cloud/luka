@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/admin/auth";
+import { requireSection } from "@/lib/admin/auth";
 import { getDb } from "@/lib/storage/database";
 
 export const runtime = "nodejs";
 
 /** GET /api/admin/users?q=&limit= — user accounts + aggregates. */
 export async function GET(req: Request) {
-  const auth = await requireAdmin();
+  const auth = await requireSection("users");
   if (auth instanceof NextResponse) return auth;
 
   const url = new URL(req.url);

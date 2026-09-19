@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getSessionFromCookies } from "@/lib/auth-server";
-import { getAdminByUserId, isAdminEmail } from "@/lib/admin/auth";
+import { allowedSections, getAdminByUserId, isAdminEmail } from "@/lib/admin/auth";
 import { AdminConsole } from "@/components/admin/AdminConsole";
 
 export const dynamic = "force-dynamic";
@@ -30,6 +30,7 @@ export default async function AdminPage() {
       adminName={admin?.name ?? user.name}
       adminEmail={admin?.email ?? user.email}
       adminRole={admin?.role ?? "super_admin"}
+      sections={allowedSections(admin, isAdminEmail(user.email))}
     />
   );
 }
