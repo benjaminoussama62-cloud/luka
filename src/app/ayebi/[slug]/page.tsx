@@ -3,6 +3,7 @@ import { AyebiStage } from "@/components/ayebi/AyebiStage";
 import { AYEBI_ARTICLES, getRelatedArticles } from "@/lib/ayebi";
 import { getAyebiArticleEnriched, getStoredArticle } from "@/lib/ayebi/server";
 import { getSessionFromCookies } from "@/lib/auth-server";
+import { authorFromSession } from "@/lib/ayebi/author";
 import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";
@@ -30,6 +31,8 @@ export default async function AyebiArticlePage({ params }: { params: Promise<{ s
   ]);
   if (!article) notFound();
 
+  const author = session ? authorFromSession(session) : null;
+
   return (
     <>
       <AyebiStage />
@@ -37,12 +40,19 @@ export default async function AyebiArticlePage({ params }: { params: Promise<{ s
         article={article}
         related={getRelatedArticles(slug)}
         canEdit={Boolean(session)}
+        isAdmin={author?.role === "admin"}
         meta={
           stored
             ? {
                 revision: stored.revision,
                 updatedByName: stored.updatedByName,
                 updatedAt: stored.updatedAt,
+                protection: stored.protection,
+                stub: stored.stub,
+                viewCount: stored.viewCount,
+                contributorCount: stored.contributorCount,
+                createdByName: stored.createdByName,
+                createdAt: stored.createdAt,
               }
             : null
         }

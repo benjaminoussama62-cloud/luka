@@ -21,6 +21,9 @@ export function AyebiWikiBar() {
           <Link href="/ayebi/recent" className="ayeba-wiki-bar-link">
             Modifications récentes
           </Link>
+          <Link href="/ayebi/recherche" className="ayeba-wiki-bar-link">
+            Recherche avancée
+          </Link>
           <Link href="/ayebi/legal" className="ayeba-wiki-bar-link">
             Licence
           </Link>
@@ -32,6 +35,9 @@ export function AyebiWikiBar() {
           </Link>
           {user ? (
             <>
+              <Link href="/ayebi/watchlist" className="ayeba-ghost px-3 py-1.5 text-xs">
+                ★ Suivi
+              </Link>
               <Link href="/ayebi/contribuer" className="ayeba-ghost px-3 py-1.5 text-xs">
                 {user.name}
               </Link>

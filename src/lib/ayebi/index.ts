@@ -6,6 +6,19 @@ import { FLAGSHIP_ARTICLES } from "./articles-flagship";
 import { INSTITUTION_ARTICLES, ECONOMY_ARTICLES } from "./articles-institutions-economy";
 import { PERSONALITY_ARTICLES } from "./articles-personalities";
 import { PLACE_ARTICLES } from "./articles-places";
+import { HISTORY_ARTICLES } from "./articles-history";
+import { GEOGRAPHY_ARTICLES } from "./articles-geography";
+import { RELIGION_ARTICLES } from "./articles-religion";
+import { MODERNISATION_ARTICLES } from "./articles-modernisation";
+import { CELEBRITIES_ARTICLES } from "./articles-celebrities";
+import { ENTREPRISES_ARTICLES } from "./articles-entreprises";
+import { EDUCATION_ARTICLES } from "./articles-education";
+import { SANTE_ARTICLES } from "./articles-sante";
+import { SOCIETE_ARTICLES } from "./articles-societe";
+import { POLITIQUE_ARTICLES } from "./articles-politique";
+import { SPORT2_ARTICLES } from "./articles-sport2";
+import { ECONOMIE2_ARTICLES } from "./articles-economie2";
+import { EXTRA_ARTICLES } from "./articles-extra";
 import type { AyebiArticle, AyebiCategory } from "./types";
 
 export type { AyebiArticle, AyebiCategory } from "./types";
@@ -23,6 +36,19 @@ const RAW: AyebiArticle[] = [
   ...INSTITUTION_ARTICLES,
   ...ECONOMY_ARTICLES,
   ...ECOSYSTEM_ARTICLES,
+  ...HISTORY_ARTICLES,
+  ...GEOGRAPHY_ARTICLES,
+  ...RELIGION_ARTICLES,
+  ...MODERNISATION_ARTICLES,
+  ...CELEBRITIES_ARTICLES,
+  ...ENTREPRISES_ARTICLES,
+  ...EDUCATION_ARTICLES,
+  ...SANTE_ARTICLES,
+  ...SOCIETE_ARTICLES,
+  ...POLITIQUE_ARTICLES,
+  ...SPORT2_ARTICLES,
+  ...ECONOMIE2_ARTICLES,
+  ...EXTRA_ARTICLES,
 ];
 
 export const AYEBI_ARTICLES: AyebiArticle[] = RAW.map((a) => {

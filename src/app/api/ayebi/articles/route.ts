@@ -36,8 +36,15 @@ export async function POST(req: Request) {
     timeline: body.timeline,
     facts: body.facts ?? [{ label: "Pays", value: "République démocratique du Congo" }],
     image: body.image,
+    gallery: body.gallery,
+    coordinates: body.coordinates,
+    quality: body.quality,
     tags: body.tags ?? [],
     relatedSlugs: body.relatedSlugs,
+    references: body.references,
+    portalId: body.portalId,
+    navboxSlugs: body.navboxSlugs,
+    stub: body.stub,
   };
 
   const result = await saveArticle(article, authorFromSession(session), String(body.editSummary ?? ""), {

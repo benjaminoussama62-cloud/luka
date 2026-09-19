@@ -4,13 +4,7 @@ import {
   getArticle,
   importSeedIfEmpty,
   listArticles,
-  saveArticle,
   searchAyebiFts,
-  getRevisions,
-  getRevision,
-  restoreRevision,
-  addTalkMessage,
-  getTalkMessages,
   getRecentEdits as getRecentEditsDb,
 } from "./db-sqlite";
 import type { AyebiArticle } from "./types";
@@ -23,14 +17,32 @@ export {
   listArticles,
   saveArticle,
   searchAyebiFts,
-  getRevisions,
+  importSeedIfEmpty,
   getRevision,
+  getRevisions,
   restoreRevision,
   addTalkMessage,
   getTalkMessages,
-  importSeedIfEmpty,
+  toggleWatchlist,
+  isWatching,
+  getUserWatchlist,
+  recordPageView,
+  getArticleStats,
+  listPortals,
+  getPortal,
+  upsertPortal,
+  getPortalArticles,
+  addFlag,
+  getFlags,
+  resolveFlag,
+  getAllOpenFlags,
+  setPageProtection,
+  getUserPublicProfile,
+  getUserContributions,
+  listCategoryArticles,
+  advancedSearch,
 } from "./db-sqlite";
-export type { StoredArticle, RevisionRow, AyebiRole, PageProtection } from "./db-sqlite";
+export type { StoredArticle, RevisionRow, AyebiRole, PageProtection, AyebiPortal, AyebiFlag, UserPublicProfile, SearchFilters } from "./db-sqlite";
 
 export async function getStoredArticle(slug: string) {
   importSeedIfEmpty();

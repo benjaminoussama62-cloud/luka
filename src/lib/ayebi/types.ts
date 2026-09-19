@@ -1,3 +1,12 @@
+export type AyebiReference = {
+  id: number;
+  url: string;
+  title: string;
+  author?: string;
+  date?: string;
+  publisher?: string;
+};
+
 export type AyebiCategory =
   | "personnalité"
   | "lieu"
@@ -6,15 +15,35 @@ export type AyebiCategory =
   | "sport"
   | "économie";
 
+export type AyebiSubSection = {
+  heading: string;
+  paragraphs: string[];
+};
+
 export type AyebiSection = {
   heading: string;
   paragraphs: string[];
+  subsections?: AyebiSubSection[];
 };
 
 export type AyebiTimelineEvent = {
   date: string;
   event: string;
 };
+
+export type AyebiGalleryImage = {
+  url: string;
+  caption: string;
+  credit?: string;
+};
+
+export type AyebiCoordinates = {
+  lat: number;
+  lon: number;
+  label?: string;
+};
+
+export type AyebiQuality = "ébauche" | "bon article" | "article de qualité" | "standard";
 
 export type AyebiArticle = {
   slug: string;
@@ -28,8 +57,15 @@ export type AyebiArticle = {
   timeline?: AyebiTimelineEvent[];
   facts: { label: string; value: string }[];
   image?: string;
+  gallery?: AyebiGalleryImage[];
+  coordinates?: AyebiCoordinates;
   tags: string[];
   relatedSlugs?: string[];
+  stub?: boolean;
+  quality?: AyebiQuality;
+  references?: AyebiReference[];
+  portalId?: string;
+  navboxSlugs?: string[];
 };
 
 export function ayebi(
@@ -57,7 +93,7 @@ export function ayebi(
   };
 }
 
-/** @deprecated — l'enrichissement live remplace le remplissage générique */
+/** @deprecated */
 export function enrichShallow(article: AyebiArticle): AyebiArticle {
   return article;
 }

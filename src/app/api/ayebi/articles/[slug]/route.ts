@@ -39,8 +39,15 @@ export async function PUT(req: Request, ctx: { params: Promise<{ slug: string }>
     timeline: body.timeline ?? current?.timeline,
     facts: body.facts ?? current?.facts ?? [],
     image: body.image ?? current?.image,
+    gallery: body.gallery ?? current?.gallery,
+    coordinates: body.coordinates ?? current?.coordinates,
+    quality: body.quality ?? current?.quality,
     tags: body.tags ?? current?.tags ?? [],
     relatedSlugs: body.relatedSlugs ?? current?.relatedSlugs,
+    references: body.references ?? current?.references,
+    portalId: body.portalId ?? current?.portalId,
+    navboxSlugs: body.navboxSlugs ?? current?.navboxSlugs,
+    stub: body.stub ?? current?.stub,
   };
 
   const result = await saveArticle(article, authorFromSession(session), String(body.editSummary ?? ""));
