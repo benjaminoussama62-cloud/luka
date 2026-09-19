@@ -57,7 +57,8 @@ export async function readSessionToken(token: string) {
 export function toSessionUser(u: DbUser): SessionUser {
   return {
     id: u.id,
-    name: u.name,
+    // Some legacy/OAuth rows carry a null name — never emit it to clients.
+    name: u.name?.trim() || u.email.split("@")[0],
     email: u.email,
     avatarColor: u.avatarColor,
     provider: u.provider,

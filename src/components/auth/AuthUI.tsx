@@ -214,8 +214,9 @@ export function ProfileMenu() {
     );
   }
 
-  const initial = user.name.slice(0, 1).toUpperCase();
-  const firstName = user.name.trim().split(/\s+/)[0] || user.name;
+  const displayName = user.name?.trim() || user.email.split("@")[0];
+  const initial = displayName.slice(0, 1).toUpperCase();
+  const firstName = displayName.split(/\s+/)[0] || displayName;
   const providerLabel =
     user.provider === "google"
       ? "Google"
@@ -252,7 +253,7 @@ export function ProfileMenu() {
         <div className="ayeba-profile-panel" role="menu">
           <div className="ayeba-profile-panel-head">
             <p className="ayeba-kicker ayeba-kicker-accent">Compte</p>
-            <p className="ayeba-profile-panel-name">{user.name}</p>
+            <p className="ayeba-profile-panel-name">{displayName}</p>
             <p className="ayeba-profile-panel-email">{user.email}</p>
             <p className="ayeba-profile-panel-via">Via {providerLabel}</p>
           </div>

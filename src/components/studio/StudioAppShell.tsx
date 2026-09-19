@@ -46,7 +46,7 @@ export function StudioAppShell({
           </Link>
           {ready && user ? (
             <button type="button" className="ayeba-ghost px-3 py-2 text-xs" onClick={() => void logout()}>
-              {user.name.split(" ")[0]}
+              {(user.name?.trim() || user.email.split("@")[0]).split(" ")[0]}
             </button>
           ) : (
             <Link href="/ayebi/connexion?redirect=/studio/app" className="ayeba-cta px-3 py-2 text-xs">
