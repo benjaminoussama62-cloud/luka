@@ -37,6 +37,7 @@ import type {
   AlgorithmSliders,
   FeaturedSnippet,
   KnowledgePanel,
+  MapPlace,
   MediaResult,
   SearchResponse,
   SearchResult,

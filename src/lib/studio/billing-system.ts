@@ -4,15 +4,65 @@
  */
 
 import { getDb } from "@/lib/storage/database";
+import {
+  amountForProvider,
+  providerForMethod,
+} from "@/lib/payments/registry";
+import {
+  attachProviderRef,
+  ensurePaymentsSchema,
+  recordPaymentEvent,
+} from "@/lib/payments/store";
+import type { PaymentProviderName, WebhookOutcome } from "@/lib/payments/types";
+import { PaymentFailedError } from "@/lib/payments/types";
 import { yieldEnterprise } from "./yield-enterprise";
 import type {
   Invoice,
   Transaction,
-  Advertiser,
-  Publisher,
   PaymentMethod,
   PayoutMethod,
 } from "./ad-network-types";
+
+function siteBaseUrl() {
+  return (
+    process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ||
+    process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ||
+    "http://127.0.0.1:3000"
+  );
+}
+
+/** Raw DB row shapes — the yield layer returns snake_case rows. */
+type AdvertiserRow = {
+  id: string;
+  current_balance: number;
+  available_credit: number;
+  payment_methods: string;
+};
+type PublisherRow = {
+  id: string;
+  balance: number;
+  lifetime_earnings: number;
+};
+type BillingInvoiceRow = {
+  id: string;
+  user_id: string;
+  entity_id: string;
+  type: string;
+  status: string;
+  total: number;
+  currency: string;
+  invoice_number: string;
+  due_date?: string;
+  paid_at?: string;
+  payment_methods?: string;
+  auto_recharge?: number;
+  recharge_amount?: number;
+  auto_payout?: number;
+  payout_method?: string;
+  payout_details?: string;
+  email?: string;
+  name?: string;
+};
 
 export class BillingSystem {
   /**
@@ -142,7 +192,7 @@ export class BillingSystem {
     // Get active publishers with earnings
     const publishers = db
       .prepare(
-        `SELECT DISTINCT p.id, p.company_name, p.user_id, p.payout_frequency, p.payout_day
+        `SELECT DISTINCT p.id, p.company_name, p.user_id, p.payout_frequency, p.payout_day, p.minimum_payout
          FROM publishers p
          JOIN publisher_sites ps ON p.id = ps.publisher_id
          WHERE p.status = 'active'
@@ -154,6 +204,7 @@ export class BillingSystem {
       user_id: string;
       payout_frequency: string;
       payout_day: number | null;
+      minimum_payout: number;
     }>;
 
     for (const publisher of publishers) {
@@ -218,7 +269,7 @@ export class BillingSystem {
          AND i.status = 'sent'
          AND a.auto_recharge = 1`,
       )
-      .all() as Array<any>;
+      .all() as BillingInvoiceRow[];
 
     for (const invoice of invoices) {
       try {
@@ -246,11 +297,12 @@ export class BillingSystem {
         if (transaction) {
           transactions.push(transaction);
 
-          // Update invoice status
-          this.updateInvoiceStatus(invoice.id, "paid", transaction.id);
-
-          // Update advertiser balance (payment reduces debt)
-          this.updateAdvertiserBalance(invoice.entity_id, -invoice.total, true);
+          // Synchronous confirmation only — async gateway confirmations
+          // arrive through webhooks and reconcileTransaction().
+          if (transaction.status === "processed") {
+            this.updateInvoiceStatus(invoice.id, "paid", transaction.id);
+            this.updateAdvertiserBalance(invoice.entity_id, -invoice.total, true);
+          }
         }
 
       } catch (error) {
@@ -278,7 +330,7 @@ export class BillingSystem {
          AND i.status = 'sent'
          AND p.auto_payout = 1`,
       )
-      .all() as Array<any>;
+      .all() as BillingInvoiceRow[];
 
     for (const invoice of invoices) {
       try {
@@ -291,7 +343,7 @@ export class BillingSystem {
           userId: invoice.user_id,
           amount: invoice.total,
           currency: invoice.currency,
-          method: invoice.payout_method,
+          method: invoice.payout_method || "mobile_money",
           reference: invoice.invoice_number,
           description: `Paiement revenus ${invoice.invoice_number}`,
           relatedEntityId: invoice.id,
@@ -301,11 +353,10 @@ export class BillingSystem {
         if (transaction) {
           transactions.push(transaction);
 
-          // Update invoice status
-          this.updateInvoiceStatus(invoice.id, "paid", transaction.id);
-
-          // Update publisher balance
-          this.updatePublisherBalance(invoice.entity_id, -invoice.total);
+          if (transaction.status === "processed") {
+            this.updateInvoiceStatus(invoice.id, "paid", transaction.id);
+            this.updatePublisherBalance(invoice.entity_id, -invoice.total);
+          }
         }
 
       } catch (error) {
@@ -314,6 +365,57 @@ export class BillingSystem {
     }
 
     return transactions;
+  }
+
+  /**
+   * Initiate a real payment for an invoice owned by the user.
+   * Returns the provider checkout URL to redirect the customer to.
+   */
+  async payInvoice(
+    invoiceId: string,
+    userId: string,
+    method: string,
+  ): Promise<{ checkoutUrl: string; transactionId: string }> {
+    ensurePaymentsSchema();
+    const invoice = getDb()
+      .prepare("SELECT * FROM invoices WHERE id = ?")
+      .get(invoiceId) as
+      | {
+          id: string;
+          user_id: string;
+          status: string;
+          total: number;
+          currency: string;
+          invoice_number: string;
+        }
+      | undefined;
+    if (!invoice || invoice.user_id !== userId) {
+      throw new PaymentFailedError("Facture introuvable.");
+    }
+    if (invoice.status === "paid") {
+      throw new PaymentFailedError("Facture déjà payée.");
+    }
+
+    const tx = await this.processPayment({
+      type: "payment",
+      userId,
+      amount: invoice.total,
+      currency: invoice.currency,
+      method,
+      reference: invoice.invoice_number,
+      description: `Paiement facture ${invoice.invoice_number}`,
+      relatedEntityId: invoice.id,
+      relatedEntityType: "invoice",
+    });
+    const row = tx
+      ? (getDb()
+          .prepare("SELECT checkout_url FROM transactions WHERE id = ?")
+          .get(tx.id) as { checkout_url?: string } | undefined)
+      : null;
+    if (!tx || !row?.checkout_url) {
+      throw new PaymentFailedError("Initialisation du paiement impossible.");
+    }
+    return { checkoutUrl: row.checkout_url, transactionId: tx.id };
   }
 
   /**
@@ -332,14 +434,28 @@ export class BillingSystem {
   }): Promise<Transaction | null> {
     const transaction = yieldEnterprise.createTransaction(input);
 
-    // Simulate payment processing (in production, integrate with payment gateways)
-    const success = await this.processPaymentGateway(transaction, input.method);
-
-    if (success) {
-      yieldEnterprise.updateTransactionStatus(transaction.id, "processed");
+    try {
+      const provider = providerForMethod(input.method);
+      const base = siteBaseUrl();
+      const charge = amountForProvider(
+        input.amount,
+        input.currency || "CDF",
+        provider.name,
+      );
+      const result = await provider.createCharge({
+        transactionId: transaction.id,
+        amount: charge.amount,
+        currency: charge.currency,
+        description: input.description,
+        returnUrl: `${base}/studio/app`,
+        notifyUrl: `${base}/api/payments/webhooks/${provider.name}`,
+      });
+      attachProviderRef(transaction.id, provider.name, result.providerRef, result.checkoutUrl);
+      yieldEnterprise.updateTransactionStatus(transaction.id, "processing");
       return yieldEnterprise.getTransaction(transaction.id);
-    } else {
-      yieldEnterprise.updateTransactionStatus(transaction.id, "failed", "Payment gateway error");
+    } catch (e) {
+      const reason = e instanceof Error ? e.message : "Payment gateway error";
+      yieldEnterprise.updateTransactionStatus(transaction.id, "failed", reason);
       return null;
     }
   }
@@ -360,40 +476,114 @@ export class BillingSystem {
   }): Promise<Transaction | null> {
     const transaction = yieldEnterprise.createTransaction(input);
 
-    // Simulate payout processing (in production, integrate with payout providers)
-    const success = await this.processPayoutGateway(transaction, input.method);
-
-    if (success) {
-      yieldEnterprise.updateTransactionStatus(transaction.id, "processed");
+    try {
+      const provider = providerForMethod(input.method);
+      const charge = amountForProvider(
+        input.amount,
+        input.currency || "CDF",
+        provider.name,
+      );
+      const details = this.payoutDetailsFor(input.relatedEntityId);
+      const result = await provider.createPayout({
+        transactionId: transaction.id,
+        amount: charge.amount,
+        currency: charge.currency,
+        destination: details,
+        description: input.description,
+      });
+      attachProviderRef(transaction.id, provider.name, result.providerRef);
+      yieldEnterprise.updateTransactionStatus(transaction.id, "processing");
       return yieldEnterprise.getTransaction(transaction.id);
-    } else {
-      yieldEnterprise.updateTransactionStatus(transaction.id, "failed", "Payout gateway error");
+    } catch (e) {
+      const reason = e instanceof Error ? e.message : "Payout gateway error";
+      yieldEnterprise.updateTransactionStatus(transaction.id, "failed", reason);
       return null;
     }
   }
 
-  /**
-   * Process payment gateway (simulated)
-   */
-  private async processPaymentGateway(transaction: Transaction, method: string): Promise<boolean> {
-    // Simulate payment processing
-    // In production, integrate with Stripe, PayPal, Mobile Money, etc.
-    await new Promise(resolve => setTimeout(resolve, 1000));
-
-    // Simulate 95% success rate
-    return Math.random() > 0.05;
+  /** Resolve invoice → publisher, then extract stored payout destination. */
+  private payoutDetailsFor(invoiceId?: string): {
+    method: string;
+    phone?: string;
+    network?: string;
+    accountName?: string;
+    accountNumber?: string;
+    bankCode?: string;
+  } {
+    const fallback = { method: "mobile_money" };
+    if (!invoiceId) return fallback;
+    const db = getDb();
+    const invoice = db
+      .prepare("SELECT entity_id FROM invoices WHERE id = ?")
+      .get(invoiceId) as { entity_id: string } | undefined;
+    if (!invoice) return fallback;
+    const row = db
+      .prepare("SELECT payout_method, payout_details FROM publishers WHERE id = ?")
+      .get(invoice.entity_id) as
+      | { payout_method?: string; payout_details?: string }
+      | undefined;
+    if (!row) return fallback;
+    try {
+      const parsed = JSON.parse(row.payout_details || "{}");
+      return { method: row.payout_method || "mobile_money", ...parsed };
+    } catch {
+      return { method: row.payout_method || "mobile_money" };
+    }
   }
 
   /**
-   * Process payout gateway (simulated)
+   * Apply a VERIFIED provider webhook outcome to a transaction.
+   * Idempotent: duplicate deliveries are dropped by payment_events.
+   * Returns true when the transaction was reconciled.
    */
-  private async processPayoutGateway(transaction: Transaction, method: string): Promise<boolean> {
-    // Simulate payout processing
-    // In production, integrate with bank transfers, Mobile Money, etc.
-    await new Promise(resolve => setTimeout(resolve, 2000));
+  reconcileTransaction(
+    provider: PaymentProviderName,
+    outcome: WebhookOutcome,
+    rawPayload: string,
+  ): boolean {
+    ensurePaymentsSchema();
+    const fresh = recordPaymentEvent({
+      provider,
+      eventId: outcome.eventId,
+      transactionId: outcome.transactionId,
+      status: outcome.status,
+      payload: rawPayload,
+    });
+    if (!fresh) return false; // already processed
 
-    // Simulate 90% success rate
-    return Math.random() > 0.1;
+    const tx = getDb()
+      .prepare("SELECT * FROM transactions WHERE id = ?")
+      .get(outcome.transactionId) as
+      | {
+          id: string;
+          type: string;
+          status: string;
+          related_entity_id?: string;
+          related_entity_type?: string;
+        }
+      | undefined;
+    if (!tx) return false;
+    if (tx.status === "processed" || tx.status === "failed") return false;
+
+    if (outcome.status === "paid") {
+      yieldEnterprise.updateTransactionStatus(tx.id, "processed");
+      if (tx.related_entity_type === "invoice" && tx.related_entity_id) {
+        const invoice = getDb()
+          .prepare("SELECT * FROM invoices WHERE id = ?")
+          .get(tx.related_entity_id) as { id: string; entity_id: string; total: number } | undefined;
+        if (invoice) {
+          this.updateInvoiceStatus(invoice.id, "paid", tx.id);
+          if (tx.type === "payment") {
+            this.updateAdvertiserBalance(invoice.entity_id, -invoice.total, true);
+          } else if (tx.type === "payout") {
+            this.updatePublisherBalance(invoice.entity_id, -invoice.total);
+          }
+        }
+      }
+    } else {
+      yieldEnterprise.updateTransactionStatus(tx.id, "failed", "Provider reported failure");
+    }
+    return true;
   }
 
   /**
@@ -487,7 +677,7 @@ export class BillingSystem {
    */
   private updateInvoiceStatus(invoiceId: string, status: string, transactionId?: string): void {
     const db = getDb();
-    const updates: any = { status, updated_at: new Date().toISOString() };
+    const updates: Record<string, string> = { status, updated_at: new Date().toISOString() };
 
     if (status === "paid") {
       updates.paid_at = new Date().toISOString();
@@ -536,7 +726,7 @@ export class BillingSystem {
          AND i.status = 'sent'
          AND i.due_date < ?`,
       )
-      .get(new Date().toISOString()) as Array<any>;
+      .all(new Date().toISOString()) as BillingInvoiceRow[];
 
     // Send reminders (in production, integrate with email service)
     for (const invoice of overdueInvoices) {
@@ -560,7 +750,7 @@ export class BillingSystem {
          AND i.status = 'paid'
          AND i.paid_at >= ?`,
       )
-      .get(new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()) as Array<any>;
+      .all(new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()) as BillingInvoiceRow[];
 
     // Send notifications (in production, integrate with email service)
     for (const invoice of paidInvoices) {
@@ -591,7 +781,7 @@ export class BillingSystem {
     const db = getDb();
 
     // Advertiser summary
-    const advertiser = yieldEnterprise.getAdvertiserByUserId(userId);
+    const advertiser = yieldEnterprise.getAdvertiserByUserId(userId) as unknown as AdvertiserRow | null;
     const advertiserSummary = {
       pendingInvoices: 0,
       pendingAmount: 0,
@@ -626,7 +816,7 @@ export class BillingSystem {
     }
 
     // Publisher summary
-    const publisher = yieldEnterprise.getPublisherByUserId(userId);
+    const publisher = yieldEnterprise.getPublisherByUserId(userId) as unknown as PublisherRow | null;
     const publisherSummary = {
       pendingPayouts: 0,
       pendingAmount: 0,
@@ -645,7 +835,7 @@ export class BillingSystem {
         .get(publisher.id) as { c: number; amount: number | null };
 
       publisherSummary.pendingPayouts = pendingPayouts.c;
-      publisherSummary.pendingAmount = pendingPayout.amount || 0;
+      publisherSummary.pendingAmount = pendingPayouts.amount || 0;
 
       const lastPayout = db
         .prepare(
@@ -672,7 +862,7 @@ export class BillingSystem {
     const id = this.generateId();
     const now = new Date().toISOString();
 
-    const advertiser = yieldEnterprise.getAdvertiserByUserId(userId);
+    const advertiser = yieldEnterprise.getAdvertiserByUserId(userId) as unknown as AdvertiserRow | null;
     if (!advertiser) throw new Error("Advertiser not found");
 
     // Update existing methods to non-default

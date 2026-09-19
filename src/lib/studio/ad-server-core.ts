@@ -4,18 +4,116 @@
  */
 
 import { getDb } from "@/lib/storage/database";
+import { hmacSha256, signingSecret } from "@/lib/security/sign";
 import type {
   AdRequest,
   AdResponse,
   Campaign,
   AdCreative,
+  AdFormat,
+  AdSize,
+  ApprovalStatus,
   AuctionResult,
   AuctionBid,
+  BiddingStrategy,
+  CampaignType,
+  DeviceTarget,
+  GeoTarget,
   NetworkDomain,
   FraudDetection,
-  PublisherSite,
   SitePlacement,
 } from "./ad-network-types";
+
+/** Raw DB row shapes (snake_case) — mapped to domain objects below. */
+type PlacementRow = {
+  id: string;
+  site_id: string;
+  name: string;
+  slot: string;
+  format: AdFormat;
+  size: AdSize;
+  position: string;
+  status: "active" | "inactive";
+  fill_rate: number;
+  ecpm: number;
+  revenue: number;
+  competitive_exclusion: number;
+  category_blocking: string;
+  min_cpm: number | null;
+};
+
+type CreativeRow = {
+  id: string;
+  campaign_id: string;
+  format: AdFormat;
+  size: AdSize;
+  title: string;
+  description: string;
+  image_url: string | null;
+  video_url: string | null;
+  audio_url: string | null;
+  landing_url: string;
+  display_url: string;
+  tracking_pixels: string;
+  status: ApprovalStatus;
+  is_valid: number;
+  rejected_reason: string | null;
+  auto_approved: number;
+  reviewed_at: string | null;
+  reviewed_by: string | null;
+  impressions: number;
+  clicks: number;
+  ctr: number;
+  conversions: number;
+  cost: number;
+  created_at: string;
+  updated_at: string;
+};
+
+type CampaignRow = {
+  id: string;
+  advertiser_id: string;
+  name: string;
+  type: CampaignType;
+  status: Campaign["status"];
+  daily_budget: number;
+  total_budget: number;
+  budget_spent: number;
+  budget_remaining: number;
+  bidding_strategy: BiddingStrategy;
+  max_cpc: number | null;
+  target_cpa: number | null;
+  target_roas: number | null;
+  start_date: string;
+  end_date: string;
+  time_zone: string;
+  hours_of_day: string;
+  days_of_week: string;
+  geo_targeting: string;
+  device_targeting: string;
+  audience_segments: string;
+  keywords: string;
+  placements: string;
+  contextual_targeting: string;
+  frequency_cap: string;
+  pacing_type: "standard" | "accelerated" | "asap";
+  deliver_over_timeframe: number | null;
+  auto_optimize: number;
+  rotation: "optimize" | "rotate_evenly";
+  exclude_competitors: number;
+  impressions: number;
+  clicks: number;
+  ctr: number;
+  conversions: number;
+  cost: number;
+  avg_cpc: number;
+  avg_cpm: number;
+  conversion_rate: number;
+  created_at: string;
+  updated_at: string;
+  started_at: string | null;
+  ended_at: string | null;
+};
 
 export class AdServer {
   private static instance: AdServer;
@@ -25,6 +123,7 @@ export class AdServer {
     "sombatekaonline.com",
     "jemsa.net",
     "tala.cd",
+    "to-tala.com",
   ];
 
   private constructor() {}
@@ -148,18 +247,19 @@ export class AdServer {
     const db = getDb();
     const now = new Date().toISOString();
 
-    const campaigns = db
+    const rows = db
       .prepare(
         `SELECT * FROM campaigns
          WHERE status = 'active'
          AND start_date <= ?
          AND end_date >= ?
-         AND budget_remaining > 0
-         AND json_array_length(placements) > 0`,
+         AND budget_remaining > 0`,
       )
-      .all(now, now) as Campaign[];
+      .all(now, now) as CampaignRow[];
 
-    return campaigns.filter((campaign) => this.isCampaignEligible(campaign, request, placement));
+    return rows
+      .map((row) => this.rowToCampaign(row))
+      .filter((campaign) => this.isCampaignEligible(campaign, request, placement));
   }
 
   /**
@@ -187,7 +287,7 @@ export class AdServer {
       if (userCountry && !geo.countries.includes(userCountry) && !geo.exclude) {
         return false;
       }
-      if (geo.exclude && geo.countries.includes(userCountry)) {
+      if (userCountry && geo.exclude && geo.countries.includes(userCountry)) {
         return false;
       }
     }
@@ -244,7 +344,7 @@ export class AdServer {
     }
 
     // Base bid calculation
-    let bidPrice = campaign.bidding.maxCpc || 0;
+    const bidPrice = campaign.bidding.maxCpc || 0;
 
     // Quality score (0-1)
     const qualityScore = this.calculateQualityScore(campaign, creative, placement);
@@ -353,17 +453,19 @@ export class AdServer {
     let score = 0.5;
 
     // Keyword match
-    if (campaign.targeting.keywords && request.context.keywords) {
+    const reqKeywords = request.context.keywords ?? [];
+    if (campaign.targeting.keywords?.length && reqKeywords.length) {
       const matches = campaign.targeting.keywords.filter((kw) =>
-        request.context.keywords.some((rk) => rk.toLowerCase().includes(kw.toLowerCase())),
+        reqKeywords.some((rk) => rk.toLowerCase().includes(kw.toLowerCase())),
       );
       score += (matches.length / campaign.targeting.keywords.length) * 0.3;
     }
 
     // Audience segment match
-    if (campaign.targeting.audienceSegments && request.targeting.audience) {
+    const reqAudience = request.targeting.audience ?? [];
+    if (campaign.targeting.audienceSegments?.length && reqAudience.length) {
       const matches = campaign.targeting.audienceSegments.filter((seg) =>
-        request.targeting.audience.includes(seg),
+        reqAudience.includes(seg),
       );
       score += (matches.length / campaign.targeting.audienceSegments.length) * 0.2;
     }
@@ -374,7 +476,7 @@ export class AdServer {
   /**
    * Get geo boost multiplier
    */
-  private getGeoBoost(geo: any, userCountry: string): number {
+  private getGeoBoost(geo: GeoTarget, userCountry: string): number {
     if (!geo || !userCountry) return 1;
     // Implement geo-specific boost logic
     return 1;
@@ -383,7 +485,7 @@ export class AdServer {
   /**
    * Get device boost multiplier
    */
-  private getDeviceBoost(device: any, userDevice: string): number {
+  private getDeviceBoost(device: DeviceTarget, userDevice: string): number {
     if (!device || !userDevice) return 1;
     // Implement device-specific boost logic
     return 1;
@@ -392,7 +494,7 @@ export class AdServer {
   /**
    * Get time boost multiplier
    */
-  private getTimeBoost(schedule: any): number {
+  private getTimeBoost(schedule: Campaign["schedule"]): number {
     const now = new Date();
     const hour = now.getHours();
     const day = now.getDay();
@@ -468,12 +570,12 @@ export class AdServer {
    */
   private buildNoFillResponse(
     request: AdRequest,
-    reason: string,
+    reason: string | undefined,
     startTime: number,
   ): AdResponse {
     return {
       requestId: request.requestId,
-      noFillReason: reason as any,
+      noFillReason: reason as AdResponse["noFillReason"],
       pricing: {
         floorPrice: request.pricing?.floorPrice || 0,
         winningPrice: 0,
@@ -572,8 +674,8 @@ export class AdServer {
     const db = getDb();
     const row = db
       .prepare("SELECT * FROM site_placements WHERE id = ?")
-      .get(placementId) as SitePlacement | undefined;
-    return row || null;
+      .get(placementId) as PlacementRow | undefined;
+    return row ? this.rowToPlacement(row) : null;
   }
 
   /**
@@ -583,8 +685,8 @@ export class AdServer {
     const db = getDb();
     const row = db
       .prepare("SELECT * FROM campaigns WHERE id = ?")
-      .get(campaignId) as Campaign | undefined;
-    return row || null;
+      .get(campaignId) as CampaignRow | undefined;
+    return row ? this.rowToCampaign(row) : null;
   }
 
   /**
@@ -594,8 +696,140 @@ export class AdServer {
     const db = getDb();
     const row = db
       .prepare("SELECT * FROM ad_creatives WHERE id = ?")
-      .get(creativeId) as AdCreative | undefined;
-    return row || null;
+      .get(creativeId) as CreativeRow | undefined;
+    return row ? this.rowToCreative(row) : null;
+  }
+
+  private parseJson<T>(raw: unknown, fallback: T): T {
+    if (typeof raw !== "string") return fallback;
+    try {
+      return JSON.parse(raw) as T;
+    } catch {
+      return fallback;
+    }
+  }
+
+  private rowToPlacement(row: PlacementRow): SitePlacement {
+    return {
+      id: row.id,
+      siteId: row.site_id,
+      name: row.name,
+      slot: row.slot,
+      format: row.format,
+      size: row.size,
+      position: row.position,
+      status: row.status,
+      fillRate: row.fill_rate || 0,
+      ecpm: row.ecpm || 0,
+      revenue: row.revenue || 0,
+      settings: {
+        competitiveExclusion: !!row.competitive_exclusion,
+        categoryBlocking: this.parseJson(row.category_blocking, []),
+        minCpm: row.min_cpm ?? undefined,
+      },
+    };
+  }
+
+  private rowToCreative(row: CreativeRow): AdCreative {
+    return {
+      id: row.id,
+      campaignId: row.campaign_id,
+      format: row.format,
+      size: row.size,
+      title: row.title,
+      description: row.description,
+      imageUrl: row.image_url ?? undefined,
+      videoUrl: row.video_url ?? undefined,
+      audioUrl: row.audio_url ?? undefined,
+      landingUrl: row.landing_url,
+      displayUrl: row.display_url,
+      trackingPixels: this.parseJson(row.tracking_pixels, {}),
+      status: row.status,
+      compliance: {
+        isValid: !!row.is_valid,
+        rejectedReason: row.rejected_reason ?? undefined,
+        autoApproved: !!row.auto_approved,
+        reviewedAt: row.reviewed_at ?? undefined,
+        reviewedBy: row.reviewed_by ?? undefined,
+      },
+      performance: {
+        impressions: row.impressions || 0,
+        clicks: row.clicks || 0,
+        ctr: row.ctr || 0,
+        conversions: row.conversions || 0,
+        cost: row.cost || 0,
+      },
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
+  }
+
+  private rowToCampaign(row: CampaignRow): Campaign {
+    const db = getDb();
+    const creativeRows = db
+      .prepare("SELECT * FROM ad_creatives WHERE campaign_id = ?")
+      .all(row.id) as CreativeRow[];
+
+    return {
+      id: row.id,
+      advertiserId: row.advertiser_id,
+      name: row.name,
+      type: row.type,
+      status: row.status,
+      budget: {
+        daily: row.daily_budget || 0,
+        total: row.total_budget || 0,
+        spent: row.budget_spent || 0,
+        remaining: row.budget_remaining || 0,
+      },
+      bidding: {
+        strategy: row.bidding_strategy,
+        maxCpc: row.max_cpc ?? undefined,
+        targetCpa: row.target_cpa ?? undefined,
+        targetRoas: row.target_roas ?? undefined,
+      },
+      schedule: {
+        startDate: row.start_date,
+        endDate: row.end_date,
+        timeZone: row.time_zone || "Africa/Kinshasa",
+        hoursOfDay: this.parseJson(row.hours_of_day, []),
+        daysOfWeek: this.parseJson(row.days_of_week, []),
+      },
+      targeting: {
+        geo: this.parseJson<GeoTarget | undefined>(row.geo_targeting, undefined),
+        device: this.parseJson<DeviceTarget | undefined>(row.device_targeting, undefined),
+        audienceSegments: this.parseJson(row.audience_segments, []),
+        keywords: this.parseJson(row.keywords, []),
+        placements: this.parseJson(row.placements, []),
+        contextual: this.parseJson<Campaign["targeting"]["contextual"]>(row.contextual_targeting, undefined),
+        frequencyCap: this.parseJson<Campaign["targeting"]["frequencyCap"]>(row.frequency_cap, undefined),
+      },
+      creatives: creativeRows.map((c) => this.rowToCreative(c)),
+      pacing: {
+        type: row.pacing_type || "standard",
+        deliverOverTimeframe: row.deliver_over_timeframe ?? undefined,
+      },
+      delivery: {
+        impressions: row.impressions || 0,
+        clicks: row.clicks || 0,
+        ctr: row.ctr || 0,
+        conversions: row.conversions || 0,
+        cost: row.cost || 0,
+        avgCpc: row.avg_cpc || 0,
+        avgCpm: row.avg_cpm || 0,
+        conversionRate: row.conversion_rate || 0,
+        roas: 0,
+      },
+      settings: {
+        autoOptimize: !!row.auto_optimize,
+        rotation: row.rotation || "optimize",
+        excludeCompetitors: !!row.exclude_competitors,
+      },
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      startedAt: row.started_at ?? undefined,
+      endedAt: row.ended_at ?? undefined,
+    };
   }
 
   /**
@@ -633,7 +867,7 @@ export class AdServer {
         type: "velocity" as const,
         severity: 6,
         description: "High request velocity",
-        value: request.userId || request.sessionId,
+        value: request.userId || request.sessionId || "unknown",
       });
       score += 6;
     }
@@ -655,8 +889,8 @@ export class AdServer {
    * Check if IP is suspicious
    */
   private isSuspiciousIp(ip: string): boolean {
-    // Implement IP reputation check
-    return false;
+    // Missing/undetermined client IP on a billed request is suspicious.
+    return !ip || ip === "unknown";
   }
 
   /**
@@ -707,7 +941,136 @@ export class AdServer {
    * Build tracking URL
    */
   private buildTrackingUrl(type: string, requestId: string, creativeId: string): string {
-    return `https://ayeba.app/api/ads/track?type=${type}&request=${requestId}&creative=${creativeId}`;
+    const sig = this.trackingSignature(type, requestId, creativeId);
+    return `https://ayeba.app/api/ads/track?type=${type}&request=${requestId}&creative=${creativeId}&sig=${sig}`;
+  }
+
+  private trackingSignature(type: string, requestId: string, creativeId: string): string {
+    try {
+      return hmacSha256(signingSecret(), `ad:${type}:${requestId}:${creativeId}`).slice(0, 24);
+    } catch {
+      return "";
+    }
+  }
+
+  /**
+   * Record a verified beacon (impression / viewthrough / click).
+   * The HTTP layer MUST verify the HMAC signature before calling.
+   * Returns the click landing URL when applicable.
+   */
+  recordBeacon(
+    type: "impression" | "click" | "viewthrough",
+    requestId: string,
+    creativeId: string,
+    req: Request,
+  ): { landingUrl?: string } {
+    const db = getDb();
+    const adReq = db
+      .prepare("SELECT * FROM ad_requests WHERE request_id = ?")
+      .get(requestId) as
+      | {
+          id: string;
+          placement_id: string;
+          user_id: string | null;
+          session_id: string | null;
+          ip_hash: string;
+          user_agent: string;
+          page_url: string;
+          response: string;
+        }
+      | undefined;
+    if (!adReq) return {};
+
+    let campaignId = "";
+    let landingUrl = "";
+    let winningPrice = 0;
+    try {
+      const response = JSON.parse(adReq.response);
+      campaignId = response.ad?.campaignId || "";
+      landingUrl = response.ad?.creative?.landingUrl || "";
+      winningPrice = response.ad?.bid?.price || 0;
+    } catch {
+      /* malformed stored response */
+    }
+    if (!campaignId) return {};
+
+    const placement = db
+      .prepare("SELECT site_id FROM site_placements WHERE id = ?")
+      .get(adReq.placement_id) as { site_id: string } | undefined;
+    const publisherSiteId = placement?.site_id || "";
+    const now = new Date().toISOString();
+
+    if (type === "impression" || type === "viewthrough") {
+      // One billable impression per request+creative — idempotent.
+      const existing = db
+        .prepare("SELECT id FROM impressions WHERE request_id = ? AND creative_id = ?")
+        .get(requestId, creativeId) as { id: string } | undefined;
+      if (existing) return {};
+      db.prepare(
+        `INSERT INTO impressions (
+          id, request_id, campaign_id, creative_id, publisher_site_id,
+          placement_id, timestamp, user_id, session_id, ip_hash,
+          user_agent, page_url, revenue, publisher_revenue
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(
+        this.generateId(),
+        requestId,
+        campaignId,
+        creativeId,
+        publisherSiteId,
+        adReq.placement_id,
+        now,
+        adReq.user_id,
+        adReq.session_id,
+        adReq.ip_hash,
+        adReq.user_agent,
+        adReq.page_url,
+        winningPrice,
+        winningPrice * 0.7,
+      );
+      return {};
+    }
+
+    // click — attach to the recorded impression when present
+    const impression = db
+      .prepare("SELECT id FROM impressions WHERE request_id = ? AND creative_id = ?")
+      .get(requestId, creativeId) as { id: string } | undefined;
+
+    // Basic click dedupe: same request+creative within 5 minutes.
+    const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    const dupe = db
+      .prepare(
+        `SELECT id FROM clicks
+         WHERE request_id = ? AND creative_id = ? AND timestamp >= ?`,
+      )
+      .get(requestId, creativeId, fiveMinAgo) as { id: string } | undefined;
+    if (dupe) return { landingUrl };
+
+    db.prepare(
+      `INSERT INTO clicks (
+        id, impression_id, request_id, campaign_id, creative_id,
+        publisher_site_id, placement_id, timestamp, user_id, session_id,
+        ip_hash, user_agent, page_url, landing_url, cost, publisher_revenue
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      this.generateId(),
+      impression?.id || `orphan-${requestId}`,
+      requestId,
+      campaignId,
+      creativeId,
+      publisherSiteId,
+      adReq.placement_id,
+      now,
+      adReq.user_id,
+      adReq.session_id,
+      this.hashIp(req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || ""),
+      req.headers.get("user-agent") || adReq.user_agent,
+      adReq.page_url,
+      landingUrl,
+      winningPrice,
+      winningPrice * 0.7,
+    );
+    return { landingUrl };
   }
 
   /**
@@ -728,8 +1091,11 @@ export class AdServer {
    * Hash IP for privacy
    */
   private hashIp(ip: string): string {
-    // Simple hash - in production use proper cryptographic hash
-    return ip.split(".").map((x) => parseInt(x, 10)).join("-");
+    try {
+      return hmacSha256(signingSecret(), `ip:${ip}`).slice(0, 24);
+    } catch {
+      return "unhashed";
+    }
   }
 }
 

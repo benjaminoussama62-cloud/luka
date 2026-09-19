@@ -12,9 +12,11 @@ import type {
   PublisherSite,
   SitePlacement,
   Invoice,
+  InvoiceItem,
   Transaction,
   PerformanceReport,
   AudienceSegment,
+  AudienceRule,
 } from "./ad-network-types";
 
 export class YieldEnterprise {
@@ -48,7 +50,7 @@ export class YieldEnterprise {
       now,
     );
 
-    return this.getAdvertiser(id);
+    return this.getAdvertiser(id)!;
   }
 
   /**
@@ -86,7 +88,7 @@ export class YieldEnterprise {
     endDate: string;
     biddingStrategy: string;
     maxCpc?: number;
-    targeting?: any;
+    targeting?: Record<string, unknown>;
   }): Campaign {
     const db = getDb();
     const id = this.generateId();
@@ -118,7 +120,7 @@ export class YieldEnterprise {
       now,
     );
 
-    return this.getCampaign(id);
+    return this.getCampaign(id)!;
   }
 
   /**
@@ -166,7 +168,7 @@ export class YieldEnterprise {
     const db = getDb();
     const now = new Date().toISOString();
 
-    const updates: Record<string, any> = { status, updated_at: now };
+    const updates: Record<string, string> = { status, updated_at: now };
 
     if (status === "active" && !this.getCampaign(campaignId)?.startedAt) {
       updates.started_at = now;
@@ -225,7 +227,7 @@ export class YieldEnterprise {
       now,
     );
 
-    return this.getCreative(id);
+    return this.getCreative(id)!;
   }
 
   /**
@@ -238,9 +240,10 @@ export class YieldEnterprise {
       .get(id) as AdCreative | undefined;
     if (!row) return null;
 
+    const raw = row as unknown as Record<string, unknown>;
     return {
       ...row,
-      tracking_pixels: JSON.parse(row.tracking_pixels as string),
+      trackingPixels: JSON.parse((raw.tracking_pixels as string) || "{}"),
     };
   }
 
@@ -253,10 +256,13 @@ export class YieldEnterprise {
       .prepare("SELECT * FROM ad_creatives WHERE campaign_id = ?")
       .all(campaignId) as AdCreative[];
 
-    return rows.map((row) => ({
-      ...row,
-      tracking_pixels: JSON.parse(row.tracking_pixels as string),
-    }));
+    return rows.map((row) => {
+      const raw = row as unknown as Record<string, unknown>;
+      return {
+        ...row,
+        trackingPixels: JSON.parse((raw.tracking_pixels as string) || "{}"),
+      };
+    });
   }
 
   /**
@@ -322,7 +328,7 @@ export class YieldEnterprise {
       now,
     );
 
-    return this.getPublisher(id);
+    return this.getPublisher(id)!;
   }
 
   /**
@@ -335,11 +341,11 @@ export class YieldEnterprise {
       .get(id) as Publisher | undefined;
     if (!row) return null;
 
+    const raw = row as unknown as Record<string, unknown>;
     return {
       ...row,
-      payment_methods: JSON.parse(row.payment_methods as string),
-      payout_details: JSON.parse(row.payout_details as string),
-    };
+      payout_details: JSON.parse((raw.payout_details as string) || "{}"),
+    } as unknown as Publisher;
   }
 
   /**
@@ -380,7 +386,7 @@ export class YieldEnterprise {
       now,
     );
 
-    return this.getPublisherSite(id);
+    return this.getPublisherSite(id)!;
   }
 
   /**
@@ -393,9 +399,10 @@ export class YieldEnterprise {
       .get(id) as PublisherSite | undefined;
     if (!row) return null;
 
+    const raw = row as unknown as Record<string, unknown>;
     return {
       ...row,
-      categories: JSON.parse(row.categories as string),
+      categories: JSON.parse((raw.categories as string) || "[]"),
       placements: this.getSitePlacements(id),
     };
   }
@@ -434,7 +441,7 @@ export class YieldEnterprise {
       ) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', 0, '[]', ?, ?)`,
     ).run(id, input.siteId, input.name, input.slot, input.format, input.size, input.position, now, now);
 
-    return this.getPlacement(id);
+    return this.getPlacement(id)!;
   }
 
   /**
@@ -447,9 +454,14 @@ export class YieldEnterprise {
       .get(id) as SitePlacement | undefined;
     if (!row) return null;
 
+    const raw = row as unknown as Record<string, unknown>;
     return {
       ...row,
-      category_blocking: JSON.parse(row.category_blocking as string),
+      settings: {
+        competitiveExclusion: !!raw.competitive_exclusion,
+        categoryBlocking: JSON.parse((raw.category_blocking as string) || "[]"),
+        minCpm: (raw.min_cpm as number | null) ?? undefined,
+      },
     };
   }
 
@@ -459,13 +471,12 @@ export class YieldEnterprise {
   getSitePlacements(siteId: string): SitePlacement[] {
     const db = getDb();
     const rows = db
-      .prepare("SELECT * FROM site_placements WHERE site_id = ?")
-      .all(siteId) as SitePlacement[];
+      .prepare("SELECT id FROM site_placements WHERE site_id = ?")
+      .all(siteId) as { id: string }[];
 
-    return rows.map((row) => ({
-      ...row,
-      category_blocking: JSON.parse(row.category_blocking as string),
-    }));
+    return rows
+      .map((row) => this.getPlacement(row.id))
+      .filter((p): p is SitePlacement => p !== null);
   }
 
   /**
@@ -475,7 +486,7 @@ export class YieldEnterprise {
     advertiserId: string;
     name: string;
     description: string;
-    rules: any[];
+    rules: AudienceRule[];
   }): AudienceSegment {
     const db = getDb();
     const id = this.generateId();
@@ -487,7 +498,7 @@ export class YieldEnterprise {
       ) VALUES (?, ?, ?, ?, ?, ?)`,
     ).run(id, input.advertiserId, input.name, input.description, JSON.stringify(input.rules), now);
 
-    return this.getAudienceSegment(id);
+    return this.getAudienceSegment(id)!;
   }
 
   /**
@@ -500,9 +511,10 @@ export class YieldEnterprise {
       .get(id) as AudienceSegment | undefined;
     if (!row) return null;
 
+    const raw = row as unknown as Record<string, unknown>;
     return {
       ...row,
-      rules: JSON.parse(row.rules as string),
+      rules: JSON.parse((raw.rules as string) || "[]"),
     };
   }
 
@@ -515,10 +527,13 @@ export class YieldEnterprise {
       .prepare("SELECT * FROM audience_segments WHERE advertiser_id = ?")
       .all(advertiserId) as AudienceSegment[];
 
-    return rows.map((row) => ({
-      ...row,
-      rules: JSON.parse(row.rules as string),
-    }));
+    return rows.map((row) => {
+      const raw = row as unknown as Record<string, unknown>;
+      return {
+        ...row,
+        rules: JSON.parse((raw.rules as string) || "[]"),
+      };
+    });
   }
 
   /**
@@ -616,7 +631,7 @@ export class YieldEnterprise {
   /**
    * Get daily metrics breakdown
    */
-  private getDailyMetrics(whereClause: string[], params: any[]): any[] {
+  private getDailyMetrics(whereClause: string[], params: unknown[]) {
     const db = getDb();
     const where = whereClause.join(" AND ");
 
@@ -629,7 +644,13 @@ export class YieldEnterprise {
          GROUP BY day
          ORDER BY day DESC`,
       )
-      .all(...params) as any[];
+      .all(...params) as Array<{
+      day: string;
+      impressions: number;
+      clicks: number;
+      cost: number;
+      revenue: number;
+    }>;
 
     return rows.map((row) => ({
       date: row.day,
@@ -643,10 +664,12 @@ export class YieldEnterprise {
   /**
    * Get geo metrics breakdown
    */
-  private getGeoMetrics(whereClause: string[], params: any[]): any[] {
+  private getGeoMetrics(whereClause: string[], params: unknown[]) {
     const db = getDb();
     const baseWhere = whereClause.filter((w) => !w.includes("publisher_site_id")).join(" AND ");
-    const baseParams = params.filter((p, i) => !whereClause[i].includes("publisher_site_id"));
+    const baseParams = whereClause.flatMap((w, i) =>
+      w.includes("publisher_site_id") ? [] : [params[i]],
+    );
 
     const rows = db
       .prepare(
@@ -658,7 +681,13 @@ export class YieldEnterprise {
          ORDER BY impressions DESC
          LIMIT 20`,
       )
-      .all(...baseParams) as any[];
+      .all(...baseParams) as Array<{
+      country: string;
+      impressions: number;
+      clicks: number;
+      cost: number;
+      revenue: number;
+    }>;
 
     return rows.map((row) => ({
       country: row.country,
@@ -672,10 +701,12 @@ export class YieldEnterprise {
   /**
    * Get device metrics breakdown
    */
-  private getDeviceMetrics(whereClause: string[], params: any[]): any[] {
+  private getDeviceMetrics(whereClause: string[], params: unknown[]) {
     const db = getDb();
     const baseWhere = whereClause.filter((w) => !w.includes("publisher_site_id")).join(" AND ");
-    const baseParams = params.filter((p, i) => !whereClause[i].includes("publisher_site_id"));
+    const baseParams = whereClause.flatMap((w, i) =>
+      w.includes("publisher_site_id") ? [] : [params[i]],
+    );
 
     const rows = db
       .prepare(
@@ -686,7 +717,13 @@ export class YieldEnterprise {
          GROUP BY device_type
          ORDER BY impressions DESC`,
       )
-      .all(...baseParams) as any[];
+      .all(...baseParams) as Array<{
+      device: string;
+      impressions: number;
+      clicks: number;
+      cost: number;
+      revenue: number;
+    }>;
 
     return rows.map((row) => ({
       device: row.device,
@@ -700,10 +737,12 @@ export class YieldEnterprise {
   /**
    * Get creative metrics breakdown
    */
-  private getCreativeMetrics(whereClause: string[], params: any[]): any[] {
+  private getCreativeMetrics(whereClause: string[], params: unknown[]) {
     const db = getDb();
     const baseWhere = whereClause.filter((w) => !w.includes("publisher_site_id")).join(" AND ");
-    const baseParams = params.filter((p, i) => !whereClause[i].includes("publisher_site_id"));
+    const baseParams = whereClause.flatMap((w, i) =>
+      w.includes("publisher_site_id") ? [] : [params[i]],
+    );
 
     const rows = db
       .prepare(
@@ -717,7 +756,14 @@ export class YieldEnterprise {
          ORDER BY impressions DESC
          LIMIT 20`,
       )
-      .all(...baseParams) as any[];
+      .all(...baseParams) as Array<{
+      creative_id: string;
+      creative_name: string;
+      impressions: number;
+      clicks: number;
+      conversions: number;
+      cost: number;
+    }>;
 
     return rows.map((row) => ({
       creativeId: row.creative_id,
@@ -739,7 +785,7 @@ export class YieldEnterprise {
     entityId: string;
     periodStart: string;
     periodEnd: string;
-    items: any[];
+    items: InvoiceItem[];
   }): Invoice {
     const db = getDb();
     const id = this.generateId();
@@ -773,7 +819,7 @@ export class YieldEnterprise {
       now,
     );
 
-    return this.getInvoice(id);
+    return this.getInvoice(id)!;
   }
 
   /**
@@ -786,9 +832,10 @@ export class YieldEnterprise {
       .get(id) as Invoice | undefined;
     if (!row) return null;
 
+    const raw = row as unknown as Record<string, unknown>;
     return {
       ...row,
-      items: JSON.parse(row.items as string),
+      items: JSON.parse((raw.items as string) || "[]"),
     };
   }
 
@@ -839,7 +886,7 @@ export class YieldEnterprise {
       now,
     );
 
-    return this.getTransaction(id);
+    return this.getTransaction(id)!;
   }
 
   /**
@@ -856,13 +903,17 @@ export class YieldEnterprise {
   /**
    * Update transaction status
    */
-  updateTransactionStatus(transactionId: string, status: string, processedAt?: string): Transaction | null {
+  updateTransactionStatus(
+    transactionId: string,
+    status: string,
+    failedReason?: string,
+  ): Transaction | null {
     const db = getDb();
-    const now = processedAt || new Date().toISOString();
+    const now = new Date().toISOString();
 
     db.prepare(
-      `UPDATE transactions SET status = ?, processed_at = ? WHERE id = ?`,
-    ).run(status, now, transactionId);
+      `UPDATE transactions SET status = ?, processed_at = ?, failed_reason = ? WHERE id = ?`,
+    ).run(status, now, failedReason ?? null, transactionId);
 
     return this.getTransaction(transactionId);
   }

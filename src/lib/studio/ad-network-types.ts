@@ -3,7 +3,7 @@
  * Multi-platform distributed ad serving across Ayeba ecosystem
  */
 
-export type NetworkDomain = "ayeba.app" | "omega-web.org" | "sombatekaonline.com" | "jemsa.net" | "tala.cd";
+export type NetworkDomain = "ayeba.app" | "omega-web.org" | "sombatekaonline.com" | "jemsa.net" | "tala.cd" | "to-tala.com";
 
 export type AdFormat = "display" | "native" | "video" | "audio" | "interstitial" | "banner" | "feed" | "sponsored";
 
@@ -19,7 +19,7 @@ export type TargetingOperator = "equals" | "contains" | "starts_with" | "regex" 
 
 export type ApprovalStatus = "pending" | "approved" | "rejected" | "under_review";
 
-export type PaymentStatus = "pending" | "processing" | "completed" | "failed" | "refunded";
+export type PaymentStatus = "pending" | "processing" | "processed" | "completed" | "failed" | "refunded";
 
 export type InvoiceStatus = "draft" | "sent" | "paid" | "overdue" | "cancelled";
 
@@ -256,6 +256,11 @@ export type AdRequest = {
       browser: string;
     };
     audience?: string[];
+  };
+  pricing?: {
+    floorPrice: number;
+    winningPrice: number;
+    currency: string;
   };
 };
 
