@@ -4,6 +4,7 @@ export type SearchIntent =
   | { kind: "math"; expr: string; display: string }
   | { kind: "capital"; subject: string; wikiQuery: string }
   | { kind: "city"; label: string; wikiQuery: string }
+  | { kind: "geography"; subject: string; wikiQuery: string }
   | { kind: "navigational"; site: NavigationalSite }
   | { kind: "general" };
 
@@ -121,6 +122,19 @@ function parseCityIntent(query: string): { label: string; wikiQuery: string } | 
   return null;
 }
 
+function parseGeographyIntent(query: string): { subject: string; wikiQuery: string } | null {
+  const normalized = normKey(query);
+  if (!/\b(kilometre|kilometres|km|superficie|surface|distance|largeur|longueur)\b/.test(normalized)) {
+    return null;
+  }
+  for (const city of Object.values(CITY_LOOKUP)) {
+    if (normalized.includes(normKey(city.label))) {
+      return { subject: city.label, wikiQuery: city.wikiQuery };
+    }
+  }
+  return null;
+}
+
 export function parseSearchIntent(query: string): SearchIntent {
   const raw = query.trim();
   if (!raw) return { kind: "general" };
@@ -137,6 +151,9 @@ export function parseSearchIntent(query: string): SearchIntent {
 
   const capital = parseCapitalIntent(raw);
   if (capital) return { kind: "capital", ...capital };
+
+  const geography = parseGeographyIntent(raw);
+  if (geography) return { kind: "geography", ...geography };
 
   const city = parseCityIntent(raw);
   if (city) return { kind: "city", ...city };
@@ -202,6 +219,8 @@ export function upstreamQuery(query: string, intent: SearchIntent): string {
     case "capital":
       return intent.wikiQuery;
     case "city":
+      return intent.wikiQuery;
+    case "geography":
       return intent.wikiQuery;
     default:
       return query;

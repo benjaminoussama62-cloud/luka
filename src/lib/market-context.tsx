@@ -40,9 +40,16 @@ export function MarketProvider({ children }: { children: ReactNode }) {
   }, [data]);
 
   useEffect(() => {
-    void refresh();
-    const id = window.setInterval(() => void refresh(), 180_000);
-    return () => window.clearInterval(id);
+    let mounted = true;
+    const run = async () => {
+      await refresh();
+      if (!mounted) return;
+    };
+    void run();
+    const id = window.setInterval(() => {
+      if (mounted) void refresh();
+    }, 180_000);
+    return () => { mounted = false; window.clearInterval(id); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const openQuote = useCallback(

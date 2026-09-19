@@ -44,7 +44,10 @@ export function MarketDetailModal({
   }, [onClose]);
 
   useEffect(() => {
-    if (initialAmount) setAmount(initialAmount);
+    if (initialAmount) {
+      const t = window.setTimeout(() => setAmount(initialAmount), 0);
+      return () => window.clearTimeout(t);
+    }
   }, [initialAmount, quote.id]);
 
   const num = parseNum(amount);

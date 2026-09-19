@@ -24,8 +24,8 @@ export function VoiceSearchButton({ onResult }: { onResult: (text: string) => vo
       webkitSpeechRecognition?: SpeechRecognitionCtor;
     };
     const Ctor = w.SpeechRecognition || w.webkitSpeechRecognition;
-    setSupported(Boolean(Ctor));
-    if (!Ctor) return;
+    const t = window.setTimeout(() => setSupported(Boolean(Ctor)), 0);
+    if (!Ctor) return () => window.clearTimeout(t);
 
     const rec = new Ctor();
     rec.lang = "fr-FR";
@@ -39,6 +39,7 @@ export function VoiceSearchButton({ onResult }: { onResult: (text: string) => vo
     rec.onerror = () => setListening(false);
     rec.onend = () => setListening(false);
     recRef.current = rec;
+    return () => window.clearTimeout(t);
   }, [onResult]);
 
   if (!supported) return null;

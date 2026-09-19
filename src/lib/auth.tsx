@@ -52,18 +52,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    void refreshSession().finally(() => setReady(true));
+    let mounted = true;
+    const run = async () => {
+      await refreshSession();
+      if (mounted) setReady(true);
+    };
+    void run();
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
     const auth = params.get("auth");
     if (!auth) return;
     window.history.replaceState({}, "", window.location.pathname + window.location.hash);
     if (auth === "ok") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       void refreshSession();
       setLoginOpen(false);
     } else if (auth === "failed" || auth === "config") {
       setLoginOpen(true);
     }
+    return () => { mounted = false; };
   }, [refreshSession]);
 
   const loginWithEmail = useCallback(

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAyeba } from "@/lib/store";
 
 export function PodcastPlayer() {
@@ -9,29 +9,34 @@ export function PodcastPlayer() {
   const [index, setIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
 
+  const stableSegments = useMemo(() => segments, [segments?.length]);
+
   useEffect(() => {
     if (!podcastOpen) {
       window.speechSynthesis?.cancel();
-      setPlaying(false);
-      setIndex(0);
+      const t = window.setTimeout(() => {
+        setPlaying(false);
+        setIndex(0);
+      }, 0);
+      return () => window.clearTimeout(t);
     }
   }, [podcastOpen]);
 
   useEffect(() => {
-    if (!playing || !podcastOpen || !segments[index]) return;
+    if (!playing || !podcastOpen || !stableSegments[index]) return;
     window.speechSynthesis.cancel();
-    const seg = segments[index];
+    const seg = stableSegments[index];
     const u = new SpeechSynthesisUtterance(seg.text);
     u.lang = "fr-FR";
     u.rate = seg.speaker === "A" ? 1 : 0.95;
     u.pitch = seg.speaker === "A" ? 1 : 0.85;
     u.onend = () => {
-      if (index < segments.length - 1) setIndex((i) => i + 1);
+      if (index < stableSegments.length - 1) setIndex((i) => i + 1);
       else setPlaying(false);
     };
     window.speechSynthesis.speak(u);
     return () => window.speechSynthesis.cancel();
-  }, [playing, index, podcastOpen, segments]);
+  }, [playing, index, podcastOpen, stableSegments]);
 
   if (!podcastOpen) return null;
 
@@ -75,7 +80,7 @@ export function PodcastPlayer() {
           </div>
 
           <ul className="space-y-3">
-            {segments.map((seg, i) => (
+            {stableSegments.map((seg, i) => (
               <li
                 key={i}
                 className={`ayeba-panel px-4 py-3 text-sm leading-relaxed ${

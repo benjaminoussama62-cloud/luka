@@ -32,9 +32,12 @@ export function InAppBrowser({
   const mobile = typeof window !== "undefined" && isMobileApp();
 
   useEffect(() => {
-    setBusy(true);
-    const t = window.setTimeout(() => setBusy(false), 1200);
-    return () => window.clearTimeout(t);
+    const t1 = window.setTimeout(() => setBusy(true), 0);
+    const t2 = window.setTimeout(() => setBusy(false), 1200);
+    return () => {
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+    };
   }, [url, nonce]);
 
   function reload() {

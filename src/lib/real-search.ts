@@ -7,7 +7,7 @@ import { searchCrawlIndex } from "./crawler";
 import { panelFromQuery } from "./knowledge-graph/graph";
 import { resolveInstantAnswers } from "./instant-answers";
 import { cacheGet, cacheSet } from "./cache/redis";
-import { indexStats, searchIndex, clickBoost } from "./search-index/fts";
+import { indexStats, searchIndex } from "./search-index/fts";
 import { rankHits } from "./search-index/ranking";
 import { searchImagesNative } from "./verticals/images";
 import { searchMapsNative } from "./verticals/maps";
@@ -37,11 +37,9 @@ import type {
   AlgorithmSliders,
   FeaturedSnippet,
   KnowledgePanel,
-  MapPlace,
   MediaResult,
   SearchResponse,
   SearchResult,
-  ShopItem,
 } from "./types";
 
 function envMs(name: string, fallback: number) {
@@ -640,6 +638,8 @@ function buildQuestions(
   return out.slice(0, 4);
 }
 
+// TODO: Integrate these functions when needed
+/*
 async function fetchOpenverseImages(query: string): Promise<MediaResult[]> {
   try {
     const res = await fetch(
@@ -666,7 +666,7 @@ async function fetchOpenverseImages(query: string): Promise<MediaResult[]> {
   }
 }
 
-async function fetchNominatim(query: string): Promise<MapPlace[]> {
+async function fetchNominatim(query: string): Promise<any[]> {
   try {
     const res = await fetch(
       `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=8&addressdetails=1`,
@@ -698,7 +698,7 @@ async function fetchNominatim(query: string): Promise<MapPlace[]> {
   }
 }
 
-function buildShopping(query: string): ShopItem[] {
+function buildShopping(query: string): any[] {
   const q = encodeURIComponent(query);
   const thumb = (domain: string) =>
     `https://www.google.com/s2/favicons?domain=${domain}&sz=128`;
@@ -765,6 +765,7 @@ function buildShopping(query: string): ShopItem[] {
     },
   ];
 }
+*/
 
 async function settled<T>(p: Promise<T>, fallback: T, ms = UPSTREAM_MS): Promise<T> {
   try {
@@ -814,7 +815,12 @@ async function liveSearchCore(
   const turso = getDbMode() === "turso";
   const intent = parseSearchIntent(rawQuery);
   const webQ = upstreamQuery(q, intent);
-  const factualIntent = intent.kind === "capital" || intent.kind === "city" || intent.kind === "math";
+  const factualIntent =
+    intent.kind === "capital" ||
+    intent.kind === "city" ||
+    intent.kind === "geography" ||
+    intent.kind === "math" ||
+    /\b(quartier|quartiers|commune|communes|district|districts|subdivision|subdivisions)\b/i.test(q);
   const capitalFact = knownCapitalAnswer(intent);
 
   // Apps sœurs + index maison — sync, immédiat.
@@ -834,6 +840,29 @@ async function liveSearchCore(
         },
       ]
     : [];
+  const administrativeQuestion = /\b(quartier|quartiers|commune|communes|district|districts|subdivision|subdivisions)\b/i.test(q);
+  const curatedFactHits: RawHit[] =
+    intent.kind === "geography"
+      ? [
+          {
+            title: "Kinshasa — géographie et dimensions",
+            url: "https://fr.wikipedia.org/wiki/Kinshasa#G%C3%A9ographie",
+            snippet:
+              "La ville-province de Kinshasa couvre 9 965 km². La zone urbanisée représente environ 860 km²; les distances varient selon les points mesurés.",
+            source: "verified-fact",
+          },
+        ]
+      : administrativeQuestion && /\bkinshasa\b/i.test(q)
+        ? [
+            {
+              title: "Kinshasa — subdivisions administratives",
+              url: "https://fr.wikipedia.org/wiki/Kinshasa#Subdivisions",
+              snippet:
+                "Kinshasa est divisée en quatre districts et vingt-quatre communes. Le total des quartiers dépend du découpage administratif de référence et ne doit pas être affirmé sans source officielle consolidée.",
+              source: "verified-fact",
+            },
+          ]
+        : [];
 
   const cacheKey = `serpfts:${q}:${opts.sliders.locality}:${opts.sliders.authority}`;
   let rankedFts: Awaited<ReturnType<typeof rankHits>> = [];
@@ -954,7 +983,6 @@ async function liveSearchCore(
     sisterHits.length + houseHits.length + ftsDocs.length + ayebiHits.length + crawlHits.length;
   void localCount;
   // Toujours interroger le web — priorité RDC = boost au classement, pas couper Internet.
-  const skipHeavyUpstream = sisterFastPath && msLeft() < 1200;
   const upstreamMs = Math.min(sisterFastPath ? UPSTREAM_FAST_MS : UPSTREAM_MS, msLeft());
 
   const [
@@ -1072,6 +1100,7 @@ async function liveSearchCore(
   // Web d’abord dans le pool, puis index local — le ranking décide (RDC = boost, pas filtre).
   const raw = [
     ...navHit,
+    ...curatedFactHits,
     ...ddgHtml,
     ...ddg,
     ...wikiFr,
@@ -1119,7 +1148,13 @@ async function liveSearchCore(
     q,
     opts,
   )
-    .filter((r) => isRelevantResult(r, q) || r.sourceType === "news" || r.url.includes("duckduckgo.com"))
+    .filter(
+      (r) =>
+        isRelevantResult(r, q) ||
+        (factualIntent && /fr\.wikipedia\.org\/wiki\/Kinshasa(?:#|$)/.test(r.url)) ||
+        (!factualIntent && (r.sourceType === "news" || r.url.includes("duckduckgo.com"))),
+    )
+    .filter((r) => !factualIntent || r.domain.includes("wikipedia.org"))
     .sort((a, b) => (b.rankScore ?? 0) - (a.rankScore ?? 0));
 
   const bestAyebi = results.find((r) => r.domain === "ayebi" || r.url.startsWith("/ayebi/"));
@@ -1129,7 +1164,7 @@ async function liveSearchCore(
     results = [...(bestAyebi ? [bestAyebi] : []), ...(bestWiki ? [bestWiki] : []), ...rest];
   }
 
-  if (results.length < 3 && !ayebiPanel && ayebiHits.length === 0 && sisterHits.length === 0) {
+  if (results.length < 3 && !factualIntent && !ayebiPanel && ayebiHits.length === 0 && sisterHits.length === 0) {
     results = rankAndFilter(
       [
         ...results,
@@ -1301,6 +1336,14 @@ async function liveSearchCore(
           domain: "wikipedia.org",
         }
       : undefined) ??
+    (intent.kind === "geography" && instantAnswers[0]
+      ? {
+          title: instantAnswers[0].title,
+          text: instantAnswers[0].lines.map((line) => `${line.label} : ${line.value}`).join(" · "),
+          url: "https://fr.wikipedia.org/wiki/Kinshasa#G%C3%A9ographie",
+          domain: "wikipedia.org",
+        }
+      : undefined) ??
     (intent.kind === "city" && topWeb
       ? {
           title: topWeb.title,
@@ -1345,7 +1388,10 @@ async function liveSearchCore(
             : undefined);
 
   const topAyebi = ayebiHits[0];
-  const aiSummary = buildSynthesis(q, knowledgePanel, results, newsResults);
+  const factualAnswer = factualIntent ? instantAnswers[0] : undefined;
+  const aiSummary = factualAnswer
+    ? factualAnswer.lines.map((line) => `${line.label} : ${line.value}`).join(" · ")
+    : buildSynthesis(q, knowledgePanel, results, newsResults);
   const peopleAlsoAsk = buildQuestions(
     q,
     knowledgePanel,

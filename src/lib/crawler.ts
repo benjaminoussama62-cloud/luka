@@ -120,7 +120,6 @@ export async function runLocalCrawl(maxPages = MAX_PAGES): Promise<CrawlDoc[]> {
   const seen = new Set<string>();
   const docs: CrawlDoc[] = [];
   const existing = await getCrawlIndex();
-  const existingUrls = new Set(existing.map((d) => d.url));
 
   while (queue.length > 0 && docs.length < maxPages) {
     const url = queue.shift()!;

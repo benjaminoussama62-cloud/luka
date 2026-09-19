@@ -16,7 +16,10 @@ export function InteractiveCanvas() {
   const [tables, setTables] = useState<CanvasTable[]>([]);
 
   useEffect(() => {
-    if (canvasOpen) setTables(response?.canvas ?? []);
+    if (canvasOpen) {
+      const t = window.setTimeout(() => setTables(response?.canvas ?? []), 0);
+      return () => window.clearTimeout(t);
+    }
   }, [canvasOpen, response]);
 
   if (!canvasOpen) return null;

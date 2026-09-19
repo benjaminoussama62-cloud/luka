@@ -34,11 +34,13 @@ export function MarketTicker({
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
+    const t = window.setTimeout(() => setMounted(true), 0);
+    return () => window.clearTimeout(t);
   }, []);
 
   useEffect(() => {
-    setData(payload);
+    const t = window.setTimeout(() => setData(payload), 0);
+    return () => window.clearTimeout(t);
   }, [payload]);
 
   const row = [...data.quotes, ...data.quotes];

@@ -1,5 +1,7 @@
 "use client";
 
+import Image from "next/image";
+
 /** Wordmark AYEBA — même tailles, style Gargantua (majuscules + lueur cyan) */
 export function AyebaWordmark({
   size = "md",
@@ -35,12 +37,13 @@ export function AyebaIcon({
   className?: string;
 }) {
   return (
-    <span
-      className={`inline-flex items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--surface)] font-[family-name:var(--font-brand)] font-bold text-white ${className}`}
-      style={{ width: size, height: size, fontSize: size * 0.4 }}
-      aria-hidden
-    >
-      A
-    </span>
+    <Image
+      src="/brand/ayeba-mark-192.png"
+      alt="AYEBA"
+      width={size}
+      height={size}
+      className={`rounded-[22%] object-contain ${className}`}
+      style={{ width: size, height: size }}
+    />
   );
 }

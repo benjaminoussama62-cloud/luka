@@ -13,13 +13,16 @@ export function SearchEngineSettings({ compact = false }: { compact?: boolean })
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
-    setEngine(getSearchEngineId());
+    const t = window.setTimeout(() => setEngine(getSearchEngineId()), 0);
     const onChange = (e: Event) => {
       const id = (e as CustomEvent<SearchEngineId>).detail;
       if (id) setEngine(id);
     };
     window.addEventListener("ayeba:search-engine", onChange);
-    return () => window.removeEventListener("ayeba:search-engine", onChange);
+    return () => {
+      window.clearTimeout(t);
+      window.removeEventListener("ayeba:search-engine", onChange);
+    };
   }, []);
 
   function pick(id: SearchEngineId) {

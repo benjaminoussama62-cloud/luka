@@ -81,10 +81,13 @@ export function BrowserShellProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const saved = loadTabs();
     if (saved) {
-      setTabs(saved);
       const aid = sessionStorage.getItem(`${TABS_KEY}.active`);
-      if (aid && saved.some((t) => t.id === aid)) setActiveId(aid);
-      else setActiveId(saved[0].id);
+      const nextActiveId = aid && saved.some((t) => t.id === aid) ? aid : saved[0].id;
+      const t = window.setTimeout(() => {
+        setTabs(saved);
+        setActiveId(nextActiveId);
+      }, 0);
+      return () => window.clearTimeout(t);
     }
   }, []);
 

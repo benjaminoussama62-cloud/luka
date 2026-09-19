@@ -288,6 +288,47 @@ function tryWeatherQuery(query: string): string | null {
   return "Kinshasa";
 }
 
+function administrativeAnswer(query: string): InstantAnswer | null {
+  const q = query.toLowerCase().normalize("NFD").replace(/\p{M}/gu, "");
+  const asksDistricts = /\b(quartier|quartiers|commune|communes|district|districts|subdivision|subdivisions)\b/.test(q);
+  if (!asksDistricts || !/\bkinshasa\b/.test(q)) return null;
+
+  const asksQuartiers = /\b(quartier|quartiers)\b/.test(q);
+  return {
+    kind: "administrative",
+    title: "Organisation administrative · Kinshasa",
+    lines: asksQuartiers
+      ? [
+          { label: "Structure officielle", value: "4 districts et 24 communes" },
+          { label: "Quartiers", value: "Nombre global non confirmé par une source officielle unique" },
+        ]
+      : [
+          { label: "Districts", value: "4" },
+          { label: "Communes", value: "24" },
+        ],
+    footnote:
+      "Source de référence : Wikipédia, section Géographie / Subdivisions, avec renvoi à la Monographie de la ville de Kinshasa (Ministère du Plan, 2005). AYEBA n'invente pas un total de quartiers non vérifié.",
+  };
+}
+
+function geographyAnswer(query: string): InstantAnswer | null {
+  const q = query.toLowerCase().normalize("NFD").replace(/\p{M}/gu, "");
+  if (!/\b(kilometre|kilometres|km|superficie|surface|distance|largeur|longueur)\b/.test(q)) return null;
+  if (!/\bkinshasa\b/.test(q)) return null;
+
+  return {
+    kind: "geography",
+    title: "Dimensions géographiques · Kinshasa",
+    lines: [
+      { label: "Superficie de la ville-province", value: "9 965 km²" },
+      { label: "Zone urbanisée", value: "environ 860 km²" },
+      { label: "Étendue urbaine est-ouest", value: "environ 18 km le long du fleuve Congo" },
+    ],
+    footnote:
+      "Sources de référence : Wikipédia, article Kinshasa, section Géographie; données citées de la Monographie de la ville de Kinshasa et sources cartographiques. Les distances dépendent du point de départ et du point d’arrivée.",
+  };
+}
+
 function tryUnit(query: string): InstantAnswer | null {
   const q = query.toLowerCase().replace(",", ".");
   const m = q.match(/(\d+(?:\.\d+)?)\s*(km|mi|miles?|kg|lb|lbs|l|litre|litres|gal|celsius|fahrenheit|°c|°f)\s*(?:en|to|vers|in|=|->)?\s*(km|mi|miles?|kg|lb|lbs|l|litre|litres|gal|celsius|fahrenheit|°c|°f)?/i);
@@ -342,6 +383,12 @@ export async function resolveInstantAnswers(query: string): Promise<InstantAnswe
       footnote: "Ayebi · dictionnaire AYEBA",
     });
   }
+
+  const administrative = administrativeAnswer(q);
+  if (administrative) out.push(administrative);
+
+  const geography = geographyAnswer(q);
+  if (geography) out.push(geography);
 
   const pop = populationAnswer(q);
   if (pop) {

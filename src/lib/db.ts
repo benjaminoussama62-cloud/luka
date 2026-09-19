@@ -31,7 +31,7 @@ type UsersFile = { users: DbUser[] };
 type CrawlFile = { docs: CrawlDoc[]; lastRun?: string };
 type HistoryFile = { byUser: Record<string, string[]> };
 
-function useSqliteStore() {
+function shouldUseSqliteStore() {
   // Prefer durable SQLite/Turso for auth + history on every environment.
   return true;
 }
@@ -93,7 +93,7 @@ async function writeJson<T>(file: string, data: T) {
 }
 
 export async function getUsers(): Promise<DbUser[]> {
-  if (useSqliteStore()) {
+  if (shouldUseSqliteStore()) {
     const rows = getDb()
       .prepare(
         "SELECT id, name, email, password_hash, avatar_color, provider, created_at FROM users ORDER BY created_at",
@@ -156,7 +156,7 @@ export async function saveUsers(users: DbUser[]) {
 }
 
 export async function findUserByEmail(email: string) {
-  if (useSqliteStore()) {
+  if (shouldUseSqliteStore()) {
     const row = getDb()
       .prepare(
         "SELECT id, name, email, password_hash, avatar_color, provider, created_at FROM users WHERE lower(email) = lower(?)",
@@ -179,7 +179,7 @@ export async function findUserByEmail(email: string) {
 }
 
 export async function findUserById(id: string) {
-  if (useSqliteStore()) {
+  if (shouldUseSqliteStore()) {
     const row = getDb()
       .prepare(
         "SELECT id, name, email, password_hash, avatar_color, provider, created_at FROM users WHERE id = ?",
@@ -211,7 +211,7 @@ export async function saveCrawlIndex(docs: CrawlDoc[], lastRun?: string) {
 }
 
 export async function getSearchHistory(userId: string): Promise<string[]> {
-  if (useSqliteStore()) {
+  if (shouldUseSqliteStore()) {
     const rows = getDb()
       .prepare(
         "SELECT query FROM search_history WHERE user_id = ? ORDER BY created_at DESC LIMIT 40",
@@ -231,7 +231,7 @@ export async function getSearchHistory(userId: string): Promise<string[]> {
 }
 
 export async function pushSearchHistory(userId: string, query: string) {
-  if (useSqliteStore()) {
+  if (shouldUseSqliteStore()) {
     const db = getDb();
     db.prepare("DELETE FROM search_history WHERE user_id = ? AND query = ?").run(userId, query);
     db.prepare(

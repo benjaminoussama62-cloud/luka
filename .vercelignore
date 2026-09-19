@@ -1,0 +1,12 @@
+node_modules
+**/node_modules
+.next
+desktop/**/dist
+desktop/**/node_modules
+mobile/**/node_modules
+mobile/**/android/.gradle
+mobile/**/android/build
+mobile/**/android/app/build
+data
+tmp-search.json
+*.log

@@ -161,7 +161,9 @@ export type InstantAnswerKind =
   | "unit"
   | "calc"
   | "definition"
-  | "population";
+  | "population"
+  | "administrative"
+  | "geography";
 
 export type InstantAnswer = {
   kind: InstantAnswerKind;

@@ -1938,6 +1938,25 @@ select option {
   }
 }
 
+@media (max-width: 380px) {
+  .ayeba-panel {
+    padding: 1rem;
+  }
+
+  .ayeba-cta {
+    min-width: 0;
+    width: 100%;
+  }
+}
+
+@media (min-width: 1600px) {
+  .ayeba-shell,
+  .ayeba-page-width {
+    max-width: 1180px;
+    margin-inline: auto;
+  }
+}
+
 /* ——— Home shortcuts: equal spacing, all screens ——— */
 .ayeba-shortcuts {
   display: flex;
@@ -3429,6 +3448,70 @@ select option {
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.05);
   color: var(--ink);
+}
+
+.ayeba-cite-num {
+  color: rgba(0, 220, 255, 0.9);
+  font-family: var(--font-mono);
+  font-size: 0.75em;
+  text-decoration: none;
+  vertical-align: super;
+  line-height: 0;
+}
+
+.ayeba-cite-num:hover {
+  color: #fff;
+  text-decoration: underline;
+}
+
+/* ——— Export PDF ——— */
+@media print {
+  .ayeba-wiki-bar,
+  .ayeba-stage,
+  .ayeba-vignette,
+  .ayeba-drc-glow,
+  .ayeba-cursor-glow,
+  .ayeba-ambient,
+  .ayeba-gradient-stage {
+    display: none !important;
+  }
+
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  .ayeba-panel,
+  .ayeba-glass {
+    border: 1px solid #ccc !important;
+    background: #fff !important;
+    backdrop-filter: none !important;
+  }
+
+  .ayeba-kicker,
+  .ayeba-kicker-accent {
+    color: #555 !important;
+  }
+
+  h1, h2, h3 {
+    color: #000 !important;
+  }
+
+  p, li, dt, dd {
+    color: #222 !important;
+  }
+
+  a {
+    color: #0066cc !important;
+  }
+
+  .ayeba-wikilink {
+    color: #0066cc !important;
+  }
+
+  .ayeba-cite-num {
+    color: #0066cc !important;
+  }
 }
 
 .store-badge-link {

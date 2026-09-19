@@ -3,7 +3,7 @@ import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import type { DbUser } from "./db";
 import { findUserByEmail, findUserById, getUsers, saveUsers } from "./db";
-import { migrateAllUsersFromJson, syncUserToSqlite } from "./users-sqlite";
+import { syncUserToSqlite } from "./users-sqlite";
 
 export const SESSION_COOKIE = "ayeba_session";
 const SESSION_DAYS = 30;
@@ -19,7 +19,6 @@ export type SessionUser = {
 function secretKey() {
   const secret =
     process.env.AUTH_SECRET ||
-    process.env.JWT_SECRET ||
     (process.env.NODE_ENV === "development" ? "ayeba-dev-secret-min-32-chars!!" : undefined);
   if (!secret || secret.length < 16) {
     throw new Error("AUTH_SECRET manquant. Copie .env.example vers .env.local");

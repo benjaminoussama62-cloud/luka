@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import Link from "next/link";
 import { CursorGradient } from "@/components/effects/CursorGradient";
 import { GradientStage } from "@/components/effects/GradientStage";
 import { LoginModal, ProfileMenu } from "@/components/auth/AuthUI";
@@ -13,7 +14,6 @@ import { isMobileApp } from "@/lib/mobile-app";
 import { useAyeba } from "@/lib/store";
 import type { MapPlace, MediaResult, SearchTab, ShopItem } from "@/lib/types";
 import { AlgorithmSliders } from "./AlgorithmSliders";
-import { SearchEngineSettings } from "@/components/settings/SearchEngineSettings";
 import { CodeExecutor } from "./CodeExecutor";
 import { CommunityIndex } from "./CommunityIndex";
 import { DeepResearchPanel } from "./DeepResearchPanel";
@@ -448,7 +448,6 @@ function AyebaAppBody() {
             <HomeSplashGate
               header={
                 <>
-                  <SearchEngineSettings compact />
                   <LangSwitch />
                   <ProfileMenu />
                 </>
@@ -477,10 +476,9 @@ function AyebaAppBody() {
             <div className="ayeba-serp-actions flex shrink-0 items-center gap-1.5 sm:gap-2">
               {typeof window !== "undefined" && isMobileApp() ? (
                 <>
-                  <SearchEngineSettings compact />
-                  <a href="/ayebi" className="ayeba-ghost px-2 py-1.5 text-xs">
+                  <Link href="/ayebi" className="ayeba-ghost px-2 py-1.5 text-xs">
                     Ayebi
-                  </a>
+                  </Link>
                 </>
               ) : null}
               <div className="ayeba-serp-lang">

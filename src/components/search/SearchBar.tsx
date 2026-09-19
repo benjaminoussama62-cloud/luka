@@ -32,15 +32,18 @@ export function SearchBar({ large = false }: { large?: boolean }) {
   }, []);
 
   useEffect(() => {
-    if (searching) closeSuggest();
+    if (searching) {
+      const t = window.setTimeout(() => closeSuggest(), 0);
+      return () => window.clearTimeout(t);
+    }
   }, [searching, closeSuggest]);
 
   useEffect(() => {
     if (timer.current) window.clearTimeout(timer.current);
     // Never overlay SERP with suggestions after a search unless user is actively typing.
     if (searching || !focused || !typing || !query.trim()) {
-      if (!typing) setOpen(false);
-      return;
+      const t = window.setTimeout(() => setOpen(false), 0);
+      return () => window.clearTimeout(t);
     }
 
     timer.current = window.setTimeout(async () => {

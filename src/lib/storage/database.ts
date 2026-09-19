@@ -5,6 +5,8 @@ import {
   sisterDevCallback,
   sisterProductionCallback,
 } from "@/lib/oauth-provider/sister-apps";
+import { applyEnterpriseSchema } from "@/lib/studio/enterprise-schema";
+import { applyAdminSchema } from "@/lib/admin/admin-schema";
 
 /** Minimal surface shared by better-sqlite3 and libsql sync drivers. */
 export type AyebaDatabase = {
@@ -243,6 +245,48 @@ function migrate(db: AyebaDatabase) {
     );
 
     CREATE INDEX IF NOT EXISTS idx_talk_slug ON ayebi_talk(slug);
+
+    CREATE TABLE IF NOT EXISTS ayebi_watchlist (
+      user_id TEXT NOT NULL,
+      slug TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (user_id, slug)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_watchlist_user ON ayebi_watchlist(user_id);
+    CREATE INDEX IF NOT EXISTS idx_watchlist_slug ON ayebi_watchlist(slug);
+
+    CREATE TABLE IF NOT EXISTS ayebi_page_views (
+      slug TEXT NOT NULL,
+      day TEXT NOT NULL,
+      views INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (slug, day)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_views_slug ON ayebi_page_views(slug);
+
+    CREATE TABLE IF NOT EXISTS ayebi_portals (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      image TEXT,
+      tags_json TEXT NOT NULL DEFAULT '[]',
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS ayebi_flags (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      slug TEXT NOT NULL,
+      reporter_id TEXT NOT NULL,
+      reporter_name TEXT NOT NULL,
+      reason TEXT NOT NULL,
+      detail TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'open',
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_flags_slug ON ayebi_flags(slug);
+    CREATE INDEX IF NOT EXISTS idx_flags_status ON ayebi_flags(status);
 
     CREATE TABLE IF NOT EXISTS ayebi_categories (
       id TEXT PRIMARY KEY,
@@ -560,10 +604,26 @@ function migrate(db: AyebaDatabase) {
     );
   `);
 
+  migrateAyebiColumns(db);
   migrateOAuthColumns(db);
   seedCategories(db);
   seedMlWeights(db);
   seedOAuthClients(db);
+  applyEnterpriseSchema(db);
+  applyAdminSchema(db);
+}
+
+function migrateAyebiColumns(db: AyebaDatabase) {
+  const alters = [
+    "ALTER TABLE ayebi_articles ADD COLUMN stub INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE ayebi_articles ADD COLUMN view_count INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE ayebi_articles ADD COLUMN contributor_count INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE ayebi_articles ADD COLUMN references_json TEXT NOT NULL DEFAULT '[]'",
+    "ALTER TABLE ayebi_articles ADD COLUMN portal_id TEXT",
+  ];
+  for (const sql of alters) {
+    try { db.exec(sql); } catch { /* column exists */ }
+  }
 }
 
 function migrateOAuthColumns(db: AyebaDatabase) {
