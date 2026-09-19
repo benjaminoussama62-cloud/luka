@@ -1,19 +1,40 @@
 import { NextResponse, after } from "next/server";
-import { getSessionFromCookies } from "@/lib/auth-server";
+import { getSessionUserId } from "@/lib/auth-server";
 import { pushSearchHistory } from "@/lib/db";
 import { synthesizeWithLlm } from "@/lib/llm";
 import { rateLimit } from "@/lib/rate-limit";
 import { liveSearch } from "@/lib/real-search";
 import { recordImpressions } from "@/lib/search-index/fts";
-import type { AlgorithmSliders } from "@/lib/types";
+import { getDbMode } from "@/lib/storage/database";
+import {
+  pushSearchHistoryAsync,
+  recordImpressionsAsync,
+} from "@/lib/storage/turso-async";
+import type { AlgorithmSliders, SearchResponse } from "@/lib/types";
 
-export const maxDuration = 10;
+export const maxDuration = 60;
+
+/** Past this, answer with a local-only SERP instead of risking a platform 504. */
+const DEADLINE_MS = Number(process.env.AYEBA_SEARCH_DEADLINE_MS) || 4500;
+
+function serverTiming(timings: Record<string, number>, degraded: boolean) {
+  const parts = Object.entries(timings).map(([k, v]) => `${k};dur=${v}`);
+  parts.push(`mode;desc="${degraded ? "degraded" : "full"}"`);
+  return parts.join(", ");
+}
 
 export async function POST(req: Request) {
+  const startedAt = Date.now();
+  const timings: Record<string, number> = {};
+
   try {
-    const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "local";
+    const ip =
+      req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "local";
     if (!rateLimit(`search:${ip}`, 180, 60_000)) {
-      return NextResponse.json({ error: "Trop de requêtes — réessayez dans une minute." }, { status: 429 });
+      return NextResponse.json(
+        { error: "Trop de requêtes — réessayez dans une minute." },
+        { status: 429 },
+      );
     }
 
     const body = (await req.json()) as {
@@ -32,59 +53,95 @@ export async function POST(req: Request) {
 
     const query = body.query ?? "actualité";
     const zeroAi = Boolean(body.zeroAi);
-
-    // liveSearch has its own wall — do not race to empty 504 (that caused "échec" SERPs).
-    const result = await liveSearch(query, {
+    const opts = {
       sliders,
       zeroAi,
       zeroAds: Boolean(body.zeroAds),
       privateMode: Boolean(body.privateMode),
-    });
+      timings,
+    };
+
+    // liveSearch has its own wall, but a stuck upstream or a slow region must never
+    // burn the whole invocation: fall back to a local-only SERP instead of a 504.
+    let degraded = false;
+    let result = await Promise.race([
+      liveSearch(query, opts),
+      new Promise<null>((resolve) =>
+        setTimeout(() => resolve(null), DEADLINE_MS),
+      ),
+    ]);
+    if (!result) {
+      degraded = true;
+      result = await liveSearch(query, { ...opts, skipUpstream: true });
+    }
+    const serp: SearchResponse = result;
 
     // Skip LLM when SERP already has strong local hits (apps sœurs / index maison).
-    const strongLocal = result.results.some(
+    const strongLocal = serp.results.some(
       (r) =>
         (typeof r.rankScore === "number" && r.rankScore >= 200) ||
-        /\b(jemsa|tala|sombateka|omega|ayeba|devalpha)\b/i.test(`${r.title} ${r.domain}`),
+        /\b(jemsa|tala|sombateka|omega|ayeba|devalpha)\b/i.test(
+          `${r.title} ${r.domain}`,
+        ),
     );
-    if (!zeroAi && !strongLocal) {
+    const llmBudget = Math.min(
+      800,
+      DEADLINE_MS + 1500 - (Date.now() - startedAt),
+    );
+    if (!zeroAi && !degraded && !strongLocal && llmBudget > 200) {
       const llmSummary = await Promise.race([
-        synthesizeWithLlm(query, result.results, result.knowledge?.summary),
-        new Promise<null>((resolve) => setTimeout(() => resolve(null), 800)),
+        synthesizeWithLlm(query, serp.results, serp.knowledge?.summary),
+        new Promise<null>((resolve) =>
+          setTimeout(() => resolve(null), llmBudget),
+        ),
       ]);
-      if (llmSummary) result.aiSummary = llmSummary;
+      if (llmSummary) serp.aiSummary = llmSummary;
     }
 
+    timings.route = Date.now() - startedAt;
+
     after(async () => {
+      const turso = getDbMode() === "turso";
       try {
-        if (!body.privateMode && query.trim() && result.results?.length) {
-          recordImpressions(
-            query.trim(),
-            result.results.map((r, i) => ({
-              url: r.url,
-              domain: r.domain,
-              position: i + 1,
-            })),
-          );
+        if (!body.privateMode && query.trim() && serp.results?.length) {
+          const impressions = serp.results.slice(0, 20).map((r, i) => ({
+            url: r.url,
+            domain: r.domain,
+            position: i + 1,
+          }));
+          // The sync libsql driver blocks the event loop per statement — never use it
+          // on a Turso deployment, one SERP would cost a dozen blocking round trips.
+          if (turso) await recordImpressionsAsync(query.trim(), impressions);
+          else recordImpressions(query.trim(), impressions);
         }
       } catch (e) {
         console.warn("[search] impressions skipped", e);
       }
       try {
         if (body.privateMode || !query.trim()) return;
-        const session = await getSessionFromCookies();
-        if (session) await pushSearchHistory(session.id, query.trim());
+        const userId = await getSessionUserId();
+        if (!userId) return;
+        if (turso) await pushSearchHistoryAsync(userId, query.trim());
+        else await pushSearchHistory(userId, query.trim());
       } catch (e) {
         console.warn("[search] history skipped", e);
       }
     });
 
-    return NextResponse.json(result);
+    return NextResponse.json(serp, {
+      headers: { "Server-Timing": serverTiming(timings, degraded) },
+    });
   } catch (e) {
-    console.error(e);
+    console.error("[search]", e, timings);
     return NextResponse.json(
-      { error: "Recherche indisponible", message: e instanceof Error ? e.message : "error" },
-      { status: 500 },
+      {
+        error: "Recherche indisponible",
+        message: e instanceof Error ? e.message : "error",
+      },
+      {
+        status: 500,
+        headers: { "Server-Timing": serverTiming(timings, true) },
+      },
     );
   }
 }

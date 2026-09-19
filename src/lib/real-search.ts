@@ -44,11 +44,16 @@ import type {
   ShopItem,
 } from "./types";
 
+function envMs(name: string, fallback: number) {
+  const raw = Number(process.env[name]);
+  return Number.isFinite(raw) && raw > 0 ? raw : fallback;
+}
+
 /** Hard ceiling for any single upstream — users leave engines that feel slow. */
-const UPSTREAM_MS = 1800;
-const UPSTREAM_FAST_MS = 900;
-/** Whole liveSearch must finish under this — client aborts at ~10s. */
-const SEARCH_WALL_MS = 6500;
+const UPSTREAM_MS = envMs("AYEBA_UPSTREAM_MS", 1500);
+const UPSTREAM_FAST_MS = envMs("AYEBA_UPSTREAM_FAST_MS", 800);
+/** Whole liveSearch must finish under this — the route wraps it in a shorter deadline. */
+const SEARCH_WALL_MS = envMs("AYEBA_SEARCH_WALL_MS", 3500);
 
 /** Full SERP memory cache (always on — never block on Turso/SQLite for this). */
 const serpMemory = new Map<string, { at: number; body: SearchResponse }>();
@@ -91,7 +96,25 @@ type FetchOpts = {
   zeroAds: boolean;
   privateMode: boolean;
   sliders: AlgorithmSliders;
+  /** Local-only SERP: no upstream fetch, no remote index read. Always sub-second. */
+  skipUpstream?: boolean;
+  /** Filled with per-stage durations in ms — surfaced as Server-Timing by the route. */
+  timings?: Record<string, number>;
 };
+
+async function timed<T>(
+  timings: Record<string, number> | undefined,
+  label: string,
+  run: () => Promise<T>,
+): Promise<T> {
+  if (!timings) return run();
+  const start = Date.now();
+  try {
+    return await run();
+  } finally {
+    timings[label] = Date.now() - start;
+  }
+}
 
 type RawHit = {
   title: string;
@@ -755,16 +778,21 @@ async function settled<T>(p: Promise<T>, fallback: T, ms = UPSTREAM_MS): Promise
 }
 
 export async function liveSearch(query: string, opts: FetchOpts): Promise<SearchResponse> {
+  const startedAt = Date.now();
   const rawQuery = query.trim() || "actualité mondiale";
   const suggested = didYouMean(rawQuery);
   const q = rawQuery;
   const serpKey = `fullserp:${q.toLowerCase()}:${opts.sliders.locality}:${opts.sliders.authority}:${opts.zeroAi ? 1 : 0}`;
   const cached = serpMemory.get(serpKey);
   if (cached && Date.now() - cached.at < SERP_TTL_MS) {
+    if (opts.timings) opts.timings.cache = Date.now() - startedAt;
     return { ...cached.body, query: rawQuery };
   }
 
   const built = await liveSearchCore(rawQuery, suggested, q, opts);
+  if (opts.timings) opts.timings.total = Date.now() - startedAt;
+  // A degraded SERP must never poison the cache for the next full search.
+  if (opts.skipUpstream) return built;
   serpMemory.set(serpKey, { at: Date.now(), body: built });
   if (serpMemory.size > 800) {
     const oldest = [...serpMemory.entries()].sort((a, b) => a[1].at - b[1].at).slice(0, 200);
@@ -780,7 +808,8 @@ async function liveSearchCore(
   opts: FetchOpts,
 ): Promise<SearchResponse> {
   // Local index first — never wait on crawl. Users switch engines for speed + relevance.
-  const wall = Date.now() + SEARCH_WALL_MS;
+  const offline = Boolean(opts.skipUpstream);
+  const wall = Date.now() + (offline ? 400 : SEARCH_WALL_MS);
   const msLeft = () => Math.max(200, wall - Date.now());
   const turso = getDbMode() === "turso";
   const intent = parseSearchIntent(rawQuery);
@@ -808,29 +837,31 @@ async function liveSearchCore(
 
   const cacheKey = `serpfts:${q}:${opts.sliders.locality}:${opts.sliders.authority}`;
   let rankedFts: Awaited<ReturnType<typeof rankHits>> = [];
-  if (!sisterFastPath) {
-    try {
-      if (!turso) {
-        rankedFts = (await cacheGet<Awaited<ReturnType<typeof rankHits>>>(cacheKey)) ?? [];
+  if (!sisterFastPath && !offline) {
+    await timed(opts.timings, "fts", async () => {
+      try {
+        if (!turso) {
+          rankedFts = (await cacheGet<Awaited<ReturnType<typeof rankHits>>>(cacheKey)) ?? [];
+        }
+        if (!rankedFts.length) {
+          const hits = turso
+            ? await Promise.race([
+                searchIndexAsync(q, 40),
+                new Promise<Awaited<ReturnType<typeof searchIndexAsync>>>((r) =>
+                  setTimeout(() => r([]), Math.min(500, msLeft())),
+                ),
+              ])
+            : searchIndex(q, 40);
+          rankedFts = rankHits(hits, q, {
+            localityBoost: opts.sliders.locality,
+            authorityBoost: opts.sliders.authority,
+          });
+          if (!turso) void cacheSet(cacheKey, rankedFts, 180).catch(() => {});
+        }
+      } catch {
+        rankedFts = [];
       }
-      if (!rankedFts.length) {
-        const hits = turso
-          ? await Promise.race([
-              searchIndexAsync(q, 40),
-              new Promise<Awaited<ReturnType<typeof searchIndexAsync>>>((r) =>
-                setTimeout(() => r([]), Math.min(500, msLeft())),
-              ),
-            ])
-          : searchIndex(q, 40);
-        rankedFts = rankHits(hits, q, {
-          localityBoost: opts.sliders.locality,
-          authorityBoost: opts.sliders.authority,
-        });
-        if (!turso) void cacheSet(cacheKey, rankedFts, 180).catch(() => {});
-      }
-    } catch {
-      rankedFts = [];
-    }
+    });
   }
 
   let ayebiPanel: KnowledgePanel | undefined;
@@ -850,7 +881,9 @@ async function liveSearchCore(
     }
   }
 
-  if (turso && !sisterFastPath) {
+  if (offline) {
+    crawlHits = [];
+  } else if (turso && !sisterFastPath) {
     try {
       const asyncAyebi = await Promise.race([
         searchAyebiAsync(q, 5),
@@ -935,34 +968,42 @@ async function liveSearchCore(
     nativeVideos,
     nativeMaps,
     instantAnswers,
-  ] = await Promise.all([
-    sisterFastPath || skipWebForMath
-      ? Promise.resolve([] as RawHit[])
-      : settled(fetchWikipedia(webQ, "fr"), [], upstreamMs),
-    sisterFastPath || skipWebForMath
-      ? Promise.resolve([] as RawHit[])
-      : settled(fetchWikipedia(webQ, "en"), [], upstreamMs),
-    sisterFastPath || skipWebForMath
-      ? Promise.resolve([] as RawHit[])
-      : settled(fetchDuckDuckGo(webQ), [], upstreamMs),
-    sisterFastPath || skipWebForMath || msLeft() < 900
-      ? Promise.resolve([] as RawHit[])
-      : settled(fetchDuckDuckGoHtml(webQ), [], upstreamMs),
-    sisterFastPath
-      ? Promise.resolve([] as RawHit[])
-      : settled(fetchNewsRss(webQ), [], upstreamMs),
-    sisterFastPath || navSite || factualIntent
-      ? Promise.resolve(undefined)
-      : settled(fetchWikiSummary(webQ), undefined, Math.min(UPSTREAM_FAST_MS, msLeft())),
-    settled(searchImagesNative(q), [], Math.min(UPSTREAM_FAST_MS, msLeft())),
-    Promise.resolve([] as MediaResult[]),
-    settled(
-      searchMapsNative(isCongoHint(q) ? `${q} République démocratique du Congo` : q),
-      [],
-      Math.min(UPSTREAM_FAST_MS, msLeft()),
-    ),
-    sisterFastPath ? Promise.resolve([]) : settled(resolveInstantAnswers(q), [], upstreamMs),
-  ]);
+  ] = await timed(opts.timings, "upstream", () =>
+    Promise.all([
+      offline || sisterFastPath || skipWebForMath
+        ? Promise.resolve([] as RawHit[])
+        : settled(fetchWikipedia(webQ, "fr"), [], upstreamMs),
+      offline || sisterFastPath || skipWebForMath
+        ? Promise.resolve([] as RawHit[])
+        : settled(fetchWikipedia(webQ, "en"), [], upstreamMs),
+      offline || sisterFastPath || skipWebForMath
+        ? Promise.resolve([] as RawHit[])
+        : settled(fetchDuckDuckGo(webQ), [], upstreamMs),
+      offline || sisterFastPath || skipWebForMath || msLeft() < 900
+        ? Promise.resolve([] as RawHit[])
+        : settled(fetchDuckDuckGoHtml(webQ), [], upstreamMs),
+      offline || sisterFastPath
+        ? Promise.resolve([] as RawHit[])
+        : settled(fetchNewsRss(webQ), [], upstreamMs),
+      offline || sisterFastPath || navSite || factualIntent
+        ? Promise.resolve(undefined)
+        : settled(fetchWikiSummary(webQ), undefined, Math.min(UPSTREAM_FAST_MS, msLeft())),
+      offline
+        ? Promise.resolve([] as MediaResult[])
+        : settled(searchImagesNative(q), [], Math.min(UPSTREAM_FAST_MS, msLeft())),
+      Promise.resolve([] as MediaResult[]),
+      offline
+        ? Promise.resolve([] as MapPlace[])
+        : settled(
+            searchMapsNative(isCongoHint(q) ? `${q} République démocratique du Congo` : q),
+            [],
+            Math.min(UPSTREAM_FAST_MS, msLeft()),
+          ),
+      sisterFastPath
+        ? Promise.resolve([])
+        : settled(resolveInstantAnswers(q), [], offline ? 150 : upstreamMs),
+    ]),
+  );
 
   void nativeVideos;
 
@@ -1106,6 +1147,32 @@ async function liveSearchCore(
       q,
       opts,
     );
+  }
+
+  if (offline && !results.length) {
+    // Degraded mode still owes the user somewhere to go, never a blank SERP.
+    results = [
+      toResult(
+        {
+          title: `${q} — Wikipédia`,
+          url: `https://fr.wikipedia.org/w/index.php?search=${encodeURIComponent(q)}`,
+          snippet: `Article encyclopédique sur « ${q} ».`,
+          source: "fallback",
+        },
+        1,
+        q,
+      ),
+      toResult(
+        {
+          title: `${q} — Recherche web`,
+          url: `https://duckduckgo.com/?q=${encodeURIComponent(q)}`,
+          snippet: `Résultats web complets pour « ${q} ».`,
+          source: "fallback",
+        },
+        2,
+        q,
+      ),
+    ];
   }
 
   // Sitelinks synthétiques pour domaines majeurs

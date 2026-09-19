@@ -65,6 +65,19 @@ export function toSessionUser(u: DbUser): SessionUser {
   };
 }
 
+/** Session id from the signed cookie alone — no database round trip. */
+export async function getSessionUserId(): Promise<string | null> {
+  const jar = await cookies();
+  const token = jar.get(SESSION_COOKIE)?.value;
+  if (!token) return null;
+  try {
+    const { payload } = await jwtVerify(token, secretKey());
+    return typeof payload.sub === "string" ? payload.sub : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function getSessionFromCookies(): Promise<SessionUser | null> {
   const jar = await cookies();
   const token = jar.get(SESSION_COOKIE)?.value;

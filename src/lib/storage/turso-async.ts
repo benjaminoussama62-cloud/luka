@@ -77,6 +77,72 @@ export async function searchIndexAsync(query: string, limit = 30): Promise<Async
   }
 }
 
+/** Impressions + Radar aggregates in one batch — never on the sync driver. */
+export async function recordImpressionsAsync(
+  query: string,
+  items: Array<{ url: string; domain: string; position: number }>,
+): Promise<void> {
+  const client = getAsyncClient();
+  if (!client || !query || !items.length) return;
+
+  const now = new Date().toISOString();
+  const day = now.slice(0, 10);
+  const statements = items
+    .slice(0, 30)
+    .filter((i) => i.url && i.domain)
+    .flatMap((i) => [
+      {
+        sql: "INSERT INTO impression_signals (query, url, domain, position, shown_at) VALUES (?, ?, ?, ?, ?)",
+        args: [query, i.url, i.domain, i.position, now],
+      },
+      {
+        sql: `INSERT INTO radar_daily (day, domain, query, url, impressions, clicks, position_sum, position_count)
+              VALUES (?, ?, ?, ?, 1, 0, ?, 1)
+              ON CONFLICT(day, domain, query, url) DO UPDATE SET
+                impressions = impressions + excluded.impressions,
+                position_sum = position_sum + excluded.position_sum,
+                position_count = position_count + excluded.position_count`,
+        args: [day, i.domain, query, i.url, i.position],
+      },
+    ]);
+  if (!statements.length) return;
+
+  try {
+    await client.batch(statements, "write");
+  } catch {
+    /* signals are best-effort */
+  }
+}
+
+export async function pushSearchHistoryAsync(userId: string, query: string): Promise<void> {
+  const client = getAsyncClient();
+  if (!client || !userId || !query) return;
+
+  try {
+    await client.batch(
+      [
+        {
+          sql: "DELETE FROM search_history WHERE user_id = ? AND query = ?",
+          args: [userId, query],
+        },
+        {
+          sql: "INSERT INTO search_history (user_id, query, created_at) VALUES (?, ?, ?)",
+          args: [userId, query, new Date().toISOString()],
+        },
+        {
+          sql: `DELETE FROM search_history WHERE user_id = ? AND id NOT IN (
+                  SELECT id FROM search_history WHERE user_id = ? ORDER BY created_at DESC LIMIT 40
+                )`,
+          args: [userId, userId],
+        },
+      ],
+      "write",
+    );
+  } catch {
+    /* history is best-effort */
+  }
+}
+
 export async function searchAyebiAsync(
   query: string,
   limit = 5,
