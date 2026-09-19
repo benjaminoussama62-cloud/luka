@@ -1,14 +1,14 @@
-import { radarOverview } from "./radar";
-import { traceOverview } from "./trace";
+import { radarEnterpriseV2 } from "./radar-v2";
+import { traceEnterpriseV2 } from "./trace-v2";
 import { yieldOverview } from "./yield";
-import { velocityOverview } from "./velocity";
+import { velocityEnterpriseV2 } from "./velocity-v2";
 import type { AetherAction, AetherOverview, StudioSite } from "./types";
 
 export function aetherOverview(site: StudioSite): AetherOverview {
-  const radar = radarOverview(site);
-  const trace = traceOverview(site);
+  const radar = radarEnterpriseV2.getOverview(site.id, site.domain);
+  const trace = traceEnterpriseV2.getRealTimeAnalytics(site.id, 30);
   const yieldData = yieldOverview(site);
-  const velocity = velocityOverview(site);
+  const velocity = velocityEnterpriseV2.getOverview(site.id);
 
   const actions: AetherAction[] = [];
   const base = `/studio/app/${site.id}`;
@@ -24,13 +24,13 @@ export function aetherOverview(site: StudioSite): AetherOverview {
     });
   }
 
-  if (!trace.snippetInstalled) {
+  if (trace.pageviews === 0) {
     actions.push({
       id: "trace-snippet",
       module: "trace",
       impact: "high",
       title: "Installer le snippet Trace",
-      detail: "Mesurez l’audience réelle sur votre site — sessions, pages et referrers.",
+      detail: "Mesurez l'audience réelle sur votre site — sessions, pages et referrers.",
       href: `${base}/trace`,
     });
   }
@@ -41,7 +41,7 @@ export function aetherOverview(site: StudioSite): AetherOverview {
       module: "radar",
       impact: "high",
       title: "Indexer votre site dans Ayeba",
-      detail: "Soumettez un sitemap ou priorisez le crawl de la page d’accueil.",
+      detail: "Soumettez un sitemap ou priorisez le crawl de la page d'accueil.",
       href: `${base}/radar`,
     });
   } else if (radar.impressions7d > 15 && radar.clicks7d === 0) {
@@ -61,7 +61,7 @@ export function aetherOverview(site: StudioSite): AetherOverview {
       module: "velocity",
       impact: velocity.latestScore != null && velocity.latestScore < 50 ? "high" : "medium",
       title: velocity.latestScore
-        ? `Score vitesse ${velocity.latestScore}/100 — plan d’action`
+        ? `Score vitesse ${velocity.latestScore}/100 — plan d'action`
         : "Lancer un audit Velocity",
       detail: velocity.latestScore
         ? "Corrigez TTFB, compression et scripts bloquants."
@@ -70,13 +70,13 @@ export function aetherOverview(site: StudioSite): AetherOverview {
     });
   }
 
-  if (!yieldData.enabled && trace.pageviews7d > 50) {
+  if (!yieldData.enabled && trace.pageviews > 50) {
     actions.push({
       id: "yield-enable",
       module: "yield",
       impact: "medium",
       title: "Activer Yield",
-      detail: `${trace.pageviews7d} pages vues cette semaine — monétisez le trafic Ayeba.`,
+      detail: `${trace.pageviews} pages vues cette semaine — monétisez le trafic Ayeba.`,
       href: `${base}/yield`,
     });
   }
@@ -89,17 +89,6 @@ export function aetherOverview(site: StudioSite): AetherOverview {
       title: `${radar.queueFailed} URL(s) en échec de crawl`,
       detail: "Inspectez robots.txt et codes HTTP.",
       href: `${base}/radar`,
-    });
-  }
-
-  if (trace.searchReferrals7d > 0 && trace.pageviews7d < trace.searchReferrals7d) {
-    actions.push({
-      id: "trace-bounce",
-      module: "trace",
-      impact: "medium",
-      title: "Trafic Ayeba qui ne reste pas",
-      detail: "Plus de clics depuis Ayeba que de pages vues — améliorez l’accueil landing.",
-      href: `${base}/trace`,
     });
   }
 
@@ -132,7 +121,7 @@ export function aetherOverview(site: StudioSite): AetherOverview {
     signals: [
       { label: "Pages indexées", value: String(radar.indexedPages) },
       { label: "Clics Ayeba 7j", value: String(radar.clicks7d) },
-      { label: "Pages vues 7j", value: String(trace.pageviews7d) },
+      { label: "Pages vues 7j", value: String(trace.pageviews) },
       { label: "Score vitesse", value: velocity.latestScore != null ? `${velocity.latestScore}/100` : "—" },
       { label: "Yield", value: yieldData.enabled ? "Actif" : "Off" },
     ],

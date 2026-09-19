@@ -59,10 +59,17 @@ export type RadarInspectResult = {
   snippet: string | null;
   domain: string | null;
   crawledAt: string | null;
+  lastIndexedAt?: string | null;
   inQueue: boolean;
   queueStatus: string | null;
+  queueAttempts?: Array<{ attempt: number; timestamp: string; error?: string }>;
   clicks30d: number;
   impressions30d: number;
+  avgPosition?: number | null;
+  bestPosition?: number | null;
+  worstPosition?: number | null;
+  seoAnalysis?: any;
+  indexingHistory?: any[];
 };
 
 export type TraceOverview = {
