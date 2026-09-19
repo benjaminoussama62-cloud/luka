@@ -1149,29 +1149,28 @@ async function liveSearchCore(
     );
   }
 
-  if (offline && !results.length) {
-    // Degraded mode still owes the user somewhere to go, never a blank SERP.
+  if (offline && results.length < 2) {
+    // Degraded mode still owes the user somewhere to go, never a blank or single-link SERP.
+    const seenUrls = new Set(results.map((r) => r.url));
+    const repli = [
+      {
+        title: `${q} — Wikipédia`,
+        url: `https://fr.wikipedia.org/w/index.php?search=${encodeURIComponent(q)}`,
+        snippet: `Article encyclopédique sur « ${q} ».`,
+        source: "fallback",
+      },
+      {
+        title: `${q} — Recherche web`,
+        url: `https://duckduckgo.com/?q=${encodeURIComponent(q)}`,
+        snippet: `Résultats web complets pour « ${q} ».`,
+        source: "fallback",
+      },
+    ];
     results = [
-      toResult(
-        {
-          title: `${q} — Wikipédia`,
-          url: `https://fr.wikipedia.org/w/index.php?search=${encodeURIComponent(q)}`,
-          snippet: `Article encyclopédique sur « ${q} ».`,
-          source: "fallback",
-        },
-        1,
-        q,
-      ),
-      toResult(
-        {
-          title: `${q} — Recherche web`,
-          url: `https://duckduckgo.com/?q=${encodeURIComponent(q)}`,
-          snippet: `Résultats web complets pour « ${q} ».`,
-          source: "fallback",
-        },
-        2,
-        q,
-      ),
+      ...results,
+      ...repli
+        .filter((h) => !seenUrls.has(h.url))
+        .map((h, i) => toResult(h, results.length + i + 1, q)),
     ];
   }
 
