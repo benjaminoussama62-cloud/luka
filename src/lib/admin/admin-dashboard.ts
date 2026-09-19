@@ -3,21 +3,15 @@
  * Central dashboard for managing the entire Ayeba Studio ecosystem
  */
 
+import { getDb } from "@/lib/storage/database";
 import { adminCore } from "./admin-core";
 import { supportSystem } from "./support-system";
 import { moderationSystem } from "./moderation-system";
-import { yieldEnterprise } from "../studio/yield-enterprise";
-import { radarEnterprise } from "../studio/radar-enterprise";
-import { traceEnterprise } from "../studio/trace-enterprise";
-import { velocityEnterprise } from "../studio/velocity-enterprise";
-import { aetherEnterprise } from "../studio/aether-enterprise";
-import { dashboardManager } from "../studio/dashboard-manager";
 import type {
+  AdminRole,
   AdminUser,
   AnalyticsDashboard,
   SystemAlert,
-  SupportTicket,
-  ModerationQueueItem,
 } from "./admin-types";
 
 export class AdminDashboard {
@@ -26,9 +20,9 @@ export class AdminDashboard {
    */
   async getMainDashboard(adminUser: AdminUser): Promise<{
     overview: {
-      network: any;
-      financial: any;
-      compliance: any;
+      network: unknown;
+      financial: unknown;
+      compliance: unknown;
       system: {
         health: string;
         uptime: number;
@@ -37,7 +31,7 @@ export class AdminDashboard {
       };
     };
     alerts: SystemAlert[];
-    tasks: any[];
+    tasks: unknown[];
     support: {
       openTickets: number;
       urgentTickets: number;
@@ -57,7 +51,7 @@ export class AdminDashboard {
       action: string;
       href: string;
     }>;
-    recentActivity: any[];
+    recentActivity: unknown[];
   }> {
     // Get overviews
     const network = adminCore.getNetworkOverview();
@@ -183,11 +177,12 @@ export class AdminDashboard {
    * Get user management dashboard
    */
   getUserManagementDashboard(filters: {
-    role?: string;
+    role?: AdminRole;
     status?: string;
     department?: string;
     search?: string;
     page?: number;
+    limit?: number;
   }) {
     const users = adminCore.listAdminUsers(filters);
 
@@ -223,7 +218,7 @@ export class AdminDashboard {
     page?: number;
   }) {
     // Get campaigns from yield system
-    const campaigns = []; // Would fetch from yieldEnterprise
+    const campaigns: Record<string, unknown>[] = []; // Would fetch from yieldEnterprise
 
     return {
       campaigns,
@@ -247,7 +242,7 @@ export class AdminDashboard {
     page?: number;
   }) {
     // Get publishers from yield system
-    const publishers = []; // Would fetch from yieldEnterprise
+    const publishers: Record<string, unknown>[] = []; // Would fetch from yieldEnterprise
 
     return {
       publishers,
@@ -442,7 +437,7 @@ export class AdminDashboard {
     type?: "users" | "campaigns" | "publishers" | "tickets" | "creatives";
     limit?: number;
   }) {
-    const results: any[] = [];
+    const results: Record<string, unknown>[] = [];
     const limit = filters?.limit || 20;
 
     // Search admin users
@@ -460,7 +455,12 @@ export class AdminDashboard {
 
     // Search support tickets
     if (!filters || filters.type === "tickets") {
-      const tickets = supportSystem.getTickets({ subject: query, limit });
+      const tickets = supportSystem.getTickets({ limit });
+      tickets.tickets = tickets.tickets.filter(
+        (t) =>
+          t.subject.toLowerCase().includes(query.toLowerCase()) ||
+          t.ticketNumber.toLowerCase().includes(query.toLowerCase()),
+      );
       results.push(...tickets.tickets.map((t) => ({
         type: "ticket",
         id: t.id,
@@ -525,7 +525,7 @@ export class AdminDashboard {
 
     const rows = db
       .prepare(`SELECT * FROM admin_notifications ${whereClause} ORDER BY created_at DESC LIMIT 20`)
-      .all(adminId) as any[];
+      .all(adminId) as Record<string, unknown>[];
 
     return rows.map((row) => ({
       ...row,

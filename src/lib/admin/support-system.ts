@@ -11,6 +11,45 @@ import type {
   AdminUser,
 } from "./admin-types";
 
+type Row = Record<string, unknown>;
+
+function mapMessage(row: Row): SupportMessage {
+  return {
+    id: row.id as string,
+    ticketId: row.ticket_id as string,
+    senderId: row.sender_id as string,
+    senderName: row.sender_name as string,
+    senderType: row.sender_type as SupportMessage["senderType"],
+    message: row.message as string,
+    attachments: JSON.parse((row.attachments as string) || "[]"),
+    isInternal: row.is_internal === 1 || row.is_internal === true,
+    createdAt: row.created_at as string,
+  };
+}
+
+function mapTicket(row: Row, messages: SupportMessage[]): SupportTicket {
+  return {
+    id: row.id as string,
+    ticketNumber: row.ticket_number as string,
+    userId: row.user_id as string,
+    userName: row.user_name as string,
+    userEmail: row.user_email as string,
+    category: row.category as SupportTicket["category"],
+    priority: row.priority as SupportTicket["priority"],
+    subject: row.subject as string,
+    description: row.description as string,
+    status: row.status as SupportTicket["status"],
+    assignedTo: (row.assigned_to as string) || undefined,
+    assignedAt: (row.assigned_at as string) || undefined,
+    resolvedBy: (row.resolved_by as string) || undefined,
+    resolvedAt: (row.resolved_at as string) || undefined,
+    resolution: (row.resolution as string) || undefined,
+    createdAt: row.created_at as string,
+    updatedAt: row.updated_at as string,
+    messages,
+  };
+}
+
 export class SupportSystem {
   /**
    * Create support ticket
@@ -52,7 +91,7 @@ export class SupportSystem {
     // Auto-assign based on category and priority
     this.autoAssignTicket(id, input.category, input.priority);
 
-    return this.getTicket(id);
+    return this.getTicket(id) as SupportTicket;
   }
 
   /**
@@ -62,13 +101,9 @@ export class SupportSystem {
     const db = getDb();
     const row = db
       .prepare("SELECT * FROM support_tickets WHERE id = ?")
-      .get(id) as SupportTicket | undefined;
+      .get(id) as Row | undefined;
     if (!row) return null;
-
-    return {
-      ...row,
-      messages: this.getTicketMessages(id),
-    };
+    return mapTicket(row, this.getTicketMessages(id));
   }
 
   /**
@@ -78,13 +113,9 @@ export class SupportSystem {
     const db = getDb();
     const row = db
       .prepare("SELECT * FROM support_tickets WHERE ticket_number = ?")
-      .get(ticketNumber) as SupportTicket | undefined;
+      .get(ticketNumber) as Row | undefined;
     if (!row) return null;
-
-    return {
-      ...row,
-      messages: this.getTicketMessages(row.id),
-    };
+    return mapTicket(row, this.getTicketMessages(row.id as string));
   }
 
   /**
@@ -94,12 +125,9 @@ export class SupportSystem {
     const db = getDb();
     const rows = db
       .prepare("SELECT * FROM support_tickets WHERE user_id = ? ORDER BY created_at DESC")
-      .all(userId) as SupportTicket[];
+      .all(userId) as Row[];
 
-    return rows.map((row) => ({
-      ...row,
-      messages: this.getTicketMessages(row.id),
-    }));
+    return rows.map((row) => mapTicket(row, this.getTicketMessages(row.id as string)));
   }
 
   /**
@@ -116,7 +144,7 @@ export class SupportSystem {
   }): { tickets: SupportTicket[]; total: number; page: number; totalPages: number } {
     const db = getDb();
     const conditions: string[] = [];
-    const params: any[] = [];
+    const params: unknown[] = [];
 
     if (filters.status) {
       conditions.push("status = ?");
@@ -154,12 +182,9 @@ export class SupportSystem {
 
     const rows = db
       .prepare(`SELECT * FROM support_tickets ${whereClause} ORDER BY created_at DESC LIMIT ? OFFSET ?`)
-      .all(...params, limit, offset) as SupportTicket[];
+      .all(...params, limit, offset) as Row[];
 
-    const tickets = rows.map((row) => ({
-      ...row,
-      messages: this.getTicketMessages(row.id),
-    }));
+    const tickets = rows.map((row) => mapTicket(row, this.getTicketMessages(row.id as string)));
 
     return {
       tickets,
@@ -183,7 +208,7 @@ export class SupportSystem {
     if (!ticket) return null;
 
     const setClause: string[] = [];
-    const params: any[] = [];
+    const params: unknown[] = [];
 
     if (updates.status !== undefined) {
       setClause.push("status = ?");
@@ -258,7 +283,7 @@ export class SupportSystem {
     // Update ticket updated_at
     db.prepare("UPDATE support_tickets SET updated_at = ? WHERE id = ?").run(now, input.ticketId);
 
-    return this.getMessage(id);
+    return this.getMessage(id) as SupportMessage;
   }
 
   /**
@@ -268,13 +293,9 @@ export class SupportSystem {
     const db = getDb();
     const row = db
       .prepare("SELECT * FROM support_messages WHERE id = ?")
-      .get(id) as SupportMessage | undefined;
+      .get(id) as Row | undefined;
     if (!row) return null;
-
-    return {
-      ...row,
-      attachments: JSON.parse(row.attachments as string),
-    };
+    return mapMessage(row);
   }
 
   /**
@@ -284,12 +305,9 @@ export class SupportSystem {
     const db = getDb();
     const rows = db
       .prepare("SELECT * FROM support_messages WHERE ticket_id = ? ORDER BY created_at ASC")
-      .all(ticketId) as SupportMessage[];
+      .all(ticketId) as Row[];
 
-    return rows.map((row) => ({
-      ...row,
-      attachments: JSON.parse(row.attachments as string),
-    }));
+    return rows.map(mapMessage);
   }
 
   /**
@@ -409,12 +427,9 @@ export class SupportSystem {
          AND status != 'resolved'
          ORDER BY priority DESC, created_at ASC`,
       )
-      .all(adminId) as SupportTicket[];
+      .all(adminId) as Row[];
 
-    return rows.map((row) => ({
-      ...row,
-      messages: this.getTicketMessages(row.id),
-    }));
+    return rows.map((row) => mapTicket(row, this.getTicketMessages(row.id as string)));
   }
 
   /**
@@ -483,7 +498,7 @@ export class SupportSystem {
     // Update source ticket status
     db.prepare(
       `UPDATE support_tickets
-       SET status = 'closed', resolution = 'Merged into ticket #${targetTicket.ticket_number}'
+       SET status = 'closed', resolution = 'Merged into ticket #${targetTicket.ticketNumber}'
        WHERE id = ?`,
     ).run(sourceTicketId);
 

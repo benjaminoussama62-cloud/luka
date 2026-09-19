@@ -5,10 +5,27 @@
 
 import { getDb } from "@/lib/storage/database";
 import { adminCore } from "./admin-core";
-import type {
-  ModerationQueueItem,
-  AdminUser,
-} from "./admin-types";
+import type { ModerationQueueItem } from "./admin-types";
+
+type Row = Record<string, unknown>;
+
+function mapItem(row: Row): ModerationQueueItem {
+  return {
+    id: row.id as string,
+    type: row.type as ModerationQueueItem["type"],
+    entityId: row.entity_id as string,
+    entityType: row.entity_type as string,
+    reason: row.reason as string,
+    priority: row.priority as ModerationQueueItem["priority"],
+    status: row.status as ModerationQueueItem["status"],
+    submittedBy: row.submitted_by as string,
+    submittedAt: row.submitted_at as string,
+    reviewedBy: (row.reviewed_by as string) || undefined,
+    reviewedAt: (row.reviewed_at as string) || undefined,
+    notes: (row.notes as string) || undefined,
+    metadata: JSON.parse((row.metadata as string) || "{}"),
+  };
+}
 
 export class ModerationSystem {
   /**
@@ -44,7 +61,7 @@ export class ModerationSystem {
       JSON.stringify(input.metadata || {}),
     );
 
-    return this.getQueueItem(id);
+    return this.getQueueItem(id) as ModerationQueueItem;
   }
 
   /**
@@ -54,13 +71,9 @@ export class ModerationSystem {
     const db = getDb();
     const row = db
       .prepare("SELECT * FROM moderation_queue WHERE id = ?")
-      .get(id) as ModerationQueueItem | undefined;
+      .get(id) as Row | undefined;
     if (!row) return null;
-
-    return {
-      ...row,
-      metadata: JSON.parse(row.metadata as string),
-    };
+    return mapItem(row);
   }
 
   /**
@@ -76,7 +89,7 @@ export class ModerationSystem {
   }): { items: ModerationQueueItem[]; total: number; page: number; totalPages: number } {
     const db = getDb();
     const conditions: string[] = [];
-    const params: any[] = [];
+    const params: unknown[] = [];
 
     if (filters.type) {
       conditions.push("type = ?");
@@ -104,12 +117,9 @@ export class ModerationSystem {
 
     const rows = db
       .prepare(`SELECT * FROM moderation_queue ${whereClause} ORDER BY priority DESC, created_at ASC LIMIT ? OFFSET ?`)
-      .all(...params, limit, offset) as ModerationQueueItem[];
+      .all(...params, limit, offset) as Row[];
 
-    const items = rows.map((row) => ({
-      ...row,
-      metadata: JSON.parse(row.metadata as string),
-    }));
+    const items = rows.map(mapItem);
 
     return {
       items,
@@ -372,12 +382,9 @@ export class ModerationSystem {
          AND status = 'under_review'
          ORDER BY priority DESC, submitted_at ASC`,
       )
-      .all(adminId) as ModerationQueueItem[];
+      .all(adminId) as Row[];
 
-    return rows.map((row) => ({
-      ...row,
-      metadata: JSON.parse(row.metadata as string),
-    }));
+    return rows.map(mapItem);
   }
 
   /**

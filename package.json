@@ -8,6 +8,8 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "admin:create": "node --import tsx scripts/create-admin.ts",
     "jobs": "node --env-file=.env.local --import tsx scripts/run-jobs.ts",
     "jobs:quick": "node --env-file=.env.local --import tsx scripts/run-jobs.ts --quick",
     "verify": "npx tsx scripts/verify-http.ts",
@@ -44,6 +46,7 @@
     "eslint-config-next": "16.2.12",
     "tailwindcss": "^4",
     "tsx": "^4.23.11",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^3.2.7"
   }
 }

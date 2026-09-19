@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * Ayeba Velocity Enterprise - Performance Monitoring & Audits
  * Real-time performance analysis with actionable recommendations
@@ -5,37 +6,88 @@
 
 import { getDb } from "@/lib/storage/database";
 import type {
-  VelocityAudit,
   VelocityFinding,
   VelocityOverview,
 } from "./types";
+
+/** Parsed contents of the `metrics` JSON column. */
+type VelocityMetrics = {
+  ttfbMs?: number;
+  ttfb_ms?: number;
+  firstContentfulPaintMs?: number;
+  firstMeaningfulPaintMs?: number;
+  largestContentfulPaintMs?: number;
+  firstInputDelayMs?: number;
+  cumulativeLayoutShiftMs?: number;
+  totalBlockingTimeMs?: number;
+  speedIndexMs?: number;
+  interactiveMs?: number;
+  totalSizeBytes?: number;
+  resourceCount?: number;
+  domSize?: number;
+  cpuTimeMs?: number;
+  scriptExecutionTimeMs?: number;
+  renderingTimeMs?: number;
+};
+
+/** velocity_metrics_detailed row (snake_case) + parsed JSON columns. */
+export type VelocityAuditDetailed = {
+  id: string;
+  site_id: string;
+  url: string;
+  timestamp: string;
+  overall_score: number;
+  metrics: VelocityMetrics;
+  findings: VelocityFinding[];
+  [key: string]: unknown;
+};
+
+type VelocityRow = Record<string, unknown> & {
+  metrics: string;
+  opportunities: string;
+  diagnostics: string;
+};
+
+function mapAudit(row: VelocityRow): VelocityAuditDetailed {
+  return {
+    ...(row as Record<string, unknown>),
+    metrics: JSON.parse(row.metrics || "{}"),
+    findings: [
+      ...JSON.parse(row.opportunities || "[]"),
+      ...JSON.parse(row.diagnostics || "[]"),
+    ],
+  } as VelocityAuditDetailed;
+}
 
 export class VelocityEnterprise {
   /**
    * Get performance overview for site
    */
-  getOverview(siteId: string): VelocityOverview {
+  getOverview(siteId: string): Omit<VelocityOverview, "audits"> & { audits: VelocityAuditDetailed[] } {
     const db = getDb();
 
     // Get latest audit
-    const latest = db
+    const latestRow = db
       .prepare(
         `SELECT * FROM velocity_metrics_detailed
          WHERE site_id = ?
          ORDER BY timestamp DESC
          LIMIT 1`,
       )
-      .get(siteId) as VelocityAudit | undefined;
+      .get(siteId) as VelocityRow | undefined;
+    const latest = latestRow ? mapAudit(latestRow) : undefined;
 
     // Get recent audits
-    const audits = db
-      .prepare(
-        `SELECT * FROM velocity_metrics_detailed
-         WHERE site_id = ?
-         ORDER BY timestamp DESC
-         LIMIT 10`,
-      )
-      .all(siteId) as VelocityAudit[];
+    const audits = (
+      db
+        .prepare(
+          `SELECT * FROM velocity_metrics_detailed
+           WHERE site_id = ?
+           ORDER BY timestamp DESC
+           LIMIT 10`,
+        )
+        .all(siteId) as VelocityRow[]
+    ).map(mapAudit);
 
     // Generate action plan from latest audit
     const actionPlan = latest ? this.generateActionPlan(latest) : [];
@@ -43,7 +95,7 @@ export class VelocityEnterprise {
     return {
       domain: "", // Will be filled from site data
       latestScore: latest?.overall_score || null,
-      latestTtfbMs: latest?.metrics ? JSON.parse(latest.metrics as string).ttfb_ms || null : null,
+      latestTtfbMs: latest?.metrics.ttfb_ms ?? latest?.metrics.ttfbMs ?? null,
       audits,
       actionPlan,
     };
@@ -52,7 +104,7 @@ export class VelocityEnterprise {
   /**
    * Run performance audit on URL
    */
-  async runAudit(siteId: string, url: string): Promise<VelocityAudit> {
+  async runAudit(siteId: string, url: string): Promise<VelocityAuditDetailed> {
     const db = getDb();
     const id = this.generateId();
     const now = new Date().toISOString();
@@ -106,33 +158,25 @@ export class VelocityEnterprise {
       metrics.renderingTimeMs || 0,
     );
 
-    return this.getAudit(id);
+    return this.getAudit(id) as VelocityAuditDetailed;
   }
 
   /**
    * Get audit by ID
    */
-  getAudit(id: string): VelocityAudit | null {
+  getAudit(id: string): VelocityAuditDetailed | null {
     const db = getDb();
     const row = db
       .prepare("SELECT * FROM velocity_metrics_detailed WHERE id = ?")
-      .get(id) as VelocityAudit | undefined;
+      .get(id) as VelocityRow | undefined;
     if (!row) return null;
-
-    return {
-      ...row,
-      metrics: JSON.parse(row.metrics as string),
-      findings: [
-        ...JSON.parse(row.opportunities as string),
-        ...JSON.parse(row.diagnostics as string),
-      ],
-    };
+    return mapAudit(row);
   }
 
   /**
    * Get audits for site
    */
-  getSiteAudits(siteId: string, limit: number = 20): VelocityAudit[] {
+  getSiteAudits(siteId: string, limit: number = 20): VelocityAuditDetailed[] {
     const db = getDb();
     const rows = db
       .prepare(
@@ -141,22 +185,16 @@ export class VelocityEnterprise {
          ORDER BY timestamp DESC
          LIMIT ?`,
       )
-      .all(siteId, limit) as VelocityAudit[];
+      .all(siteId, limit) as VelocityRow[];
 
-    return rows.map((row) => ({
-      ...row,
-      metrics: JSON.parse(row.metrics as string),
-      findings: [
-        ...JSON.parse(row.opportunities as string),
-        ...JSON.parse(row.diagnostics as string),
-      ],
-    }));
+    return rows.map(mapAudit);
   }
 
   /**
    * Measure performance (simulated - in production use real measurement)
    */
   private async measurePerformance(url: string): Promise<any> {
+    void url;
     // Simulate performance metrics
     // In production, use tools like Lighthouse, WebPageTest, or custom measurement
     return {
@@ -291,6 +329,7 @@ export class VelocityEnterprise {
    * Generate performance findings
    */
   private generateFindings(metrics: any, overallScore: number): VelocityFinding[] {
+    void overallScore;
     const findings: VelocityFinding[] = [];
 
     // Critical findings
@@ -394,7 +433,7 @@ export class VelocityEnterprise {
   /**
    * Generate action plan from audit
    */
-  private generateActionPlan(audit: VelocityAudit): VelocityFinding[] {
+  private generateActionPlan(audit: VelocityAuditDetailed): VelocityFinding[] {
     const findings = audit.findings || [];
     const critical = findings.filter((f) => f.severity === "critical");
     const warnings = findings.filter((f) => f.severity === "warn");

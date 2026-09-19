@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * Ayeba Trace Enterprise - Cross-Domain Analytics
  * Real-time analytics with cross-platform tracking across Ayeba network
@@ -9,9 +10,31 @@ import type {
   CrossDomainTracking,
   TrackingEvent,
   UserProfile,
-  TraceSession,
-  TraceEventEnhanced,
 } from "./ad-network-types";
+
+/** Raw trace_sessions row (snake_case columns). */
+type TraceSession = {
+  id: string;
+  site_id: string;
+  user_id: string | null;
+  started_at: string;
+  duration_sec: number;
+  pageviews: number;
+  bounce: number;
+  entry_page: string;
+  exit_page: string;
+  device_type: string;
+  browser: string;
+  os: string;
+  country: string;
+  city: string;
+  referrer: string;
+  utm_source: string;
+  utm_medium: string;
+  utm_campaign: string;
+  utm_content: string;
+  utm_term: string;
+};
 
 export class TraceEnterprise {
   private readonly NETWORK_DOMAINS: NetworkDomain[] = [
@@ -19,7 +42,7 @@ export class TraceEnterprise {
     "omega-web.org",
     "sombatekaonline.com",
     "jemsa.net",
-    "tala.cd",
+    "to-tala.com",
   ];
 
   /**
@@ -44,7 +67,6 @@ export class TraceEnterprise {
     const db = getDb();
     const eventId = this.generateId();
     const now = new Date().toISOString();
-    const ipHash = this.hashIp(input.ip);
 
     // Get or create session
     const session = this.getOrCreateSession({
@@ -333,16 +355,18 @@ export class TraceEnterprise {
     const db = getDb();
     const row = db
       .prepare("SELECT * FROM cross_domain_profiles WHERE user_id = ? AND session_id = ?")
-      .get(userId, sessionId) as CrossDomainTracking | undefined;
+      .get(userId, sessionId) as
+      | { user_id: string; session_id: string; domains: string; timeline: string; profile: string }
+      | undefined;
 
     if (!row) return null;
 
     return {
       userId: row.user_id,
       sessionId: row.session_id,
-      domains: JSON.parse(row.domains as string),
-      timeline: JSON.parse(row.timeline as string),
-      profile: JSON.parse(row.profile as string),
+      domains: JSON.parse(row.domains),
+      timeline: JSON.parse(row.timeline),
+      profile: JSON.parse(row.profile),
     };
   }
 
@@ -406,6 +430,7 @@ export class TraceEnterprise {
    * Create user profile from first event
    */
   private createUserProfile(event: TrackingEvent): UserProfile {
+    void event;
     return {
       segments: [],
       interests: [],
@@ -566,7 +591,7 @@ export class TraceEnterprise {
     const db = getDb();
     const since = new Date(Date.now() - periodDays * 24 * 60 * 60 * 1000).toISOString();
 
-    const results = [];
+    const results: { stepName: string; users: number; dropoff: number; conversionRate: number }[] = [];
 
     for (let i = 0; i < steps.length; i++) {
       const step = steps[i];
@@ -577,8 +602,8 @@ export class TraceEnterprise {
         )
         .get(siteId, since, `%${step}%`) as { c: number };
 
-      const dropoff = i > 0 ? results[i - 1].users - stepUsers.c : 0;
-      const conversionRate = i > 0 ? (stepUsers.c / results[0].users) * 100 : 100;
+      const dropoff: number = i > 0 ? results[i - 1].users - stepUsers.c : 0;
+      const conversionRate: number = i > 0 ? (stepUsers.c / results[0].users) * 100 : 100;
 
       results.push({
         stepName: step,
@@ -675,6 +700,7 @@ export class TraceEnterprise {
    * Get geo info from IP (simplified)
    */
   private getGeoFromIp(ip: string): { country: string; city: string } {
+    void ip;
     // In production, use proper IP geolocation service
     return { country: "CD", city: "Kinshasa" };
   }

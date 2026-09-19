@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * Ayeba Studio Dashboard Manager - Unified Dashboard
  * Central hub for navigating between all 5 services with real-time data
@@ -80,6 +81,7 @@ export class DashboardManager {
 
     // Generate alerts
     const alerts = this.generateAlerts({
+      site,
       radar: radarOverview,
       trace: traceOverview,
       yield: yieldDataOverview,
@@ -438,6 +440,7 @@ export class DashboardManager {
    * Generate alerts from all services
    */
   private generateAlerts(data: {
+    site: { id: string };
     radar: any;
     trace: any;
     yield: any;
@@ -579,7 +582,7 @@ export class DashboardManager {
     // Simulated data - in production, use real historical data
     const days = 7;
     const baseValue = trace.sessions / days;
-    return Array.from({ length: days }, (_, i) => {
+    return Array.from({ length: days }, () => {
       const variation = Math.random() * 0.3 - 0.15;
       return Math.round(baseValue * (1 + variation));
     });
@@ -591,7 +594,7 @@ export class DashboardManager {
   private generateImpressionsSeries(radar: any): number[] {
     const days = 7;
     const baseValue = radar.impressions7d / days;
-    return Array.from({ length: days }, (_, i) => {
+    return Array.from({ length: days }, () => {
       const variation = Math.random() * 0.4 - 0.2;
       return Math.round(baseValue * (1 + variation));
     });
@@ -603,7 +606,7 @@ export class DashboardManager {
   private generateClicksSeries(radar: any): number[] {
     const days = 7;
     const baseValue = radar.clicks7d / days;
-    return Array.from({ length: days }, (_, i) => {
+    return Array.from({ length: days }, () => {
       const variation = Math.random() * 0.5 - 0.25;
       return Math.round(baseValue * (1 + variation));
     });
@@ -643,7 +646,7 @@ export class DashboardManager {
       now,
     );
 
-    return this.getLayout(id);
+    return this.getLayout(id) as DashboardLayout;
   }
 
   /**
@@ -653,12 +656,12 @@ export class DashboardManager {
     const db = getDb();
     const row = db
       .prepare("SELECT * FROM dashboard_layouts WHERE id = ?")
-      .get(layoutId) as DashboardLayout | undefined;
+      .get(layoutId) as (Omit<DashboardLayout, "widgets"> & { widgets: string }) | undefined;
     if (!row) return null;
 
     return {
       ...row,
-      widgets: JSON.parse(row.widgets as string),
+      widgets: JSON.parse(row.widgets),
     };
   }
 
@@ -669,11 +672,11 @@ export class DashboardManager {
     const db = getDb();
     const rows = db
       .prepare("SELECT * FROM dashboard_layouts WHERE user_id = ? ORDER BY updated_at DESC")
-      .all(userId) as DashboardLayout[];
+      .all(userId) as (Omit<DashboardLayout, "widgets"> & { widgets: string })[];
 
     return rows.map((row) => ({
       ...row,
-      widgets: JSON.parse(row.widgets as string),
+      widgets: JSON.parse(row.widgets),
     }));
   }
 

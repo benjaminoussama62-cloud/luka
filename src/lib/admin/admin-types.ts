@@ -25,7 +25,7 @@ export type AdminAuditLog = {
   action: string;
   entityType: string;
   entityId: string;
-  changes: Record<string, { old: any; new: any }>;
+  changes: Record<string, { old: unknown; new: unknown }>;
   ipAddress: string;
   userAgent: string;
   timestamp: string;
@@ -187,7 +187,7 @@ export type TaskQueue = {
   priority: number;
   status: "pending" | "processing" | "completed" | "failed";
   payload: Record<string, unknown>;
-  result?: any;
+  result?: unknown;
   error?: string;
   attempts: number;
   maxAttempts: number;

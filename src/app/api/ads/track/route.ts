@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { adServer } from "@/lib/studio/ad-server-core";
 import { adCorsHeaders } from "@/lib/ads/sister-access";
-import { hmacSha256, safeEqual, signingSecret } from "@/lib/security/sign";
+import { verifyAdTrackingSignature } from "@/lib/ads/tracking-sign";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
@@ -12,10 +12,6 @@ const PIXEL = Buffer.from(
 );
 
 const TYPES = new Set(["impression", "click", "viewthrough"]);
-
-function expectedSig(type: string, requestId: string, creativeId: string) {
-  return hmacSha256(signingSecret(), `ad:${type}:${requestId}:${creativeId}`).slice(0, 24);
-}
 
 /**
  * GET /api/ads/track?type=&request=&creative=&sig=
@@ -36,7 +32,7 @@ export async function GET(req: Request) {
   if (!rateLimit(`adtrack:${clientIp(req)}`, 300, 60_000)) {
     return NextResponse.json({ error: "rate_limit" }, { status: 429 });
   }
-  if (!safeEqual(sig, expectedSig(type, requestId, creativeId))) {
+  if (!verifyAdTrackingSignature(type, requestId, creativeId, sig)) {
     return NextResponse.json({ error: "signature invalide" }, { status: 403 });
   }
 

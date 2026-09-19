@@ -5,6 +5,7 @@
 
 import { getDb } from "@/lib/storage/database";
 import { hmacSha256, signingSecret } from "@/lib/security/sign";
+import { adTrackingSignature } from "@/lib/ads/tracking-sign";
 import type {
   AdRequest,
   AdResponse,
@@ -946,11 +947,7 @@ export class AdServer {
   }
 
   private trackingSignature(type: string, requestId: string, creativeId: string): string {
-    try {
-      return hmacSha256(signingSecret(), `ad:${type}:${requestId}:${creativeId}`).slice(0, 24);
-    } catch {
-      return "";
-    }
+    return adTrackingSignature(type, requestId, creativeId);
   }
 
   /**

@@ -170,7 +170,7 @@ CREATE INDEX IF NOT EXISTS idx_notifications_read ON admin_notifications(read);
 CREATE INDEX IF NOT EXISTS idx_notifications_created ON admin_notifications(created_at DESC);
 `;
 
-export function applyAdminSchema(db: any) {
+export function applyAdminSchema(db: { exec(sql: string): unknown }) {
   const migrations = [
     "ALTER TABLE admin_users ADD COLUMN id TEXT",
     "ALTER TABLE admin_users ADD COLUMN user_id TEXT",

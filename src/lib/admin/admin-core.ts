@@ -8,17 +8,81 @@ import type {
   AdminUser,
   AdminRole,
   AdminAuditLog,
-  ModerationQueueItem,
-  SupportTicket,
   NetworkOverview,
   FinancialOverview,
   ComplianceReport,
+  DomainOverview,
   SystemAlert,
   TaskQueue,
-  AnalyticsDashboard,
   BulkAction,
   BulkActionResult,
 } from "./admin-types";
+
+type Row = Record<string, unknown>;
+
+function mapAdminUser(row: Row): AdminUser {
+  return {
+    id: row.id as string,
+    userId: row.user_id as string,
+    name: row.name as string,
+    email: row.email as string,
+    role: row.role as AdminRole,
+    permissions: JSON.parse((row.permissions as string) || "[]"),
+    departments: JSON.parse((row.departments as string) || "[]"),
+    createdAt: row.created_at as string,
+    lastLoginAt: (row.last_login_at as string) || "",
+    status: row.status as AdminUser["status"],
+  };
+}
+
+function mapAlert(row: Row): SystemAlert {
+  return {
+    id: row.id as string,
+    type: row.type as SystemAlert["type"],
+    severity: row.severity as SystemAlert["severity"],
+    title: row.title as string,
+    message: row.message as string,
+    source: row.source as string,
+    affectedEntities: JSON.parse((row.affected_entities as string) || "[]"),
+    recommendedActions: JSON.parse((row.recommended_actions as string) || "[]"),
+    createdAt: row.created_at as string,
+    resolvedAt: (row.resolved_at as string) || undefined,
+    resolvedBy: (row.resolved_by as string) || undefined,
+  };
+}
+
+function mapTask(row: Row): TaskQueue {
+  return {
+    id: row.id as string,
+    type: row.type as string,
+    priority: row.priority as number,
+    status: row.status as TaskQueue["status"],
+    payload: JSON.parse((row.payload as string) || "{}"),
+    result: row.result ? JSON.parse(row.result as string) : undefined,
+    error: (row.error as string) || undefined,
+    attempts: row.attempts as number,
+    maxAttempts: row.max_attempts as number,
+    scheduledAt: row.scheduled_at as string,
+    startedAt: (row.started_at as string) || undefined,
+    completedAt: (row.completed_at as string) || undefined,
+    processedBy: (row.processed_by as string) || undefined,
+  };
+}
+
+function mapAudit(row: Row): AdminAuditLog {
+  return {
+    id: row.id as string,
+    adminId: row.admin_id as string,
+    adminName: row.admin_name as string,
+    action: row.action as string,
+    entityType: row.entity_type as string,
+    entityId: row.entity_id as string,
+    changes: JSON.parse((row.changes as string) || "{}"),
+    ipAddress: (row.ip_address as string) || "",
+    userAgent: (row.user_agent as string) || "",
+    timestamp: row.timestamp as string,
+  };
+}
 
 export class AdminCore {
   /**
@@ -63,7 +127,7 @@ export class AdminCore {
       changes: { role: { old: null, new: input.role } },
     });
 
-    return this.getAdminUser(id);
+    return this.getAdminUser(id) as AdminUser;
   }
 
   /**
@@ -73,14 +137,9 @@ export class AdminCore {
     const db = getDb();
     const row = db
       .prepare("SELECT * FROM admin_users WHERE id = ?")
-      .get(id) as AdminUser | undefined;
+      .get(id) as Row | undefined;
     if (!row) return null;
-
-    return {
-      ...row,
-      permissions: JSON.parse(row.permissions as string),
-      departments: JSON.parse(row.departments as string),
-    };
+    return mapAdminUser(row);
   }
 
   /**
@@ -90,14 +149,9 @@ export class AdminCore {
     const db = getDb();
     const row = db
       .prepare("SELECT * FROM admin_users WHERE user_id = ?")
-      .get(userId) as AdminUser | undefined;
+      .get(userId) as Row | undefined;
     if (!row) return null;
-
-    return {
-      ...row,
-      permissions: JSON.parse(row.permissions as string),
-      departments: JSON.parse(row.departments as string),
-    };
+    return mapAdminUser(row);
   }
 
   /**
@@ -113,7 +167,7 @@ export class AdminCore {
   }): { users: AdminUser[]; total: number; page: number; totalPages: number } {
     const db = getDb();
     const conditions: string[] = [];
-    const params: any[] = [];
+    const params: unknown[] = [];
 
     if (filters.role) {
       conditions.push("role = ?");
@@ -146,13 +200,9 @@ export class AdminCore {
 
     const rows = db
       .prepare(`SELECT * FROM admin_users ${whereClause} ORDER BY created_at DESC LIMIT ? OFFSET ?`)
-      .all(...params, limit, offset) as AdminUser[];
+      .all(...params, limit, offset) as Row[];
 
-    const users = rows.map((row) => ({
-      ...row,
-      permissions: JSON.parse(row.permissions as string),
-      departments: JSON.parse(row.departments as string),
-    }));
+    const users = rows.map(mapAdminUser);
 
     return {
       users,
@@ -177,8 +227,8 @@ export class AdminCore {
     if (!admin) return null;
 
     const setClause: string[] = [];
-    const params: any[] = [];
-    const changes: Record<string, { old: any; new: any }> = {};
+    const params: unknown[] = [];
+    const changes: Record<string, { old: unknown; new: unknown }> = {};
 
     if (updates.name !== undefined) {
       setClause.push("name = ?");
@@ -317,7 +367,7 @@ export class AdminCore {
     action: string;
     entityType: string;
     entityId: string;
-    changes: Record<string, { old: any; new: any }>;
+    changes: Record<string, { old: unknown; new: unknown }>;
   }): void {
     const db = getDb();
 
@@ -351,7 +401,7 @@ export class AdminCore {
   }): AdminAuditLog[] {
     const db = getDb();
     const conditions: string[] = [];
-    const params: any[] = [];
+    const params: unknown[] = [];
 
     if (filters.adminId) {
       conditions.push("admin_id = ?");
@@ -388,12 +438,9 @@ export class AdminCore {
 
     const rows = db
       .prepare(`SELECT * FROM admin_audit_log ${whereClause} ORDER BY timestamp DESC LIMIT ?`)
-      .all(...params, limit) as AdminAuditLog[];
+      .all(...params, limit) as Row[];
 
-    return rows.map((row) => ({
-      ...row,
-      changes: JSON.parse(row.changes as string),
-    }));
+    return rows.map(mapAudit);
   }
 
   /**
@@ -406,7 +453,10 @@ export class AdminCore {
     // Get domain health
     const domains = db
       .prepare("SELECT * FROM network_health ORDER BY timestamp DESC LIMIT 5")
-      .all() as any[];
+      .all() as {
+        domain: string; status: DomainOverview["status"]; fill_rate: number; avg_latency_ms: number;
+        impressions: number; revenue: number; active_placements: number;
+      }[];
 
     const domainOverviews = domains.map((d) => ({
       domain: d.domain,
@@ -575,7 +625,9 @@ export class AdminCore {
          WHERE type = 'creative'
          AND created_at >= ?`,
       )
-      .get(startDate) as any;
+      .get(startDate) as {
+        total: number; approved: number | null; rejected: number | null; pending: number | null;
+      };
 
     // Fraud detection
     const fraudStats = db
@@ -587,7 +639,9 @@ export class AdminCore {
          WHERE action = 'block'
          AND timestamp >= ?`,
       )
-      .get(startDate) as any;
+      .get(startDate) as {
+        blocked_requests: number; flagged_accounts: number;
+      };
 
     return {
       period,
@@ -595,14 +649,14 @@ export class AdminCore {
         total: violations.c,
         byCategory: {},
         bySeverity: {},
-        resolved: contentModeration.approved + contentModeration.rejected,
-        pending: contentModeration.pending,
+        resolved: (contentModeration.approved ?? 0) + (contentModeration.rejected ?? 0),
+        pending: contentModeration.pending ?? 0,
       },
       contentModeration: {
         reviewed: contentModeration.total,
-        approved: contentModeration.approved,
-        rejected: contentModeration.rejected,
-        pending: contentModeration.pending,
+        approved: contentModeration.approved ?? 0,
+        rejected: contentModeration.rejected ?? 0,
+        pending: contentModeration.pending ?? 0,
       },
       fraudDetection: {
         blockedRequests: fraudStats.blocked_requests,
@@ -651,7 +705,7 @@ export class AdminCore {
       now,
     );
 
-    return this.getAlert(id);
+    return this.getAlert(id) as SystemAlert;
   }
 
   /**
@@ -661,14 +715,9 @@ export class AdminCore {
     const db = getDb();
     const row = db
       .prepare("SELECT * FROM system_alerts WHERE id = ?")
-      .get(id) as SystemAlert | undefined;
+      .get(id) as Row | undefined;
     if (!row) return null;
-
-    return {
-      ...row,
-      affectedEntities: JSON.parse(row.affected_entities as string),
-      recommendedActions: JSON.parse(row.recommended_actions as string),
-    };
+    return mapAlert(row);
   }
 
   /**
@@ -678,13 +727,8 @@ export class AdminCore {
     const db = getDb();
     const rows = db
       .prepare("SELECT * FROM system_alerts WHERE resolved_at IS NULL ORDER BY created_at DESC")
-      .all() as SystemAlert[];
-
-    return rows.map((row) => ({
-      ...row,
-      affectedEntities: JSON.parse(row.affected_entities as string),
-      recommendedActions: JSON.parse(row.recommended_actions as string),
-    }));
+      .all() as Row[];
+    return rows.map(mapAlert);
   }
 
   /**
@@ -730,7 +774,7 @@ export class AdminCore {
       now,
     );
 
-    return this.getTask(id);
+    return this.getTask(id) as TaskQueue;
   }
 
   /**
@@ -740,14 +784,9 @@ export class AdminCore {
     const db = getDb();
     const row = db
       .prepare("SELECT * FROM admin_task_queue WHERE id = ?")
-      .get(id) as TaskQueue | undefined;
+      .get(id) as Row | undefined;
     if (!row) return null;
-
-    return {
-      ...row,
-      payload: JSON.parse(row.payload as string),
-      result: row.result ? JSON.parse(row.result as string) : null,
-    };
+    return mapTask(row);
   }
 
   /**
@@ -765,13 +804,9 @@ export class AdminCore {
          ORDER BY priority DESC, scheduled_at ASC
          LIMIT 50`,
       )
-      .all(now) as TaskQueue[];
+      .all(now) as Row[];
 
-    return rows.map((row) => ({
-      ...row,
-      payload: JSON.parse(row.payload as string),
-      result: row.result ? JSON.parse(row.result as string) : null,
-    }));
+    return rows.map(mapTask);
   }
 
   /**
@@ -807,13 +842,19 @@ export class AdminCore {
   /**
    * Execute task (simulated)
    */
-  private executeTask(task: TaskQueue): { success: boolean; data: any } {
+  private executeTask(task: TaskQueue): { success: boolean; data: Record<string, unknown> } {
     // In production, implement actual task execution logic
     switch (task.type) {
       case "bulk_approve":
-        return { success: true, data: { approved: task.payload.entityIds?.length || 0 } };
+        return {
+          success: true,
+          data: { approved: (task.payload.entityIds as string[] | undefined)?.length || 0 },
+        };
       case "bulk_reject":
-        return { success: true, data: { rejected: task.payload.entityIds?.length || 0 } };
+        return {
+          success: true,
+          data: { rejected: (task.payload.entityIds as string[] | undefined)?.length || 0 },
+        };
       case "generate_report":
         return { success: true, data: { reportUrl: "/reports/generated" } };
       default:
