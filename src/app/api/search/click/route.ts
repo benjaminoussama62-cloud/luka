@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { recordClick } from "@/lib/search-index/fts";
 import { extractFeatures, trainFromClick } from "@/lib/search-index/ml-rank";
+import { signalContext } from "@/lib/http-ctx";
 
 export async function POST(req: Request) {
   const body = (await req.json()) as {
@@ -16,7 +17,12 @@ export async function POST(req: Request) {
   const domain = String(body.domain ?? "").trim();
 
   if (query && url) {
-    recordClick(query, url, domain || new URL(url, "https://ayeba.app").hostname);
+    recordClick(
+      query,
+      url,
+      domain || new URL(url, "https://ayeba.app").hostname,
+      signalContext(req),
+    );
 
     if (body.title) {
       const features = extractFeatures(

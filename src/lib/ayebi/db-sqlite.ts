@@ -177,6 +177,24 @@ export function listArticles(): StoredArticle[] {
   });
 }
 
+/**
+ * Backlinks ("Pages liées") — articles whose wikitext contains a [[slug]]
+ * internal link to the target. Scans stored wikitext in content_json.
+ */
+export function getBacklinks(slug: string, limit = 30): { slug: string; title: string }[] {
+  importSeedIfEmpty();
+  const rows = getDb()
+    .prepare("SELECT slug, title, content_json FROM ayebi_articles WHERE slug != ?")
+    .all(slug) as { slug: string; title: string; content_json: string }[];
+  return rows
+    .filter((r) => {
+      const c = r.content_json || "";
+      return c.includes(`[[${slug}|`) || c.includes(`[[${slug}]]`);
+    })
+    .slice(0, limit)
+    .map((r) => ({ slug: r.slug, title: r.title }));
+}
+
 export function searchAyebiFts(query: string, limit = 20): AyebiArticle[] {
   importSeedIfEmpty();
   const tokens = query

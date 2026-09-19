@@ -96,7 +96,7 @@ export async function runCrawlBatch(
       const doc = parseHtml(html, item.url);
       if (!doc) throw new Error("empty");
 
-      indexDocument(doc);
+      indexDocument(doc, { outLinks: doc.outLinks });
 
       for (const link of doc.outLinks.slice(0, 20)) {
         enqueueUrl(link, link.includes(".cd") ? 9 : link.includes("wikipedia") ? 6 : 2);

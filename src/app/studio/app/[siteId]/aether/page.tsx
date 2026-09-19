@@ -1,14 +1,19 @@
 "use client";
+/* eslint-disable react-hooks/set-state-in-effect */
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { StudioAppShell } from "@/components/studio/StudioAppShell";
+import { ModuleNav } from "@/components/studio/ui";
+import { AETHER_NAV } from "@/components/studio/aether-nav";
 import type {
   AetherOverview,
   StudioSite,
 } from "@/lib/studio/types";
+
+type Insight = { title: string; detail: string; href: string; priority: "high" | "medium" | "low" };
 
 export default function StudioAetherPage() {
   const { siteId } = useParams<{ siteId: string }>();
@@ -16,14 +21,23 @@ export default function StudioAetherPage() {
   const router = useRouter();
   const [site, setSite] = useState<StudioSite | null>(null);
   const [overview, setOverview] = useState<AetherOverview | null>(null);
+  const [insights, setInsights] = useState<Insight[]>([]);
 
   const load = useCallback(async () => {
     if (!siteId) return;
-    const res = await fetch(`/api/studio/aether/${siteId}/overview`);
-    if (!res.ok) return;
-    const data = (await res.json()) as { overview: AetherOverview; site: StudioSite };
-    setOverview(data.overview);
-    setSite(data.site);
+    const [o, i] = await Promise.all([
+      fetch(`/api/studio/aether/${siteId}/overview`),
+      fetch(`/api/studio/aether/${siteId}/insights`),
+    ]);
+    if (o.ok) {
+      const data = (await o.json()) as { overview: AetherOverview; site: StudioSite };
+      setOverview(data.overview);
+      setSite(data.site);
+    }
+    if (i.ok) {
+      const data = (await i.json()) as { insights: Insight[] };
+      setInsights(data.insights || []);
+    }
   }, [siteId]);
 
   useEffect(() => {
@@ -44,6 +58,7 @@ export default function StudioAetherPage() {
 
   return (
     <StudioAppShell siteId={siteId} siteDomain={site.domain}>
+      <ModuleNav siteId={siteId} module="aether" items={AETHER_NAV} />
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="ayeba-kicker ayeba-kicker-accent">Aether</p>
@@ -93,6 +108,28 @@ export default function StudioAetherPage() {
           ))}
         </ol>
       </section>
+
+      {insights.length ? (
+        <section className="mt-12">
+          <h2 className="font-[family-name:var(--font-brand)] text-xl text-[var(--ink)]">
+            Diagnostics sur vos données
+          </h2>
+          <ul className="mt-6 space-y-4">
+            {insights.map((ins) => (
+              <li key={ins.title} className="ayeba-panel flex flex-wrap items-center justify-between gap-4 p-5">
+                <div className="min-w-0">
+                  <p className="text-[10px] uppercase tracking-[0.14em] text-[var(--faint)]">
+                    {ins.priority === "high" ? "Priorité haute" : "Priorité moyenne"}
+                  </p>
+                  <h3 className="mt-1 font-[family-name:var(--font-brand)] text-lg text-[var(--ink)]">{ins.title}</h3>
+                  <p className="mt-1 max-w-2xl text-sm text-[var(--muted)]">{ins.detail}</p>
+                </div>
+                <Link href={ins.href} className="ayeba-ghost shrink-0 px-3 py-2 text-xs">Ouvrir</Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
     </StudioAppShell>
   );
 }

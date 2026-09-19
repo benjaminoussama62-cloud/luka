@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { OAuthClient } from "@/lib/oauth-provider/types";
+import type { DeveloperProject } from "@/lib/developers/console";
+import { OAUTH_SCOPES, type OAuthScopeId } from "@/lib/oauth-provider/scopes";
 import { buildAuthorizeUrl } from "@/lib/oauth-provider/endpoints";
 import { CopyField } from "./CopyField";
 
@@ -24,6 +26,18 @@ export function DeveloperAppDetail({
   const [redirectUris, setRedirectUris] = useState(app.redirectUris.join("\n"));
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [projects, setProjects] = useState<DeveloperProject[]>([]);
+  const [projectId, setProjectId] = useState<string>("");
+  const [restrictScopes, setRestrictScopes] = useState(false);
+  const [scopes, setScopes] = useState<Set<OAuthScopeId>>(
+    new Set(Object.keys(OAUTH_SCOPES) as OAuthScopeId[]),
+  );
+
+  useEffect(() => {
+    void fetch("/api/developers/projects").then(async (r) => {
+      if (r.ok) setProjects(((await r.json()) as { projects: DeveloperProject[] }).projects);
+    });
+  }, []);
 
   async function requestVerification() {
     const res = await fetch(`/api/developers/apps/${app.clientId}/verify-request`, { method: "POST" });
@@ -42,6 +56,8 @@ export function DeveloperAppDetail({
         description,
         websiteUrl,
         redirectUris: redirectUris.split("\n").map((s) => s.trim()).filter(Boolean),
+        projectId: projectId || null,
+        scopes: restrictScopes ? [...scopes] : undefined,
       }),
     });
     const data = (await res.json()) as { app?: OAuthClient; error?: string };
@@ -125,6 +141,47 @@ export function DeveloperAppDetail({
           value={redirectUris}
           onChange={(e) => setRedirectUris(e.target.value)}
         />
+      </div>
+
+      <div className="dev-console-field">
+        <label>Projet</label>
+        <select className="ayeba-input" value={projectId} onChange={(e) => setProjectId(e.target.value)}>
+          <option value="">— Aucun projet —</option>
+          {projects.map((p) => (
+            <option key={p.id} value={p.id}>{p.name}</option>
+          ))}
+        </select>
+      </div>
+
+      <div className="dev-console-field">
+        <label className="flex items-center gap-2">
+          <input type="checkbox" checked={restrictScopes} onChange={(e) => setRestrictScopes(e.target.checked)} />
+          Restreindre les portées OAuth autorisées
+        </label>
+        {restrictScopes ? (
+          <div className="mt-2 space-y-1.5 pl-6 text-sm">
+            {(Object.keys(OAUTH_SCOPES) as OAuthScopeId[]).map((id) => (
+              <label key={id} className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={scopes.has(id)}
+                  onChange={(e) => {
+                    const next = new Set(scopes);
+                    if (e.target.checked) next.add(id);
+                    else next.delete(id);
+                    setScopes(next);
+                  }}
+                />
+                <span>
+                  <code className="dev-console-code">{id}</code> — {OAUTH_SCOPES[id].label}
+                </span>
+              </label>
+            ))}
+            <p className="dev-console-muted text-xs">
+              Une requête d&rsquo;autorisation demandant une portée non cochée sera refusée (invalid_scope).
+            </p>
+          </div>
+        ) : null}
       </div>
 
       <CopyField label="URL d’autorisation (exemple)" value={authUrl} mono={false} />

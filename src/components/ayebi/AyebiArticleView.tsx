@@ -40,12 +40,14 @@ const CAT_SLUG: Record<string, string> = {
 export function AyebiArticleView({
   article,
   related,
+  backlinks = [],
   canEdit = false,
   isAdmin = false,
   meta,
 }: {
   article: AyebiArticle;
   related: AyebiArticle[];
+  backlinks?: { slug: string; title: string }[];
   canEdit?: boolean;
   isAdmin?: boolean;
   meta?: {
@@ -242,7 +244,15 @@ export function AyebiArticleView({
                   <h2 className="flex items-center gap-2 border-b border-[var(--line)] pb-1 font-[family-name:var(--font-display)] text-2xl font-semibold text-white">
                     <span className="font-mono text-sm text-[var(--faint)]">{si + 1}</span>
                     {sec.heading}
-                    <a href={`#${slugifyHeading(sec.heading)}`} className="ml-auto text-[var(--faint)] opacity-0 hover:opacity-100 text-sm" aria-label="Lien ancre">§</a>
+                    <a href={`#${slugifyHeading(sec.heading)}`} className="text-[var(--faint)] opacity-0 hover:opacity-100 text-sm" aria-label="Lien ancre">§</a>
+                    {canEdit && (
+                      <Link
+                        href={`/ayebi/${article.slug}/modifier?section=${si}`}
+                        className="ml-auto font-[family-name:var(--font-body)] text-xs font-normal text-[rgba(0,200,255,0.75)] hover:underline"
+                      >
+                        [modifier]
+                      </Link>
+                    )}
                   </h2>
                   <div className="mt-4 space-y-4 text-[15px] leading-[1.9] text-[var(--muted)]">
                     {sec.paragraphs.map((p, pi) => (
@@ -445,6 +455,22 @@ export function AyebiArticleView({
                 📂 {article.category}
               </Link>
             </div>
+
+            {/* Pages liées (backlinks) */}
+            {backlinks.length > 0 && (
+              <div className="ayeba-panel p-4">
+                <p className="ayeba-kicker mb-3">Pages liées</p>
+                <ul className="space-y-1.5">
+                  {backlinks.map((b) => (
+                    <li key={b.slug}>
+                      <Link href={`/ayebi/${b.slug}`} className="text-xs text-[rgba(0,200,255,0.8)] hover:underline">
+                        {b.title}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
             {/* Admin : protection */}
             {isAdmin && (

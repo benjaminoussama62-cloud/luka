@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireStudioSite, studioError } from "@/lib/studio/http";
-import { velocityEnterpriseV2 } from "@/lib/studio/velocity-v2";
+import { velocityOverview } from "@/lib/studio/velocity";
+import { psiAuditHistory } from "@/lib/studio/velocity-psi";
 
 type Ctx = { params: Promise<{ siteId: string }> };
 
@@ -9,8 +10,9 @@ export async function GET(_req: Request, ctx: Ctx) {
   const owned = await requireStudioSite(siteId);
   if (owned instanceof NextResponse) return owned;
   try {
-    const overview = velocityEnterpriseV2.getOverview(owned.site.id);
-    return NextResponse.json({ overview, site: owned.site });
+    const overview = velocityOverview(owned.site);
+    const history = psiAuditHistory(owned.site.id);
+    return NextResponse.json({ overview, history, site: owned.site });
   } catch (e) {
     return studioError(e);
   }

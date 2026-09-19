@@ -71,6 +71,23 @@ export function isRedirectUriAllowed(clientId: string, redirectUri: string): boo
   return uris.includes(redirectUri);
 }
 
+/**
+ * Allowed scopes configured on the client in the developer console.
+ * Returns null when unrestricted (default).
+ */
+export function getClientAllowedScopes(clientId: string): string[] | null {
+  const row = getDb()
+    .prepare("SELECT scopes FROM oauth_clients WHERE client_id = ?")
+    .get(clientId) as { scopes: string } | undefined;
+  if (!row?.scopes) return null;
+  try {
+    const list = JSON.parse(row.scopes) as string[];
+    return Array.isArray(list) && list.length ? list : null;
+  } catch {
+    return null;
+  }
+}
+
 export function listOAuthClientsByOwner(ownerUserId: string): OAuthClient[] {
   const db = getDb();
   const rows = db

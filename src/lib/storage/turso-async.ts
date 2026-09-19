@@ -81,6 +81,7 @@ export async function searchIndexAsync(query: string, limit = 30): Promise<Async
 export async function recordImpressionsAsync(
   query: string,
   items: Array<{ url: string; domain: string; position: number }>,
+  ctx?: { device?: string; country?: string },
 ): Promise<void> {
   const client = getAsyncClient();
   if (!client || !query || !items.length) return;
@@ -92,8 +93,8 @@ export async function recordImpressionsAsync(
     .filter((i) => i.url && i.domain)
     .flatMap((i) => [
       {
-        sql: "INSERT INTO impression_signals (query, url, domain, position, shown_at) VALUES (?, ?, ?, ?, ?)",
-        args: [query, i.url, i.domain, i.position, now],
+        sql: "INSERT INTO impression_signals (query, url, domain, position, shown_at, device, country) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        args: [query, i.url, i.domain, i.position, now, ctx?.device || "", ctx?.country || ""],
       },
       {
         sql: `INSERT INTO radar_daily (day, domain, query, url, impressions, clicks, position_sum, position_count)

@@ -7,7 +7,7 @@ import {
   hasUserConsent,
   recordUserConsent,
 } from "@/lib/oauth-provider/codes";
-import { getOAuthClient } from "@/lib/oauth-provider/clients";
+import { getClientAllowedScopes, getOAuthClient } from "@/lib/oauth-provider/clients";
 import { parseScopeString } from "@/lib/oauth-provider/scopes";
 import {
   buildRedirectWithCode,
@@ -47,6 +47,12 @@ export default async function OAuthAuthorizePage({ searchParams }: Props) {
   const client = getOAuthClient(parsed.clientId);
   if (!client) {
     redirect(buildRedirectWithError(parsed.redirectUri, "invalid_client", parsed.state));
+  }
+
+  // Per-client scope restrictions from the developer console.
+  const allowed = getClientAllowedScopes(parsed.clientId);
+  if (allowed && !parseScopeString(parsed.scope).every((s) => allowed.includes(s))) {
+    redirect(buildRedirectWithError(parsed.redirectUri, "invalid_scope", parsed.state));
   }
 
   const session = await getSessionFromCookies();

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * Ayeba Trace Enterprise v2 - Advanced Analytics Platform
  * Google Analytics-level features with ML-powered insights and multi-touch attribution
@@ -15,9 +16,13 @@ export class TraceEnterpriseV2 {
     userId?: string;
     sessionId: string;
     pageUrl: string;
+    title?: string;
     referrer?: string;
     userAgent: string;
     ip: string;
+    screenResolution?: string;
+    language?: string;
+    timezone?: string;
     context?: {
       utmSource?: string;
       utmMedium?: string;
@@ -32,7 +37,6 @@ export class TraceEnterpriseV2 {
     const db = getDb();
     const eventId = this.generateId();
     const now = new Date().toISOString();
-    const ipHash = this.hashIp(input.ip);
 
     // Get or create session with enhanced tracking
     const session = await this.getOrCreateEnhancedSession({
@@ -43,6 +47,9 @@ export class TraceEnterpriseV2 {
       referrer: input.referrer,
       userAgent: input.userAgent,
       ip: input.ip,
+      screenResolution: input.screenResolution,
+      language: input.language,
+      timezone: input.timezone,
       context: input.context,
     });
 
@@ -58,7 +65,7 @@ export class TraceEnterpriseV2 {
       session.id,
       input.siteId,
       this.extractPath(input.pageUrl),
-      this.extractTitle(input.pageUrl),
+      input.title || this.extractTitle(input.pageUrl),
       input.referrer || "",
       JSON.stringify({ utm: input.context, first_visit: session.isFirstVisit }),
       JSON.stringify(input.customDimensions || {}),
@@ -87,13 +94,78 @@ export class TraceEnterpriseV2 {
 
     // Record attribution data
     this.recordAttribution({
-      sessionId: input.sessionId,
+      sessionId: session.id,
       siteId: input.siteId,
       pageUrl: input.pageUrl,
       referrer: input.referrer,
       utm: input.context,
     });
 
+    return eventId;
+  }
+
+  /**
+   * Track a non-pageview event (scroll, click, conversion, engagement, custom)
+   * fired by tag-manager rules in the collector script.
+   */
+  async trackEvent(input: {
+    siteId: string;
+    sessionId: string;
+    pageUrl: string;
+    referrer?: string;
+    userAgent: string;
+    ip: string;
+    eventType: "scroll" | "click" | "conversion" | "engagement" | "event" | "custom";
+    title?: string;
+    durationMs?: number;
+    scrollDepth?: number;
+    data?: Record<string, unknown>;
+    screenResolution?: string;
+    language?: string;
+    timezone?: string;
+    context?: {
+      utmSource?: string; utmMedium?: string; utmCampaign?: string;
+      utmContent?: string; utmTerm?: string; gclid?: string; fbclid?: string;
+    };
+  }): Promise<string> {
+    const db = getDb();
+    const eventId = this.generateId();
+    const now = new Date().toISOString();
+
+    const session = await this.getOrCreateEnhancedSession({
+      siteId: input.siteId,
+      sessionId: input.sessionId,
+      pageUrl: input.pageUrl,
+      referrer: input.referrer,
+      userAgent: input.userAgent,
+      ip: input.ip,
+      screenResolution: input.screenResolution,
+      language: input.language,
+      timezone: input.timezone,
+      context: input.context,
+    });
+
+    db.prepare(
+      `INSERT INTO trace_events_enhanced (
+        id, session_id, site_id, event_type, path, title, referrer,
+        duration_ms, scroll_depth, elements_clicked, form_submissions,
+        errors, custom_events, custom_dimensions, timestamp
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', '[]', '[]', ?, '{}', ?)`,
+    ).run(
+      eventId,
+      session.id,
+      input.siteId,
+      input.eventType,
+      this.extractPath(input.pageUrl),
+      input.title || this.extractTitle(input.pageUrl),
+      input.referrer || "",
+      Math.max(0, Math.round(input.durationMs || 0)),
+      Math.max(0, Math.min(100, input.scrollDepth || 0)),
+      JSON.stringify(input.data || {}),
+      now,
+    );
+
+    this.updateEnhancedSessionStats(session.id);
     return eventId;
   }
 
@@ -108,15 +180,21 @@ export class TraceEnterpriseV2 {
     referrer?: string;
     userAgent: string;
     ip: string;
+    screenResolution?: string;
+    language?: string;
+    timezone?: string;
     context?: any;
   }): Promise<any> {
     const db = getDb();
     const now = new Date().toISOString();
+    // Sanitized client sessionId doubles as the session primary key so that
+    // subsequent hits from the same browser session reuse the same row.
+    const sid = String(input.sessionId || "").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 64);
 
     // Check if session exists
     const existing = db
       .prepare("SELECT * FROM trace_sessions WHERE id = ?")
-      .get(input.sessionId) as any;
+      .get(sid || "__none__") as any;
 
     if (existing) {
       return { ...existing, isFirstVisit: false };
@@ -127,8 +205,10 @@ export class TraceEnterpriseV2 {
     const geoInfo = await this.getGeoFromIp(input.ip);
     const isFirstVisit = this.checkFirstVisit(input.userId, input.siteId);
 
-    // Create new session with comprehensive data
-    const id = this.generateId();
+    // Create new session with comprehensive data.
+    // The client-provided sessionId is used as the primary key so subsequent
+    // events from the same browser session attach to the same row.
+    const id = sid || this.generateId();
     db.prepare(
       `INSERT INTO trace_sessions (
         id, site_id, user_id, started_at, duration_sec, pageviews,
@@ -137,7 +217,7 @@ export class TraceEnterpriseV2 {
         utm_content, utm_term, gclid, fbclid, is_first_visit, session_quality,
         ad_blocker, javascript_enabled, cookies_enabled, screen_resolution,
         language, timezone
-      ) VALUES (?, ?, ?, ?, 0, 1, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, 0, 0, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       id,
       input.siteId,
@@ -163,9 +243,9 @@ export class TraceEnterpriseV2 {
       0, // Ad blocker (detected via JS)
       1, // JavaScript enabled
       1, // Cookies enabled
-      "1920x1080", // Would detect via JS
-      "fr",
-      "Africa/Kinshasa",
+      String(input.screenResolution || "").slice(0, 20),
+      String(input.language || "").slice(0, 20),
+      String(input.timezone || "").slice(0, 60),
     );
 
     return { id, isFirstVisit };
@@ -951,22 +1031,37 @@ export class TraceEnterpriseV2 {
    */
   private updateEnhancedSessionStats(sessionId: string): void {
     const db = getDb();
+    if (!this.getSession(sessionId)) return;
 
-    const session = this.getSession(sessionId);
-    if (!session) return;
-
-    const newPageviews = session.pageviews + 1;
-    const isBounce = newPageviews === 1 ? 1 : 0;
-
+    // Recompute from stored events — idempotent and safe under concurrent hits.
     db.prepare(
       `UPDATE trace_sessions
-       SET pageviews = ?, bounce = ?, exit_page = (
-         SELECT path FROM trace_events_enhanced
-         WHERE session_id = ? AND event_type = 'pageview'
-         ORDER BY timestamp DESC LIMIT 1
-       )
+       SET pageviews = (
+             SELECT COUNT(*) FROM trace_events_enhanced
+             WHERE session_id = ? AND event_type = 'pageview'
+           ),
+           bounce = CASE WHEN (
+             SELECT COUNT(*) FROM trace_events_enhanced
+             WHERE session_id = ? AND event_type = 'pageview'
+           ) <= 1 THEN 1 ELSE 0 END,
+           exit_page = (
+             SELECT path FROM trace_events_enhanced
+             WHERE session_id = ? AND event_type = 'pageview'
+             ORDER BY timestamp DESC LIMIT 1
+           ),
+           ended_at = (
+             SELECT MAX(timestamp) FROM trace_events_enhanced WHERE session_id = ?
+           ),
+           duration_sec = MAX(0, CAST((
+             SELECT (julianday(MAX(timestamp)) - julianday(?))
+             FROM trace_events_enhanced WHERE session_id = ?
+           ) * 86400 AS INTEGER))
        WHERE id = ?`,
-    ).run(newPageviews, isBounce, sessionId, sessionId);
+    ).run(
+      sessionId, sessionId, sessionId, sessionId,
+      this.getSession(sessionId)?.started_at || new Date().toISOString(),
+      sessionId, sessionId,
+    );
   }
 
   /**

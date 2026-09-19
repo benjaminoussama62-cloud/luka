@@ -8,7 +8,7 @@ import {
 } from "@/lib/auth-server";
 import { logOAuthAudit } from "@/lib/oauth-provider/audit";
 import { createAuthorizationCode, hasUserConsent, recordUserConsent } from "@/lib/oauth-provider/codes";
-import { getOAuthClient } from "@/lib/oauth-provider/clients";
+import { getClientAllowedScopes, getOAuthClient } from "@/lib/oauth-provider/clients";
 import { parseScopeString } from "@/lib/oauth-provider/scopes";
 import {
   buildRedirectWithCode,
@@ -85,6 +85,18 @@ export async function POST(req: Request) {
 
   const client = getOAuthClient(parsed.clientId)!;
   const scopes = parseScopeString(parsed.scope);
+
+  // Enforce per-client scope restrictions configured in the developer console.
+  const allowed = getClientAllowedScopes(parsed.clientId);
+  if (allowed && !scopes.every((s) => allowed.includes(s))) {
+    logOAuthAudit({ event: "authorize_scope_denied", clientId: parsed.clientId, ip, detail: parsed.scope });
+    if (body.action === "approve") {
+      return NextResponse.json({
+        redirect: buildRedirectWithError(parsed.redirectUri, "invalid_scope", parsed.state),
+      });
+    }
+    return NextResponse.json({ error: "Portée non autorisée pour cette application" }, { status: 403 });
+  }
 
   if (body.action === "login") {
     return NextResponse.json({

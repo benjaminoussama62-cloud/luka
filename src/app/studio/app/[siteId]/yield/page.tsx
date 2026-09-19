@@ -1,9 +1,12 @@
 "use client";
+/* eslint-disable react-hooks/set-state-in-effect */
 
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { StudioAppShell } from "@/components/studio/StudioAppShell";
+import { ModuleNav } from "@/components/studio/ui";
+import { YIELD_NAV } from "@/components/studio/yield-nav";
 import type { StudioSite, YieldOverview, YieldPlacement } from "@/lib/studio/types";
 
 export default function StudioYieldPage() {
@@ -77,6 +80,7 @@ export default function StudioYieldPage() {
 
   return (
     <StudioAppShell siteId={siteId} siteDomain={site.domain}>
+      <ModuleNav siteId={siteId} module="yield" items={YIELD_NAV} />
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="ayeba-kicker ayeba-kicker-accent">Yield</p>

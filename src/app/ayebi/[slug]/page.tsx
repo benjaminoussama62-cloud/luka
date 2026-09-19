@@ -1,7 +1,7 @@
 import { AyebiArticleView } from "@/components/ayebi/AyebiArticleView";
 import { AyebiStage } from "@/components/ayebi/AyebiStage";
 import { AYEBI_ARTICLES, getRelatedArticles } from "@/lib/ayebi";
-import { getAyebiArticleEnriched, getStoredArticle } from "@/lib/ayebi/server";
+import { getAyebiArticleEnriched, getBacklinks, getStoredArticle } from "@/lib/ayebi/server";
 import { getSessionFromCookies } from "@/lib/auth-server";
 import { authorFromSession } from "@/lib/ayebi/author";
 import { notFound } from "next/navigation";
@@ -24,10 +24,11 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 
 export default async function AyebiArticlePage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const [article, stored, session] = await Promise.all([
+  const [article, stored, session, backlinks] = await Promise.all([
     getAyebiArticleEnriched(slug),
     getStoredArticle(slug),
     getSessionFromCookies(),
+    Promise.resolve().then(() => getBacklinks(slug)),
   ]);
   if (!article) notFound();
 
@@ -39,6 +40,7 @@ export default async function AyebiArticlePage({ params }: { params: Promise<{ s
       <AyebiArticleView
         article={article}
         related={getRelatedArticles(slug)}
+        backlinks={backlinks}
         canEdit={Boolean(session)}
         isAdmin={author?.role === "admin"}
         meta={

@@ -656,6 +656,55 @@ CREATE TABLE IF NOT EXISTS attribution_touchpoints (
 CREATE INDEX IF NOT EXISTS idx_attribution_site ON attribution_touchpoints(site_id);
 CREATE INDEX IF NOT EXISTS idx_attribution_session ON attribution_touchpoints(session_id);
 CREATE INDEX IF NOT EXISTS idx_attribution_timestamp ON attribution_touchpoints(timestamp DESC);
+
+-- TRACE TAG MANAGER (règles de collecte déclaratives)
+CREATE TABLE IF NOT EXISTS trace_tag_rules (
+  id TEXT PRIMARY KEY,
+  site_id TEXT NOT NULL REFERENCES studio_sites(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  tag_type TEXT NOT NULL DEFAULT 'event',
+  trigger_type TEXT NOT NULL DEFAULT 'all_pages',
+  trigger_value TEXT NOT NULL DEFAULT '',
+  config TEXT NOT NULL DEFAULT '{}',
+  status TEXT NOT NULL DEFAULT 'active',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_trace_tags_site ON trace_tag_rules(site_id);
+
+-- RADAR — sitemaps soumis (historique + statut de lecture réel)
+CREATE TABLE IF NOT EXISTS radar_sitemaps (
+  id TEXT PRIMARY KEY,
+  site_id TEXT NOT NULL REFERENCES studio_sites(id) ON DELETE CASCADE,
+  sitemap_url TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  discovered_count INTEGER NOT NULL DEFAULT 0,
+  last_error TEXT,
+  submitted_at TEXT NOT NULL,
+  last_read TEXT,
+  UNIQUE(site_id, sitemap_url)
+);
+
+CREATE INDEX IF NOT EXISTS idx_radar_sitemaps_site ON radar_sitemaps(site_id);
+
+-- YIELD — mots-clés de campagne (Google Ads keywords)
+CREATE TABLE IF NOT EXISTS campaign_keywords (
+  id TEXT PRIMARY KEY,
+  campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  keyword TEXT NOT NULL,
+  match_type TEXT NOT NULL DEFAULT 'broad',
+  max_cpc REAL,
+  status TEXT NOT NULL DEFAULT 'enabled',
+  impressions INTEGER NOT NULL DEFAULT 0,
+  clicks INTEGER NOT NULL DEFAULT 0,
+  cost REAL NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE(campaign_id, keyword, match_type)
+);
+
+CREATE INDEX IF NOT EXISTS idx_campaign_keywords ON campaign_keywords(campaign_id);
 `;
 
 export function applyEnterpriseSchema(db: any) {

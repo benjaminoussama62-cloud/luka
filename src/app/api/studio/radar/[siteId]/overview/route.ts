@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireStudioSite, studioError } from "@/lib/studio/http";
-import { radarEnterpriseV2 } from "@/lib/studio/radar-v2";
+import { radarOverview } from "@/lib/studio/radar";
 
 type Ctx = { params: Promise<{ siteId: string }> };
 
@@ -9,7 +9,7 @@ export async function GET(_req: Request, ctx: Ctx) {
   const owned = await requireStudioSite(siteId);
   if (owned instanceof NextResponse) return owned;
   try {
-    const overview = radarEnterpriseV2.getOverview(owned.site.id, owned.site.domain);
+    const overview = radarOverview(owned.site);
     return NextResponse.json({ overview, site: owned.site });
   } catch (e) {
     return studioError(e);

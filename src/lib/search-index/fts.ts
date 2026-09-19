@@ -11,14 +11,16 @@ export type IndexedDoc = {
   localRelevant: boolean;
 };
 
-export function indexDocument(doc: IndexedDoc) {
+export function indexDocument(doc: IndexedDoc, extra?: { outLinks?: string[] }) {
   const db = getDb();
+  const outLinks = (extra?.outLinks || []).slice(0, 200);
   db.prepare(
     `INSERT INTO crawl_documents (id, url, canonical_url, domain, title, snippet, body, keywords, source_type, credibility, local_relevant, link_count, crawled_at, recrawl_after)
-     VALUES (?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, ?, 0, ?, ?)
+     VALUES (?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, ?, ?, ?, ?)
      ON CONFLICT(url) DO UPDATE SET
        title=excluded.title, snippet=excluded.snippet, body=excluded.body,
-       credibility=excluded.credibility, crawled_at=excluded.crawled_at, recrawl_after=excluded.recrawl_after`,
+       credibility=excluded.credibility, link_count=excluded.link_count,
+       crawled_at=excluded.crawled_at, recrawl_after=excluded.recrawl_after`,
   ).run(
     doc.id,
     doc.url,
@@ -30,9 +32,27 @@ export function indexDocument(doc: IndexedDoc) {
     doc.sourceType,
     doc.credibility,
     doc.localRelevant ? 1 : 0,
+    outLinks.length,
     new Date().toISOString(),
     new Date(Date.now() + 7 * 86400000).toISOString(),
   );
+
+  // Persist the real link graph edges discovered at crawl time (Radar "Liens").
+  if (outLinks.length) {
+    try {
+      db.prepare("DELETE FROM document_links WHERE source_url = ?").run(doc.url);
+      const ins = db.prepare(
+        `INSERT OR IGNORE INTO document_links (source_url, source_domain, target_url, target_domain, discovered_at)
+         VALUES (?, ?, ?, ?, ?)`,
+      );
+      const now = new Date().toISOString();
+      for (const target of outLinks) {
+        try {
+          ins.run(doc.url, doc.domain, target, new URL(target).hostname.replace(/^www\./, ""), now);
+        } catch { /* malformed target */ }
+      }
+    } catch { /* link table best-effort */ }
+  }
 
   db.prepare("DELETE FROM search_fts WHERE doc_id = ?").run(doc.id);
   db.prepare(
@@ -144,33 +164,33 @@ export function indexStats() {
   };
 }
 
-export function recordClick(query: string, url: string, domain: string) {
+export type SignalContext = { device?: string; country?: string };
+
+export function recordClick(query: string, url: string, domain: string, ctx?: SignalContext) {
   const db = getDb();
   const now = new Date().toISOString();
-  db.prepare("INSERT INTO click_signals (query, url, domain, clicked_at) VALUES (?, ?, ?, ?)").run(
-    query,
-    url,
-    domain,
-    now,
-  );
+  db.prepare(
+    "INSERT INTO click_signals (query, url, domain, clicked_at, device, country) VALUES (?, ?, ?, ?, ?, ?)",
+  ).run(query, url, domain, now, ctx?.device || "", ctx?.country || "");
   bumpRadarDaily({ day: now.slice(0, 10), domain, query, url, clicks: 1, impressions: 0, position: null });
 }
 
 export function recordImpressions(
   query: string,
   items: Array<{ url: string; domain: string; position: number }>,
+  ctx?: SignalContext,
 ) {
   if (!query || !items.length) return;
   const db = getDb();
   const now = new Date().toISOString();
   const day = now.slice(0, 10);
   const ins = db.prepare(
-    "INSERT INTO impression_signals (query, url, domain, position, shown_at) VALUES (?, ?, ?, ?, ?)",
+    "INSERT INTO impression_signals (query, url, domain, position, shown_at, device, country) VALUES (?, ?, ?, ?, ?, ?, ?)",
   );
   for (const item of items.slice(0, 30)) {
     if (!item.url || !item.domain) continue;
     try {
-      ins.run(query, item.url, item.domain, item.position, now);
+      ins.run(query, item.url, item.domain, item.position, now, ctx?.device || "", ctx?.country || "");
       bumpRadarDaily({
         day,
         domain: item.domain,

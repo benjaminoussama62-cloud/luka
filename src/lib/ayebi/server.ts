@@ -14,6 +14,7 @@ export { isDeepArticle } from "./enrich-live";
 export { slugifyTitle, AYEBI_CATEGORIES } from "./constants";
 export {
   getArticle,
+  getBacklinks,
   listArticles,
   saveArticle,
   searchAyebiFts,

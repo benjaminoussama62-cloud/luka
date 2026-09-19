@@ -5,13 +5,25 @@ import { AyebiStage } from "@/components/ayebi/AyebiStage";
 import { getAyebiArticleLive } from "@/lib/ayebi/server";
 import { getSessionFromCookies } from "@/lib/auth-server";
 
-export default async function ModifierFichePage({ params }: { params: Promise<{ slug: string }> }) {
+export default async function ModifierFichePage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<{ section?: string }>;
+}) {
   const session = await getSessionFromCookies();
   if (!session) redirect(`/ayebi/connexion?redirect=/ayebi/${(await params).slug}/modifier`);
 
   const { slug } = await params;
+  const { section } = await searchParams;
   const article = await getAyebiArticleLive(slug);
   if (!article) redirect("/ayebi/nouveau");
+
+  const sectionIndex =
+    section !== undefined && /^\d+$/.test(section) ? Number(section) : undefined;
+  const sectionName =
+    sectionIndex !== undefined ? article.sections?.[sectionIndex]?.heading : undefined;
 
   return (
     <>
@@ -21,12 +33,14 @@ export default async function ModifierFichePage({ params }: { params: Promise<{ 
           <Link href={`/ayebi/${slug}`} className="ayeba-ghost px-3 py-1.5 text-xs">
             ← {article.title}
           </Link>
-          <h1 className="mt-4 font-[family-name:var(--font-display)] text-3xl text-white">Modifier</h1>
+          <h1 className="mt-4 font-[family-name:var(--font-display)] text-3xl text-white">
+            {sectionName ? `Modifier la section « ${sectionName} »` : "Modifier"}
+          </h1>
           <p className="mt-2 text-sm text-[var(--muted)]">
             Décrivez vos changements dans le résumé de modification avant d&apos;enregistrer.
           </p>
         </div>
-        <AyebiEditor mode="edit" initial={article} />
+        <AyebiEditor mode="edit" initial={article} sectionIndex={sectionIndex} />
       </div>
     </>
   );

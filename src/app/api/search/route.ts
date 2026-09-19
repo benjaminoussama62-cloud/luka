@@ -6,6 +6,7 @@ import { rateLimit } from "@/lib/rate-limit";
 import { liveSearch } from "@/lib/real-search";
 import { recordImpressions } from "@/lib/search-index/fts";
 import { getDbMode } from "@/lib/storage/database";
+import { signalContext } from "@/lib/http-ctx";
 import {
   pushSearchHistoryAsync,
   recordImpressionsAsync,
@@ -111,8 +112,9 @@ export async function POST(req: Request) {
           }));
           // The sync libsql driver blocks the event loop per statement — never use it
           // on a Turso deployment, one SERP would cost a dozen blocking round trips.
-          if (turso) await recordImpressionsAsync(query.trim(), impressions);
-          else recordImpressions(query.trim(), impressions);
+          const ctx = signalContext(req);
+          if (turso) await recordImpressionsAsync(query.trim(), impressions, ctx);
+          else recordImpressions(query.trim(), impressions, ctx);
         }
       } catch (e) {
         console.warn("[search] impressions skipped", e);

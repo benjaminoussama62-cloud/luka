@@ -3,6 +3,7 @@ import { getDb } from "@/lib/storage/database";
 export type OAuthAuditEvent =
   | "authorize_start"
   | "authorize_denied"
+  | "authorize_scope_denied"
   | "authorize_granted"
   | "token_issued"
   | "token_refreshed"

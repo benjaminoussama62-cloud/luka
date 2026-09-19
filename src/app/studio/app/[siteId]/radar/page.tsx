@@ -1,11 +1,14 @@
 "use client";
+/* eslint-disable react-hooks/set-state-in-effect */
 
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { StudioAppShell } from "@/components/studio/StudioAppShell";
+import { ModuleNav } from "@/components/studio/ui";
+import { RADAR_NAV } from "@/components/studio/radar-nav";
 import type {
-  RadarInspectResult,
   RadarOverview,
   RadarPageRow,
   RadarQueryRow,
@@ -21,11 +24,6 @@ export default function StudioRadarPage() {
   const [overview, setOverview] = useState<RadarOverview | null>(null);
   const [queries, setQueries] = useState<RadarQueryRow[]>([]);
   const [pages, setPages] = useState<RadarPageRow[]>([]);
-  const [inspectUrl, setInspectUrl] = useState("");
-  const [sitemapUrl, setSitemapUrl] = useState("");
-  const [inspection, setInspection] = useState<RadarInspectResult | null>(null);
-  const [actionMsg, setActionMsg] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     if (!siteId) return;
@@ -38,8 +36,6 @@ export default function StudioRadarPage() {
       const data = (await o.json()) as { overview: RadarOverview; site: StudioSite };
       setOverview(data.overview);
       setSite(data.site);
-      setSitemapUrl(data.site.sitemapUrl || `https://${data.site.domain}/sitemap.xml`);
-      setInspectUrl(`https://${data.site.domain}/`);
     }
     if (q.ok) {
       const data = (await q.json()) as { queries: RadarQueryRow[] };
@@ -59,51 +55,6 @@ export default function StudioRadarPage() {
     if (user) void load();
   }, [user, load]);
 
-  async function onInspect(e: FormEvent, enqueue = false) {
-    e.preventDefault();
-    setBusy(true);
-    setActionMsg(null);
-    const res = await fetch(`/api/studio/radar/${siteId}/inspect`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url: inspectUrl, enqueue }),
-    });
-    const data = (await res.json()) as {
-      inspection?: RadarInspectResult;
-      enqueued?: { url: string };
-      error?: string;
-    };
-    setBusy(false);
-    if (!res.ok) {
-      setActionMsg(data.error || "Inspection impossible");
-      return;
-    }
-    setInspection(data.inspection || null);
-    if (data.enqueued) {
-      setActionMsg(`Crawl priorisé : ${data.enqueued.url}`);
-      void load();
-    }
-  }
-
-  async function onSitemap(e: FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setActionMsg(null);
-    const res = await fetch(`/api/studio/radar/${siteId}/sitemap`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sitemapUrl }),
-    });
-    const data = (await res.json()) as { urlsEnqueued?: number; error?: string };
-    setBusy(false);
-    if (!res.ok) {
-      setActionMsg(data.error || "Sitemap refusé");
-      return;
-    }
-    setActionMsg(`${data.urlsEnqueued ?? 0} URL(s) mises en file depuis le sitemap.`);
-    void load();
-  }
-
   if (!site || !overview) {
     return (
       <StudioAppShell siteId={siteId}>
@@ -114,6 +65,7 @@ export default function StudioRadarPage() {
 
   return (
     <StudioAppShell siteId={siteId} siteDomain={site.domain}>
+      <ModuleNav siteId={siteId} module="radar" items={RADAR_NAV} />
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="ayeba-kicker ayeba-kicker-accent">Radar</p>
@@ -133,7 +85,6 @@ export default function StudioRadarPage() {
           {overview.nextAction.title}
         </h2>
         <p className="mt-2 max-w-2xl text-sm text-[var(--muted)]">{overview.nextAction.detail}</p>
-        {actionMsg ? <p className="mt-3 text-sm text-[var(--accent)]">{actionMsg}</p> : null}
       </section>
 
       {/* Metrics strip — not cards */}
@@ -170,62 +121,27 @@ export default function StudioRadarPage() {
         </section>
       ) : null}
 
-      <section className="mt-12 grid gap-12 lg:grid-cols-2">
-        <form onSubmit={(e) => void onSitemap(e)}>
-          <h2 className="font-[family-name:var(--font-brand)] text-xl text-[var(--ink)]">Sitemap</h2>
-          <p className="mt-2 text-sm text-[var(--muted)]">
-            Soumettez la carte de votre site pour accélérer l’indexation.
-          </p>
-          <input
-            className="ayeba-input mt-4 h-11 w-full px-3 text-sm"
-            value={sitemapUrl}
-            onChange={(e) => setSitemapUrl(e.target.value)}
-            placeholder="https://exemple.com/sitemap.xml"
-          />
-          <button type="submit" className="ayeba-cta mt-3 h-10 px-5 text-xs" disabled={busy}>
-            Soumettre le sitemap
-          </button>
-        </form>
-
-        <form onSubmit={(e) => void onInspect(e, false)}>
+      <section className="mt-12 grid gap-6 sm:grid-cols-2">
+        <Link
+          href={`/studio/app/${siteId}/radar/inspection`}
+          className="ayeba-panel block p-6 transition hover:border-[var(--accent)]"
+        >
           <h2 className="font-[family-name:var(--font-brand)] text-xl text-[var(--ink)]">
             Inspection d’URL
           </h2>
           <p className="mt-2 text-sm text-[var(--muted)]">
-            Statut d’indexation, crawl, clics et file d’attente.
+            Statut d’indexation, crawl, clics et file d’attente pour n’importe quelle URL du domaine.
           </p>
-          <input
-            className="ayeba-input mt-4 h-11 w-full px-3 text-sm"
-            value={inspectUrl}
-            onChange={(e) => setInspectUrl(e.target.value)}
-          />
-          <div className="mt-3 flex flex-wrap gap-2">
-            <button type="submit" className="ayeba-ghost h-10 px-4 text-xs" disabled={busy}>
-              Inspecter
-            </button>
-            <button
-              type="button"
-              className="ayeba-cta h-10 px-4 text-xs"
-              disabled={busy}
-              onClick={() => {
-                const fake = { preventDefault() {} } as FormEvent;
-                void onInspect(fake, true);
-              }}
-            >
-              Inspecter + prioriser crawl
-            </button>
-          </div>
-          {inspection ? (
-            <dl className="mt-5 grid grid-cols-2 gap-3 text-sm">
-              <Pair k="Indexée" v={inspection.indexed ? "Oui" : "Non"} />
-              <Pair k="File" v={inspection.queueStatus || "—"} />
-              <Pair k="Clics 30j" v={String(inspection.clicks30d)} />
-              <Pair k="Impressions 30j" v={String(inspection.impressions30d)} />
-              <Pair k="Titre" v={inspection.title || "—"} />
-              <Pair k="Crawl" v={inspection.crawledAt?.slice(0, 19) || "—"} />
-            </dl>
-          ) : null}
-        </form>
+        </Link>
+        <Link
+          href={`/studio/app/${siteId}/radar/sitemaps`}
+          className="ayeba-panel block p-6 transition hover:border-[var(--accent)]"
+        >
+          <h2 className="font-[family-name:var(--font-brand)] text-xl text-[var(--ink)]">Sitemaps</h2>
+          <p className="mt-2 text-sm text-[var(--muted)]">
+            Soumettez la carte de votre site pour accélérer l’indexation.
+          </p>
+        </Link>
       </section>
 
       <section className="mt-14">
@@ -312,15 +228,6 @@ function Metric({ label, value }: { label: string; value: string }) {
       <p className="mt-1 font-[family-name:var(--font-brand)] text-3xl tracking-[-0.03em] text-[var(--ink)]">
         {value}
       </p>
-    </div>
-  );
-}
-
-function Pair({ k, v }: { k: string; v: string }) {
-  return (
-    <div>
-      <dt className="text-[10px] uppercase tracking-[0.12em] text-[var(--faint)]">{k}</dt>
-      <dd className="mt-1 text-[var(--ink)]">{v}</dd>
     </div>
   );
 }

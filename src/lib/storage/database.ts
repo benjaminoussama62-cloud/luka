@@ -196,6 +196,19 @@ function migrate(db: AyebaDatabase) {
       clicked_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS document_links (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      source_url TEXT NOT NULL,
+      source_domain TEXT NOT NULL,
+      target_url TEXT NOT NULL,
+      target_domain TEXT NOT NULL,
+      discovered_at TEXT NOT NULL,
+      UNIQUE(source_url, target_url)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_doclinks_target ON document_links(target_domain, target_url);
+    CREATE INDEX IF NOT EXISTS idx_doclinks_source ON document_links(source_domain);
+
     CREATE TABLE IF NOT EXISTS ayebi_articles (
       slug TEXT PRIMARY KEY,
       title TEXT NOT NULL,
@@ -602,10 +615,54 @@ function migrate(db: AyebaDatabase) {
       backup_codes_json TEXT NOT NULL DEFAULT '[]',
       updated_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS developer_projects (
+      id TEXT PRIMARY KEY,
+      owner_user_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active',
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_dev_projects_owner ON developer_projects(owner_user_id);
+
+    CREATE TABLE IF NOT EXISTS developer_api_keys (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      owner_user_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      key_prefix TEXT NOT NULL,
+      key_hash TEXT NOT NULL UNIQUE,
+      api_scopes TEXT NOT NULL DEFAULT '["search"]',
+      restrictions_json TEXT NOT NULL DEFAULT '{}',
+      quota_per_day INTEGER NOT NULL DEFAULT 1000,
+      status TEXT NOT NULL DEFAULT 'active',
+      created_at TEXT NOT NULL,
+      last_used_at TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_dev_keys_project ON developer_api_keys(project_id);
+    CREATE INDEX IF NOT EXISTS idx_dev_keys_owner ON developer_api_keys(owner_user_id);
+
+    CREATE TABLE IF NOT EXISTS developer_api_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      key_id TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      endpoint TEXT NOT NULL,
+      status_code INTEGER NOT NULL,
+      latency_ms INTEGER NOT NULL DEFAULT 0,
+      ip TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_dev_logs_project ON developer_api_logs(project_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_dev_logs_key ON developer_api_logs(key_id, created_at DESC);
   `);
 
   migrateAyebiColumns(db);
   migrateOAuthColumns(db);
+  migrateSignalColumns(db);
+  migrateDeveloperColumns(db);
   seedCategories(db);
   seedMlWeights(db);
   seedOAuthClients(db);
@@ -645,6 +702,30 @@ function migrateOAuthColumns(db: AyebaDatabase) {
     );
   } catch {
     /* ignore */
+  }
+}
+
+/** Developers console: link OAuth clients to projects + granular scopes. */
+function migrateDeveloperColumns(db: AyebaDatabase) {
+  const alters = [
+    "ALTER TABLE oauth_clients ADD COLUMN project_id TEXT",
+    "ALTER TABLE oauth_clients ADD COLUMN scopes TEXT NOT NULL DEFAULT ''",
+  ];
+  for (const sql of alters) {
+    try { db.exec(sql); } catch { /* column exists */ }
+  }
+}
+
+/** Adds device/country dimensions to raw search signals (Radar performance). */
+function migrateSignalColumns(db: AyebaDatabase) {
+  const alters = [
+    "ALTER TABLE impression_signals ADD COLUMN device TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE impression_signals ADD COLUMN country TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE click_signals ADD COLUMN device TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE click_signals ADD COLUMN country TEXT NOT NULL DEFAULT ''",
+  ];
+  for (const sql of alters) {
+    try { db.exec(sql); } catch { /* column exists */ }
   }
 }
 

@@ -58,14 +58,28 @@ const QUALITIES: { id: AyebiQuality; label: string }[] = [
   { id: "article de qualité", label: "★ Article de qualité" },
 ];
 
-export function AyebiEditor({ initial, mode }: { initial?: Partial<AyebiArticle>; mode: "create" | "edit" }) {
+export function AyebiEditor({
+  initial,
+  mode,
+  sectionIndex,
+}: {
+  initial?: Partial<AyebiArticle>;
+  mode: "create" | "edit";
+  /** Wikipedia-style section edit: only this section's wikitext is loaded. */
+  sectionIndex?: number;
+}) {
   const router = useRouter();
+  const editingSection =
+    sectionIndex !== undefined ? initial?.sections?.[sectionIndex] : undefined;
+  const isSectionEdit = Boolean(editingSection);
   const [title, setTitle] = useState(initial?.title ?? "");
   const [slug, setSlug] = useState(initial?.slug ?? "");
   const [subtitle, setSubtitle] = useState(initial?.subtitle ?? "");
   const [category, setCategory] = useState<AyebiCategory>(initial?.category ?? "lieu");
   const [summary, setSummary] = useState(initial?.summary ?? "");
-  const [sectionsText, setSectionsText] = useState(sectionsToText(initial?.sections));
+  const [sectionsText, setSectionsText] = useState(
+    editingSection ? sectionsToText([editingSection]) : sectionsToText(initial?.sections),
+  );
   const [factsText, setFactsText] = useState(factsToText(initial?.facts ?? [{ label: "Pays", value: "RDC" }]));
   const [tagsText, setTagsText] = useState((initial?.tags ?? []).join(", "));
   const [editSummary, setEditSummary] = useState("");
@@ -81,6 +95,9 @@ export function AyebiEditor({ initial, mode }: { initial?: Partial<AyebiArticle>
   const [coordLon, setCoordLon] = useState(initial?.coordinates?.lon?.toString() ?? "");
   const [galleryText, setGalleryText] = useState(
     (initial?.gallery ?? []).map((g) => `${g.url}|${g.caption}${g.credit ? "|" + g.credit : ""}`).join("\n")
+  );
+  const [timelineText, setTimelineText] = useState(
+    (initial?.timeline ?? []).map((e) => `${e.date}|${e.event}`).join("\n")
   );
   const sectionsRef = useRef<HTMLTextAreaElement>(null);
 
@@ -122,6 +139,14 @@ export function AyebiEditor({ initial, mode }: { initial?: Partial<AyebiArticle>
     }).filter((g) => g.url);
   }
 
+  function parseTimeline(raw: string) {
+    return raw.split("\n").map((l) => l.trim()).filter(Boolean).map((line) => {
+      const i = line.indexOf("|");
+      if (i === -1) return { date: "", event: line };
+      return { date: line.slice(0, i).trim(), event: line.slice(i + 1).trim() };
+    }).filter((e) => e.date || e.event);
+  }
+
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setSaving(true);
@@ -130,6 +155,14 @@ export function AyebiEditor({ initial, mode }: { initial?: Partial<AyebiArticle>
     const lat = parseFloat(coordLat);
     const lon = parseFloat(coordLon);
 
+    // Section edit: splice the edited wikitext back into the full section list.
+    let sections = parseSections(sectionsText);
+    if (isSectionEdit && initial?.sections && sectionIndex !== undefined) {
+      const all = [...initial.sections];
+      all.splice(sectionIndex, 1, ...sections);
+      sections = all;
+    }
+
     const article = {
       slug: slug.trim() || slugifyTitle(title),
       title: title.trim(),
@@ -137,7 +170,8 @@ export function AyebiEditor({ initial, mode }: { initial?: Partial<AyebiArticle>
       category,
       summary: summary.trim(),
       body: [],
-      sections: parseSections(sectionsText),
+      sections,
+      timeline: parseTimeline(timelineText),
       facts: parseFacts(factsText),
       tags: tagsText.split(",").map((t) => t.trim()).filter(Boolean),
       image: imageUrl || undefined,
@@ -169,7 +203,16 @@ export function AyebiEditor({ initial, mode }: { initial?: Partial<AyebiArticle>
   return (
     <form onSubmit={onSubmit} className="mx-auto max-w-3xl space-y-6">
 
+      {isSectionEdit ? (
+        <div className="ayeba-panel border-[rgba(0,200,255,0.3)] p-4 text-sm text-[var(--muted)]">
+          Édition de la section <strong className="text-white">« {editingSection!.heading} »</strong> uniquement —
+          le reste de l&rsquo;article est conservé tel quel. Ajoutez <code className="text-[var(--accent)]">---</code> pour
+          créer une nouvelle section à cet emplacement.
+        </div>
+      ) : null}
+
       {/* ── Identité ── */}
+      {!isSectionEdit && (
       <div className="ayeba-panel p-6">
         <p className="ayeba-kicker ayeba-kicker-accent mb-4">
           {mode === "create" ? "Nouvelle fiche · 100 % RDC" : "Modifier la fiche"}
@@ -205,6 +248,7 @@ export function AyebiEditor({ initial, mode }: { initial?: Partial<AyebiArticle>
           </label>
         </div>
       </div>
+      )}
 
       {/* ── Corps ── */}
       <div className="ayeba-panel p-6">
@@ -257,6 +301,7 @@ export function AyebiEditor({ initial, mode }: { initial?: Partial<AyebiArticle>
       </div>
 
       {/* ── Infobox + médias ── */}
+      {!isSectionEdit && (
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="ayeba-panel p-6">
           <p className="ayeba-kicker mb-2">Infobox (faits clés)</p>
@@ -293,8 +338,25 @@ export function AyebiEditor({ initial, mode }: { initial?: Partial<AyebiArticle>
           </div>
         </div>
       </div>
+      )}
+
+      {/* ── Chronologie ── */}
+      {!isSectionEdit && (
+      <div className="ayeba-panel p-6">
+        <p className="ayeba-kicker mb-2">Chronologie</p>
+        <p className="mb-3 text-xs text-[var(--muted)]">Une ligne par événement : Date|Événement</p>
+        <textarea
+          value={timelineText}
+          onChange={(e) => setTimelineText(e.target.value)}
+          rows={5}
+          placeholder={"1960|Indépendance du Congo\n1965|Arrivée au pouvoir de Mobutu"}
+          className="ayeba-glass w-full rounded-xl px-4 py-3 font-mono text-sm text-white"
+        />
+      </div>
+      )}
 
       {/* ── Métadonnées ── */}
+      {!isSectionEdit && (
       <div className="ayeba-panel p-6 grid gap-4 sm:grid-cols-2">
         <label className="block">
           <span className="mb-1 block text-xs text-[var(--faint)]">Tags (virgules)</span>
@@ -308,7 +370,11 @@ export function AyebiEditor({ initial, mode }: { initial?: Partial<AyebiArticle>
           <span className="mb-1 block text-xs text-[var(--faint)]">Boîte de navigation (slugs séparés par virgules)</span>
           <input value={navboxText} onChange={(e) => setNavboxText(e.target.value)} placeholder="patrice-lumumba, mobutu, kabila" className="ayeba-glass w-full rounded-xl px-4 py-3 font-mono text-sm text-white" />
         </label>
-        <label className="block sm:col-span-2">
+      </div>
+      )}
+
+      <div className="ayeba-panel p-6">
+        <label className="block">
           <span className="mb-1 block text-xs text-[var(--faint)]">Résumé de modification *</span>
           <input value={editSummary} onChange={(e) => setEditSummary(e.target.value)} required placeholder="Ex: Ajout section histoire, correction dates..." className="ayeba-glass w-full rounded-xl px-4 py-3 text-white" />
         </label>

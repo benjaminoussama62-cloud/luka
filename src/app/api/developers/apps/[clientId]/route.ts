@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireDeveloperSession } from "@/lib/developers/session";
+import { getProject } from "@/lib/developers/console";
+import { getDb } from "@/lib/storage/database";
 import {
   deleteOAuthClient,
   getOAuthClient,
@@ -38,6 +40,8 @@ export async function PATCH(req: Request, ctx: Ctx) {
     name?: string;
     description?: string;
     redirectUris?: string[];
+    projectId?: string | null;
+    scopes?: string[];
   };
 
   if (body.redirectUris) {
@@ -45,13 +49,28 @@ export async function PATCH(req: Request, ctx: Ctx) {
     if (!uriCheck.ok) return NextResponse.json({ error: uriCheck.error }, { status: 400 });
   }
 
-  const app = updateOAuthClient(clientId, auth.user.id, {
+  updateOAuthClient(clientId, auth.user.id, {
     name: body.name?.trim(),
     description: body.description,
     redirectUris: body.redirectUris?.map((u) => u.trim()).filter(Boolean),
   });
 
-  return NextResponse.json({ app });
+  // Project attachment + allowed scopes (validated against owned projects).
+  if (body.projectId !== undefined) {
+    if (body.projectId && !getProject(body.projectId, auth.user.id)) {
+      return NextResponse.json({ error: "Projet introuvable" }, { status: 404 });
+    }
+    getDb()
+      .prepare("UPDATE oauth_clients SET project_id = ? WHERE client_id = ?")
+      .run(body.projectId || null, clientId);
+  }
+  if (body.scopes) {
+    getDb()
+      .prepare("UPDATE oauth_clients SET scopes = ? WHERE client_id = ?")
+      .run(JSON.stringify(body.scopes), clientId);
+  }
+
+  return NextResponse.json({ app: getOAuthClient(clientId) });
 }
 
 export async function DELETE(_req: Request, ctx: Ctx) {
