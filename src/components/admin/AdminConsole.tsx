@@ -28,7 +28,8 @@ type Tab =
   | "billing"
   | "network"
   | "content"
-  | "audit";
+  | "audit"
+  | "team";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "Vue d'ensemble" },
@@ -39,6 +40,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "network", label: "Réseau pubs" },
   { id: "content", label: "Contenu & accès" },
   { id: "audit", label: "Journal & alertes" },
+  { id: "team", label: "Équipe admin" },
 ];
 
 /* ---------- helpers ---------- */
@@ -170,6 +172,8 @@ export function AdminConsole({
   const [ticket, setTicket] = useState<Row | null>(null);
   const [reply, setReply] = useState("");
   const [userQuery, setUserQuery] = useState("");
+  const [newAdminEmail, setNewAdminEmail] = useState("");
+  const [newAdminRole, setNewAdminRole] = useState("support");
 
   const flash = (m: string) => {
     setNotice(m);
@@ -191,6 +195,7 @@ export function AdminConsole({
         t === "billing" ? "/api/admin/billing" :
         t === "network" ? "/api/admin/network" :
         t === "content" ? "/api/admin/content" :
+        t === "team" ? "/api/admin/admins" :
         "/api/admin/audit";
       const d = await api<Row>(path);
       if (d) setData(d);
@@ -615,6 +620,75 @@ export function AdminConsole({
                   s(l.adminName), s(l.action), `${s(l.entityType)} · ${s(l.entityId)}`, s(l.ipAddress), dt(l.timestamp),
                 ])}
                 empty="Aucun log"
+              />
+            </div>
+          </section>
+        )}
+
+        {tab === "team" && (
+          <section className="space-y-4">
+            <header>
+              <h2 className="text-xl font-semibold">Équipe admin</h2>
+              <p className="text-sm opacity-60">Ajouter, suspendre ou retirer des administrateurs et changer leur rôle</p>
+            </header>
+            <div className="ayeba-panel p-4">
+              <p className="ayeba-kicker mb-3">Ajouter un administrateur</p>
+              <form
+                className="flex flex-wrap gap-2"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!newAdminEmail.trim()) return;
+                  void act("/api/admin/admins", { action: "create", email: newAdminEmail.trim(), role: newAdminRole }, "Admin ajouté");
+                  setNewAdminEmail("");
+                }}
+              >
+                <input
+                  className="ayeba-input flex-1 min-w-56"
+                  type="email"
+                  placeholder="email du compte Ayeba existant…"
+                  value={newAdminEmail}
+                  onChange={(e) => setNewAdminEmail(e.target.value)}
+                />
+                <select
+                  className="ayeba-input"
+                  value={newAdminRole}
+                  onChange={(e) => setNewAdminRole(e.target.value)}
+                >
+                  {((data.roles as string[]) ?? ["super_admin", "manager", "support", "moderator", "analyst"]).map((r) => (
+                    <option key={r} value={r}>{r}</option>
+                  ))}
+                </select>
+                <Btn onClick={() => undefined}>Ajouter</Btn>
+              </form>
+              <p className="mt-2 text-xs opacity-50">La personne doit avoir un compte Ayeba existant. Le rôle super_admin donne toutes les permissions.</p>
+            </div>
+            <div className="ayeba-panel p-4">
+              <p className="ayeba-kicker mb-3">Administrateurs</p>
+              <Table
+                head={["Nom", "Email", "Rôle", "Statut", "Depuis", "Actions"]}
+                rows={((data.admins as Row[]) ?? []).map((a) => [
+                  s(a.name),
+                  s(a.email),
+                  <select
+                    key="role"
+                    className="ayeba-input py-0.5 text-xs"
+                    value={s(a.role)}
+                    onChange={(e) => void act("/api/admin/admins", { action: "update", id: a.id, role: e.target.value }, "Rôle mis à jour")}
+                  >
+                    {((data.roles as string[]) ?? []).map((r) => <option key={r} value={r}>{r}</option>)}
+                  </select>,
+                  <Badge key="s" tone={statusTone(a.status)}>{s(a.status)}</Badge>,
+                  dt(a.createdAt),
+                  <span key="a" className="flex gap-1">
+                    {a.status === "active" ? (
+                      <Btn danger onClick={() => void act("/api/admin/admins", { action: "update", id: a.id, status: "suspended" }, "Admin suspendu")}>Suspendre</Btn>
+                    ) : (
+                      <Btn onClick={() => void act("/api/admin/admins", { action: "update", id: a.id, status: "active" }, "Admin réactivé")}>Réactiver</Btn>
+                    )}
+                    <Btn danger onClick={() => { if (window.confirm(`Retirer ${s(a.email)} des admins ?`)) void act("/api/admin/admins", { action: "delete", id: a.id }, "Admin retiré"); }}>Retirer</Btn>
+                  </span>,
+                ])}
+                empty="Aucun administrateur"
               />
             </div>
           </section>

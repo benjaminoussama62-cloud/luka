@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS admin_users (
   permissions TEXT NOT NULL DEFAULT '[]',
   departments TEXT NOT NULL DEFAULT '[]',
   created_at TEXT NOT NULL,
+  updated_at TEXT,
   last_login_at TEXT,
   status TEXT NOT NULL DEFAULT 'active'
 );
@@ -182,6 +183,7 @@ export function applyAdminSchema(db: { exec(sql: string): unknown }) {
     "ALTER TABLE admin_users ADD COLUMN created_at TEXT",
     "ALTER TABLE admin_users ADD COLUMN last_login_at TEXT",
     "ALTER TABLE admin_users ADD COLUMN status TEXT",
+    "ALTER TABLE admin_users ADD COLUMN updated_at TEXT",
     "ALTER TABLE admin_audit_log ADD COLUMN id TEXT",
     "ALTER TABLE admin_audit_log ADD COLUMN admin_id TEXT",
     "ALTER TABLE admin_audit_log ADD COLUMN admin_name TEXT",
