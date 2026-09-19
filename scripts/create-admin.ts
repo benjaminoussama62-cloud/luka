@@ -54,7 +54,7 @@ function main() {
   } else {
     db.prepare(
       `INSERT INTO admin_users (id, user_id, name, email, role, permissions, departments, created_at, last_login_at, status)
-       VALUES (?, ?, ?, ?, 'super_admin', '["*"]', '["*"]', ?, ?, 'active')`,
+       VALUES (?, ?, ?, ?, 'super_admin', '["all"]', '["*"]', ?, ?, 'active')`,
     ).run(randomUUID(), user.id, name, email, now, now);
   }
 

@@ -42,9 +42,34 @@ export function getAdminByUserId(userId: string): AdminUser | null {
 }
 
 /**
+ * First-login bootstrap: an env-listed email (AYEBA_ADMIN_EMAILS) with no
+ * admin_users row gets a super_admin row provisioned automatically, so
+ * every mutation route (which requires a real row for FK integrity) works
+ * without a manual CLI step against the production database.
+ */
+function provisionEnvAdmin(user: SessionUser): AdminUser | null {
+  try {
+    const db = getDb();
+    const now = new Date().toISOString();
+    const id = crypto.randomUUID();
+    db.prepare(
+      `INSERT INTO admin_users (id, user_id, name, email, role, permissions, departments, created_at, last_login_at, status)
+       VALUES (?, ?, ?, ?, 'super_admin', '["all"]', '["*"]', ?, ?, 'active')`,
+    ).run(id, user.id, user.name, user.email.toLowerCase(), now, now);
+    db.prepare(
+      `INSERT INTO admin_audit_log (id, admin_id, admin_name, action, entity_type, entity_id, changes, timestamp)
+       VALUES (?, ?, ?, 'env_bootstrap_admin', 'admin_user', ?, '{}', ?)`,
+    ).run(crypto.randomUUID(), id, user.name, id, now);
+    return getAdminByUserId(user.id);
+  } catch (e) {
+    console.error("[admin] env bootstrap failed", e);
+    return null;
+  }
+}
+
+/**
  * Require an authenticated admin. Returns { user, admin } or a
  * NextResponse to send back (401 unauthenticated, 403 not admin).
- * `admin` is null for env-listed admins without an admin_users row.
  */
 export async function requireAdmin(): Promise<
   { user: SessionUser; admin: AdminUser | null } | NextResponse
@@ -53,10 +78,11 @@ export async function requireAdmin(): Promise<
   if (!user) {
     return NextResponse.json({ error: "Connexion requise" }, { status: 401 });
   }
-  const admin = getAdminByUserId(user.id);
+  let admin = getAdminByUserId(user.id);
   if (!admin && !isAdminEmail(user.email)) {
     return NextResponse.json({ error: "Accès réservé aux administrateurs" }, { status: 403 });
   }
+  if (!admin) admin = provisionEnvAdmin(user);
   return { user, admin };
 }
 
