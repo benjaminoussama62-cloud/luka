@@ -79,7 +79,10 @@ const {
   isEngine,
 } = require("./search-engines");
 
-const HOME_URL = pathToFileURL(path.join(__dirname, "..", "newtab", "index.html")).href;
+// Le nouvel onglet EST le vrai site — comme Yandex ouvre yandex.ru.
+// La page locale newtab/ sert uniquement de repli hors-ligne.
+const HOME_URL = "https://ayeba.app/";
+const LOCAL_NTP_URL = pathToFileURL(path.join(__dirname, "..", "newtab", "index.html")).href;
 const CHROME_URL = pathToFileURL(path.join(__dirname, "..", "chrome", "index.html")).href;
 const RAIL_URL = pathToFileURL(path.join(__dirname, "..", "chrome", "rail.html")).href;
 const DATA_DIR = path.join(app.getPath("userData"), "data");
@@ -198,7 +201,9 @@ async function restoreExtensions() {
 }
 
 function isNewTab(url = "") {
-  return url.startsWith("file:") && url.includes("/newtab/");
+  if (url.startsWith("file:") && url.includes("/newtab/")) return true;
+  // La racine d'ayeba.app = l'accueil : ne pas encombrer l'historique.
+  return url === HOME_URL || url === "https://ayeba.app";
 }
 
 function canBack(wc) {
@@ -441,6 +446,14 @@ function createBrowserWindow(isPrivate = false) {
     wc.on("did-navigate-in-page", (_e, url) => {
       tab.url = url;
       pushChromeState();
+    });
+
+    // Hors-ligne : si l'accueil ayeba.app ne charge pas, on sert la page locale.
+    wc.on("did-fail-load", (_e, errorCode, _desc, validatedURL, isMainFrame) => {
+      if (!isMainFrame || errorCode === -3) return; // -3 = navigation interrompue (normal)
+      if (validatedURL === HOME_URL || validatedURL === "https://ayeba.app") {
+        wc.loadURL(LOCAL_NTP_URL).catch(() => {});
+      }
     });
 
     wc.on("dom-ready", () => {

@@ -6,11 +6,14 @@
     <title>Nouvel onglet — AYEBA</title>
     <style>
       :root {
-        --ink: #eceef4;
-        --muted: rgba(235, 238, 246, 0.6);
+        --void: #000000;
+        --ink: #f5f5f7;
+        --muted: #9ca3af;
+        --faint: #52525b;
         --line: rgba(255, 255, 255, 0.09);
-        --accent: #7c5cff;
-        --accent-2: #38bdf8;
+        --cyan: #00b4ff;
+        --cyan-soft: #7df0ff;
+        --orange: #e85d04;
         --font: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
       }
       * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -19,20 +22,20 @@
         min-height: 100vh;
         font-family: var(--font);
         color: var(--ink);
-        background: #07080d;
+        background: var(--void);
         overflow-x: hidden;
       }
 
-      /* Aurora Ayeba — dégradés locaux, aucune image externe */
+      /* Aurora ayeba.app — cyan + orange, aucun violet */
       .aurora {
         position: fixed;
         inset: -20%;
         z-index: 0;
         background:
-          radial-gradient(ellipse 55% 45% at 18% 8%, rgba(124, 92, 255, 0.28), transparent 62%),
-          radial-gradient(ellipse 45% 40% at 85% 18%, rgba(56, 189, 248, 0.2), transparent 60%),
-          radial-gradient(ellipse 60% 45% at 55% 95%, rgba(168, 85, 247, 0.14), transparent 62%),
-          linear-gradient(180deg, #0a0c13 0%, #07080d 55%, #080910 100%);
+          radial-gradient(ellipse 55% 45% at 18% 6%, rgba(0, 180, 255, 0.22), transparent 62%),
+          radial-gradient(ellipse 45% 40% at 86% 16%, rgba(125, 240, 255, 0.12), transparent 60%),
+          radial-gradient(ellipse 55% 42% at 55% 98%, rgba(232, 93, 4, 0.13), transparent 62%),
+          linear-gradient(180deg, #05070c 0%, #000000 55%, #04060a 100%);
         animation: aurora-drift 26s ease-in-out infinite alternate;
       }
       @keyframes aurora-drift {
@@ -84,11 +87,15 @@
         font-size: 12.5px;
         font-weight: 600;
         cursor: pointer;
-        transition: background 0.15s, transform 0.12s;
+        transition: background 0.15s, border-color 0.15s, transform 0.12s;
       }
-      .top-bar .sign-in:hover { background: rgba(255, 255, 255, 0.12); transform: translateY(-1px); }
+      .top-bar .sign-in:hover {
+        background: rgba(0, 180, 255, 0.12);
+        border-color: rgba(0, 180, 255, 0.35);
+        transform: translateY(-1px);
+      }
 
-      /* Hero */
+      /* Hero — reprend le wordmark lumineux de ayeba.app */
       .hero {
         display: flex;
         flex-direction: column;
@@ -98,36 +105,38 @@
       .brand {
         display: flex;
         align-items: center;
-        gap: 14px;
+        gap: 16px;
         margin-bottom: 1.75rem;
         animation: rise 0.5s cubic-bezier(0.16, 1, 0.3, 1) backwards;
       }
       .brand-mark {
-        width: 52px;
-        height: 52px;
-        border-radius: 15px;
+        width: 54px;
+        height: 54px;
+        border-radius: 14px;
         display: grid;
         place-items: center;
-        background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
-        color: #fff;
-        font-size: 26px;
-        font-weight: 800;
-        box-shadow: 0 10px 32px rgba(124, 92, 255, 0.4);
+        background: linear-gradient(160deg, #12141c, #0a0a0e);
+        box-shadow:
+          inset 0 0 0 1px rgba(0, 180, 255, 0.35),
+          0 10px 32px rgba(0, 180, 255, 0.22);
       }
       .brand-name {
-        font-size: 30px;
-        font-weight: 700;
-        letter-spacing: 0.12em;
-        background: linear-gradient(90deg, #fff 30%, rgba(255, 255, 255, 0.65));
-        -webkit-background-clip: text;
-        background-clip: text;
-        color: transparent;
+        font-size: 32px;
+        font-weight: 600;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: #fff;
+        text-shadow:
+          0 0 18px rgba(0, 220, 255, 0.5),
+          0 0 50px rgba(0, 180, 255, 0.32),
+          0 0 100px rgba(0, 140, 255, 0.14);
       }
       .brand-tag {
-        font-size: 11.5px;
-        color: var(--muted);
-        letter-spacing: 0.04em;
-        margin-top: -2px;
+        font-size: 12px;
+        color: var(--orange);
+        letter-spacing: 0.03em;
+        margin-top: 2px;
+        font-style: italic;
       }
       @keyframes rise {
         from { opacity: 0; transform: translateY(14px); }
@@ -142,18 +151,21 @@
         padding: 0 10px 0 20px;
         border-radius: 999px;
         border: 1px solid rgba(255, 255, 255, 0.14);
-        background: rgba(18, 21, 30, 0.75);
+        background: rgba(13, 16, 24, 0.8);
         backdrop-filter: blur(18px);
         box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.06);
         transition: border-color 0.18s, box-shadow 0.18s, transform 0.15s;
         animation: rise 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.08s backwards;
       }
       form.search:focus-within {
-        border-color: rgba(124, 92, 255, 0.6);
-        box-shadow: 0 10px 44px rgba(124, 92, 255, 0.25), 0 0 0 3px rgba(124, 92, 255, 0.15);
+        border-color: rgba(0, 180, 255, 0.6);
+        box-shadow:
+          0 10px 44px rgba(0, 180, 255, 0.22),
+          0 0 0 3px rgba(0, 180, 255, 0.15);
         transform: translateY(-1px);
       }
-      form.search > svg { flex-shrink: 0; opacity: 0.5; margin-right: 12px; }
+      form.search > svg { flex-shrink: 0; opacity: 0.55; margin-right: 12px; }
+      form.search:focus-within > svg { color: var(--cyan-soft); opacity: 1; }
       form.search input {
         flex: 1;
         min-width: 0;
@@ -166,27 +178,28 @@
       form.search input::placeholder { color: var(--muted); }
       form.search .go {
         height: 38px;
-        padding: 0 20px;
+        padding: 0 22px;
         border: 0;
         border-radius: 999px;
-        background: linear-gradient(135deg, var(--accent), var(--accent-2));
-        color: #fff;
+        background: linear-gradient(135deg, var(--cyan), var(--cyan-soft));
+        color: #00131f;
         font-size: 13.5px;
-        font-weight: 600;
+        font-weight: 700;
         cursor: pointer;
-        transition: filter 0.14s, transform 0.1s;
+        box-shadow: 0 4px 18px rgba(0, 180, 255, 0.3);
+        transition: filter 0.14s, transform 0.1s, box-shadow 0.14s;
         flex-shrink: 0;
       }
-      form.search .go:hover { filter: brightness(1.12); }
+      form.search .go:hover { filter: brightness(1.1); box-shadow: 0 6px 24px rgba(0, 180, 255, 0.45); }
       form.search .go:active { transform: scale(0.97); }
 
-      /* Tuiles de raccourcis */
+      /* Tuiles — cercles comme les raccourcis de la homepage ayeba.app */
       .tiles {
         margin-top: 2rem;
         display: grid;
         grid-template-columns: repeat(auto-fit, 74px);
         justify-content: center;
-        gap: 10px;
+        gap: 12px;
         max-width: 700px;
         padding: 0 1rem;
         animation: rise 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.16s backwards;
@@ -207,25 +220,23 @@
       .tile-box {
         width: 56px;
         height: 56px;
-        border-radius: 16px;
+        border-radius: 50%;
         display: grid;
         place-items: center;
         overflow: hidden;
-        background: rgba(255, 255, 255, 0.07);
+        background: linear-gradient(160deg, #14161f, #0a0c12);
         border: 1px solid var(--line);
-        backdrop-filter: blur(10px);
         font-size: 19px;
         font-weight: 700;
         color: var(--ink);
-        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.07);
-        transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+        transition: border-color 0.15s, box-shadow 0.15s;
       }
       .tile:hover .tile-box {
-        background: rgba(255, 255, 255, 0.12);
-        border-color: rgba(124, 92, 255, 0.4);
-        box-shadow: 0 8px 24px rgba(124, 92, 255, 0.22);
+        border-color: rgba(0, 180, 255, 0.55);
+        box-shadow: 0 8px 26px rgba(0, 180, 255, 0.28);
       }
-      .tile-box img { width: 26px; height: 26px; object-fit: contain; }
+      .tile-box img { width: 30px; height: 30px; object-fit: contain; }
       .tile-label {
         font-size: 10.5px;
         color: var(--muted);
@@ -234,6 +245,7 @@
         text-overflow: ellipsis;
         white-space: nowrap;
       }
+      .tile:hover .tile-label { color: var(--ink); }
       .tile.add .tile-box { border-style: dashed; color: var(--muted); font-weight: 300; font-size: 24px; }
 
       /* Widgets : météo + marchés */
@@ -251,7 +263,7 @@
         gap: 11px;
         padding: 11px 16px;
         border-radius: 14px;
-        background: rgba(255, 255, 255, 0.055);
+        background: rgba(255, 255, 255, 0.05);
         border: 1px solid var(--line);
         backdrop-filter: blur(14px);
         font-size: 12.5px;
@@ -260,8 +272,8 @@
       .widget .w-icon { font-size: 20px; }
       .widget strong { color: var(--ink); font-size: 14px; display: block; }
       .widget .ticker-items { display: flex; gap: 14px; }
-      .widget .up { color: #4ade80; }
-      .widget .down { color: #f87171; }
+      .widget .up { color: #34d399; }
+      .widget .down { color: #fb7185; }
 
       /* Feed */
       .feed-section {
@@ -282,14 +294,12 @@
       }
       .feed-nav::-webkit-scrollbar { display: none; }
       .feed-brand {
-        font-weight: 700;
+        font-weight: 600;
         font-size: 14px;
         margin-right: 12px;
-        background: linear-gradient(90deg, var(--accent), var(--accent-2));
-        -webkit-background-clip: text;
-        background-clip: text;
-        color: transparent;
-        letter-spacing: 0.02em;
+        color: #fff;
+        letter-spacing: 0.04em;
+        text-shadow: 0 0 14px rgba(0, 220, 255, 0.45);
       }
       .feed-nav button[data-cat] {
         flex-shrink: 0;
@@ -305,9 +315,10 @@
       }
       .feed-nav button[data-cat]:hover { color: var(--ink); background: rgba(255, 255, 255, 0.07); }
       .feed-nav button[data-cat].active {
-        background: rgba(124, 92, 255, 0.18);
-        color: #d6ccff;
+        background: rgba(0, 180, 255, 0.16);
+        color: var(--cyan-soft);
         font-weight: 600;
+        box-shadow: inset 0 0 0 1px rgba(0, 180, 255, 0.3);
       }
 
       .feed-grid {
@@ -327,7 +338,7 @@
         border: 1px solid var(--line);
         padding: 0;
         text-align: left;
-        background: rgba(20, 24, 34, 0.72);
+        background: rgba(16, 19, 29, 0.75);
         backdrop-filter: blur(10px);
         transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.18s, border-color 0.18s;
         animation: card-in 0.4s ease backwards;
@@ -343,8 +354,8 @@
       }
       .card:hover {
         transform: translateY(-3px);
-        border-color: rgba(124, 92, 255, 0.35);
-        box-shadow: 0 14px 40px rgba(0, 0, 0, 0.45);
+        border-color: rgba(0, 180, 255, 0.4);
+        box-shadow: 0 14px 40px rgba(0, 0, 0, 0.45), 0 0 30px rgba(0, 180, 255, 0.08);
       }
       .card-hero { grid-column: span 2; grid-row: span 2; min-height: 300px; }
       @media (max-width: 820px) { .card-hero { grid-column: 1 / -1; grid-row: auto; } }
@@ -361,13 +372,13 @@
       .card .overlay {
         position: absolute;
         inset: 0;
-        background: linear-gradient(to top, rgba(5, 7, 12, 0.92) 0%, rgba(5, 7, 12, 0.3) 55%, transparent 100%);
+        background: linear-gradient(to top, rgba(0, 0, 0, 0.94) 0%, rgba(0, 0, 0, 0.35) 55%, transparent 100%);
       }
       .card .body { position: absolute; left: 0; right: 0; bottom: 0; padding: 13px 15px; }
       .card-hero .body { padding: 18px 20px; }
       .card .source {
         font-size: 10.5px;
-        color: rgba(255, 255, 255, 0.55);
+        color: var(--cyan-soft);
         margin-bottom: 5px;
         text-transform: uppercase;
         letter-spacing: 0.06em;
@@ -384,7 +395,7 @@
       }
       .card-hero h3 { font-size: clamp(1.05rem, 2vw, 1.35rem); -webkit-line-clamp: 4; }
       .card.no-img {
-        background: linear-gradient(145deg, rgba(30, 34, 52, 0.85), rgba(14, 17, 26, 0.92));
+        background: linear-gradient(145deg, rgba(18, 22, 34, 0.9), rgba(8, 10, 16, 0.95));
       }
 
       .skeleton {
@@ -404,6 +415,7 @@
         color: rgba(255, 255, 255, 0.3);
         letter-spacing: 0.05em;
       }
+      .foot .dot { color: var(--orange); }
     </style>
   </head>
   <body>
@@ -417,15 +429,26 @@
 
       <section class="hero">
         <div class="brand">
-          <div class="brand-mark">A</div>
+          <div class="brand-mark">
+            <svg width="34" height="34" viewBox="0 0 512 512" aria-hidden="true">
+              <defs>
+                <linearGradient id="ntpA" x1="20%" y1="10%" x2="80%" y2="90%">
+                  <stop offset="0%" stop-color="#7df0ff"/>
+                  <stop offset="45%" stop-color="#00b4ff"/>
+                  <stop offset="100%" stop-color="#e85d04"/>
+                </linearGradient>
+              </defs>
+              <path fill="url(#ntpA)" d="M256 96 L392 400 H332 L302 324 H210 L180 400 H120 L256 96 Z M228 268 H284 L256 196 Z"/>
+            </svg>
+          </div>
           <div>
             <div class="brand-name">AYEBA</div>
-            <div class="brand-tag">Recherche · Ayebi · Écosystème RDC</div>
+            <div class="brand-tag">Le monde entier, une requête.</div>
           </div>
         </div>
         <form class="search" id="searchForm">
           <svg width="19" height="19" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="9" cy="9" r="5.5"/><path d="M13.5 13.5 17.5 17.5"/></svg>
-          <input id="q" type="search" placeholder="Rechercher avec Ayeba" autofocus />
+          <input id="q" type="search" placeholder="Rechercher le monde entier…" autofocus />
           <button type="submit" class="go">Rechercher</button>
         </form>
         <div class="tiles" id="shortcuts"></div>
@@ -455,19 +478,19 @@
         </div>
       </section>
 
-      <div class="foot">AYEBA · navigateur officiel ayeba.app</div>
+      <div class="foot">AYEBA <span class="dot">·</span> navigateur officiel ayeba.app</div>
     </div>
 
     <script>
       const SHORTCUTS = [
-        { name: "Ayeba", href: "https://ayeba.app", logo: "https://ayeba.app/favicon.ico", tint: "linear-gradient(135deg,#7c5cff,#38bdf8)" },
-        { name: "Ayebi", href: "https://ayeba.app/ayebi", letter: "A" },
-        { name: "Studio", href: "https://ayeba.app/studio", letter: "S", tint: "rgba(124,92,255,.25)" },
-        { name: "Marchés", href: "https://ayeba.app/marches", letter: "M", tint: "rgba(56,189,248,.2)" },
+        { name: "Ayeba", href: "https://ayeba.app", logo: "https://ayeba.app/brand/ayeba-mark.svg" },
+        { name: "Ayebi", href: "https://ayeba.app/ayebi", letter: "A", tint: "linear-gradient(160deg,#12222e,#0a0c12)" },
+        { name: "Studio", href: "https://ayeba.app/studio", letter: "S", tint: "linear-gradient(160deg,#12222e,#0a0c12)" },
         { name: "Jemsa", href: "https://jemsa.net", logo: "https://ayeba.app/brand/shortcuts/jemsa.svg" },
-        { name: "Sombateka", href: "https://sombatekaonline.com", logo: "https://ayeba.app/brand/shortcuts/sombateka.png" },
-        { name: "Omega", href: "https://omega-web.org", logo: "https://ayeba.app/brand/shortcuts/omega.png" },
-        { name: "YouTube", href: "https://youtube.com", logo: "https://www.youtube.com/favicon.ico" },
+        { name: "Sombateka", href: "https://sombatekaonline.com", logo: "https://ayeba.app/brand/shortcuts/sombateka.svg" },
+        { name: "DevAlpha", href: "https://ayeba.app/developers", logo: "https://ayeba.app/brand/shortcuts/devalpha1.svg" },
+        { name: "Tala", href: "https://ayeba.app/tala", logo: "https://ayeba.app/brand/shortcuts/tala.svg" },
+        { name: "Omega", href: "https://omega-web.org", logo: "https://ayeba.app/brand/shortcuts/omega.svg" },
       ];
 
       const FEED_QUERIES = {

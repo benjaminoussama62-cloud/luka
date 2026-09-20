@@ -16,7 +16,6 @@
     btnHome: document.getElementById("btnHome"),
     btnNewTab: document.getElementById("btnNewTab"),
     btnOmniFav: document.getElementById("btnOmniFav"),
-    btnCollections: document.getElementById("btnCollections"),
     btnDownloads: document.getElementById("btnDownloads"),
     btnExtensions: document.getElementById("btnExtensions"),
     btnCopilot: document.getElementById("btnCopilot"),
@@ -75,6 +74,8 @@
   function displayUrl(url) {
     if (!url) return "";
     if (url.startsWith("file:") && url.includes("/newtab/")) return "";
+    // L'accueil = nouvel onglet : omnibox vide, comme Chrome/Yandex.
+    if (url === "https://ayeba.app/" || url === "https://ayeba.app") return "";
     try {
       return new URL(url).href;
     } catch {
@@ -285,7 +286,7 @@
       node.hidden = true;
     }
     els.btnMenu?.setAttribute("aria-expanded", "false");
-    [els.btnProfile, els.btnDownloads, els.btnCollections].forEach((b) => b?.classList.remove("active"));
+    [els.btnProfile, els.btnDownloads].forEach((b) => b?.classList.remove("active"));
     els.favSearchBox?.classList.add("hidden");
     els.favSearchBox && (els.favSearchBox.hidden = true);
     setBackdrop(false);
@@ -298,7 +299,7 @@
       menu: { el: els.menu, btn: els.btnMenu, backdrop: true },
       profile: { el: els.profileFlyout, btn: els.btnProfile, backdrop: true },
       downloads: { el: els.downloadsFlyout, btn: els.btnDownloads, backdrop: true },
-      favorites: { el: els.favoritesDrawer, btn: els.btnCollections, backdrop: true },
+      favorites: { el: els.favoritesDrawer, btn: null, backdrop: true },
       panel: { el: els.panel, backdrop: true },
     };
     const target = map[name];
@@ -574,16 +575,6 @@
     openOverlay === "downloads" ? closeAllOverlays() : openFlyout("downloads");
   });
 
-  els.btnCollections?.addEventListener("click", async (e) => {
-    e.stopPropagation();
-    if (openOverlay === "favorites") {
-      closeAllOverlays();
-      return;
-    }
-    openFlyout("favorites");
-    await renderFavoritesDrawer();
-  });
-
   els.favAddCurrent?.addEventListener("click", async () => {
     await addFavorite();
     await renderFavoritesDrawer(els.favFilter?.value || "");
@@ -643,11 +634,11 @@
     // ignorer les clics fantômes juste après l'ouverture d'un overlay.
     if (Date.now() - overlayOpenedAt < 250) return;
     const roots = [els.menu, els.profileFlyout, els.downloadsFlyout, els.panel];
-    const btns = [els.btnMenu, els.btnProfile, els.btnDownloads, els.btnCollections];
+    const btns = [els.btnMenu, els.btnProfile, els.btnDownloads];
     const inside = roots.some((r) => r && !r.hidden && r.contains(e.target));
     const onBtn = btns.some((b) => b && b.contains(e.target));
     if (openOverlay === "favorites") {
-      if (!els.favoritesDrawer?.contains(e.target) && !els.btnCollections?.contains(e.target)) {
+      if (!els.favoritesDrawer?.contains(e.target)) {
         closeAllOverlays();
       }
       return;
