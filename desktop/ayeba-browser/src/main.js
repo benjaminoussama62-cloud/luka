@@ -8,6 +8,8 @@ const {
   Menu,
   dialog,
   nativeTheme,
+  safeStorage,
+  clipboard,
 } = require("electron");
 const { autoUpdater } = require("electron-updater");
 const path = require("path");
@@ -79,12 +81,15 @@ const {
 
 const HOME_URL = pathToFileURL(path.join(__dirname, "..", "newtab", "index.html")).href;
 const CHROME_URL = pathToFileURL(path.join(__dirname, "..", "chrome", "index.html")).href;
+const RAIL_URL = pathToFileURL(path.join(__dirname, "..", "chrome", "rail.html")).href;
 const DATA_DIR = path.join(app.getPath("userData"), "data");
 const HISTORY_FILE = path.join(DATA_DIR, "history.json");
 const FAV_FILE = path.join(DATA_DIR, "favorites.json");
 const SETTINGS_FILE = path.join(DATA_DIR, "settings.json");
+const PASS_FILE = path.join(DATA_DIR, "passwords.json");
 
-const CHROME_H = 126;
+const CHROME_H = 96;
+const RAIL_W = 52;
 
 /** Téléchargements récents (Edge-like flyout). */
 const downloadLog = [];
@@ -107,9 +112,12 @@ function ensureData() {
 }
 
 function readSettings() {
-  const raw = readJson(SETTINGS_FILE, { searchEngine: DEFAULT_ENGINE });
+  const raw = readJson(SETTINGS_FILE, { searchEngine: DEFAULT_ENGINE, extensions: [] });
   const searchEngine = isEngine(raw.searchEngine) ? raw.searchEngine : DEFAULT_ENGINE;
-  return { searchEngine };
+  const extensions = Array.isArray(raw.extensions)
+    ? raw.extensions.filter((p) => typeof p === "string" && p)
+    : [];
+  return { searchEngine, extensions };
 }
 
 function writeSettings(patch) {
@@ -138,6 +146,55 @@ function pushHistory(entry) {
   const list = readJson(HISTORY_FILE, []);
   list.unshift({ ...entry, at: Date.now() });
   writeJson(HISTORY_FILE, list.slice(0, 500));
+}
+
+// ── Coffre de mots de passe local (chiffré via safeStorage / DPAPI) ──
+function readVault() {
+  return readJson(PASS_FILE, []);
+}
+
+function writeVault(vault) {
+  writeJson(PASS_FILE, vault.slice(0, 300));
+}
+
+function vaultPublic() {
+  return readVault().map(({ id, origin, username, at }) => ({ id, origin, username, at }));
+}
+
+function vaultDecrypt(entry) {
+  try {
+    if (!entry?.secret || !safeStorage.isEncryptionAvailable()) return "";
+    return safeStorage.decryptString(Buffer.from(entry.secret, "base64"));
+  } catch {
+    return "";
+  }
+}
+
+// ── Extensions Chromium réelles (session.loadExtension) ──
+function extPublic() {
+  return session.defaultSession.getAllExtensions().map((e) => ({
+    id: e.id,
+    name: e.name || e.id,
+    version: e.version || "",
+    path: e.path,
+  }));
+}
+
+async function loadExtensionDir(dir) {
+  const ext = await session.defaultSession.loadExtension(dir, { allowFileAccess: true });
+  const s = readSettings();
+  if (!s.extensions.includes(dir)) writeSettings({ extensions: [...s.extensions, dir] });
+  return { id: ext.id, name: ext.name, version: ext.version, path: ext.path };
+}
+
+async function restoreExtensions() {
+  for (const dir of readSettings().extensions) {
+    try {
+      if (fs.existsSync(dir)) await session.defaultSession.loadExtension(dir, { allowFileAccess: true });
+    } catch (err) {
+      log(`extension load failed ${dir}: ${err?.message || err}`);
+    }
+  }
 }
 
 function isNewTab(url = "") {
@@ -187,10 +244,18 @@ function createBrowserWindow(isPrivate = false) {
       height: 840,
       minWidth: 720,
       minHeight: 480,
-      backgroundColor: "#050507",
+      backgroundColor: "#0a0c11",
       title: isPrivate ? "AYEBA — InPrivate" : "AYEBA",
       autoHideMenuBar: true,
-      // BaseWindow often never fires ready-to-show — show immediately so the app is visible.
+      // Fenêtre sans cadre : onglets intégrés comme Yandex/Edge, boutons
+      // réduire/agrandir/fermer dessinés par Windows via titleBarOverlay.
+      frame: false,
+      titleBarStyle: "hidden",
+      titleBarOverlay: {
+        color: "#0a0c11",
+        symbolColor: "#e9ecf3",
+        height: 40,
+      },
       show: true,
       icon: path.join(__dirname, "..", "assets", "icon.ico"),
     });
@@ -225,9 +290,24 @@ function createBrowserWindow(isPrivate = false) {
     },
   });
   state.chrome = chrome;
-  chrome.setBackgroundColor("#00000000");
+  chrome.setBackgroundColor("#0a0c11");
   win.contentView.addChildView(chrome);
   chrome.webContents.loadURL(CHROME_URL);
+
+  // Rail vertical gauche (style Yandex) — vue dédiée pour ne pas bloquer
+  // les clics : chaque vue ne couvre que sa propre zone rectangulaire.
+  const rail = new WebContentsView({
+    webPreferences: {
+      preload: path.join(__dirname, "preload-chrome.js"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  });
+  state.rail = rail;
+  rail.setBackgroundColor("#0a0c11");
+  win.contentView.addChildView(rail);
+  rail.webContents.loadURL(RAIL_URL);
 
   function raiseChrome() {
     if (win.isDestroyed() || chrome.webContents.isDestroyed()) return;
@@ -243,8 +323,16 @@ function createBrowserWindow(isPrivate = false) {
     // otherwise it swallows every click meant for the page below. It expands
     // to full height only while an overlay (menu, flyouts, findbar) is open.
     chrome.setBounds({ x: 0, y: 0, width, height: state.overlayOpen ? height : CHROME_H });
+    if (state.rail && !state.rail.webContents.isDestroyed()) {
+      state.rail.setBounds({ x: 0, y: CHROME_H, width: RAIL_W, height: Math.max(0, height - CHROME_H) });
+    }
     for (const t of state.tabs) {
-      t.view.setBounds({ x: 0, y: CHROME_H, width, height: Math.max(0, height - CHROME_H) });
+      t.view.setBounds({
+        x: RAIL_W,
+        y: CHROME_H,
+        width: Math.max(0, width - RAIL_W),
+        height: Math.max(0, height - CHROME_H),
+      });
     }
     raiseChrome();
   }
@@ -296,6 +384,9 @@ function createBrowserWindow(isPrivate = false) {
         at: d.at,
       })),
     });
+    if (state.rail && !state.rail.webContents.isDestroyed()) {
+      state.rail.webContents.send("browser:state", { isPrivate: !!state.isPrivate });
+    }
   }
 
   state.pushChromeState = pushChromeState;
@@ -707,6 +798,95 @@ function createBrowserWindow(isPrivate = false) {
       state.overlayOpen = !!open;
       layout();
     },
+    // Le rail envoie ses actions ici ; le main les relaie au chrome qui
+    // affiche l'overlay correspondant (ui:open).
+    "rail:action": (_e, name) => {
+      emitChrome("ui:open", name);
+      return true;
+    },
+    // ── Extensions réelles ──
+    "ext:list": () => extPublic(),
+    "ext:load": async () => {
+      const r = await dialog.showOpenDialog(win, {
+        title: "Choisir le dossier de l'extension (contient manifest.json)",
+        properties: ["openDirectory"],
+      });
+      if (r.canceled || !r.filePaths[0]) return { cancelled: true };
+      try {
+        const ext = await loadExtensionDir(r.filePaths[0]);
+        return { ok: true, ext };
+      } catch (err) {
+        return { error: String(err?.message || err) };
+      }
+    },
+    "ext:remove": (_e, id) => {
+      const ext = session.defaultSession.getAllExtensions().find((e) => e.id === id);
+      try {
+        if (ext) session.defaultSession.removeExtension(id);
+      } catch {}
+      const s = readSettings();
+      writeSettings({ extensions: s.extensions.filter((p) => p !== ext?.path) });
+      return extPublic();
+    },
+    // ── Coffre de mots de passe (safeStorage → DPAPI Windows) ──
+    "pass:list": () => vaultPublic(),
+    "pass:add": (_e, entry) => {
+      const origin = String(entry?.origin || "").trim();
+      const username = String(entry?.username || "").trim();
+      const password = String(entry?.password || "");
+      if (!origin || !password || !safeStorage.isEncryptionAvailable()) return vaultPublic();
+      const vault = readVault();
+      vault.unshift({
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        origin,
+        username,
+        secret: safeStorage.encryptString(password).toString("base64"),
+        at: Date.now(),
+      });
+      writeVault(vault);
+      return vaultPublic();
+    },
+    "pass:remove": (_e, id) => {
+      writeVault(readVault().filter((p) => p.id !== id));
+      return vaultPublic();
+    },
+    "pass:reveal": (_e, id) => {
+      const entry = readVault().find((p) => p.id === id);
+      return entry ? vaultDecrypt(entry) : "";
+    },
+    "pass:copy": (_e, id) => {
+      const entry = readVault().find((p) => p.id === id);
+      const pw = entry ? vaultDecrypt(entry) : "";
+      if (pw) {
+        clipboard.writeText(pw);
+        setTimeout(() => clipboard.clear(), 30000);
+      }
+      return !!pw;
+    },
+    // Remplit le formulaire de connexion visible de l'onglet actif.
+    "pass:fill": async (_e, id) => {
+      const t = activeTab();
+      const entry = readVault().find((p) => p.id === id);
+      const pw = entry ? vaultDecrypt(entry) : "";
+      if (!t || !pw || t.view.webContents.isDestroyed()) return false;
+      const js = `(() => {
+        const pw = document.querySelector('input[type="password"]');
+        if (!pw) return false;
+        const root = pw.closest('form') || document;
+        const user = root.querySelector('input[type="email"],input[type="text"],input[name*="user" i],input[name*="mail" i],input[name*="login" i]');
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+        const put = (el, v) => { setter.call(el, v); el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); };
+        if (user) put(user, ${JSON.stringify(entry.username)});
+        put(pw, ${JSON.stringify(pw)});
+        return true;
+      })()`;
+      try {
+        return await t.view.webContents.executeJavaScript(js);
+      } catch {
+        return false;
+      }
+    },
+    "app:quit": () => app.quit(),
   };
 
   windows.add(state);
@@ -755,11 +935,26 @@ function bindIpc() {
     "settings:search-url",
     "nav:ayebi",
     "chrome:overlay",
+    "rail:action",
+    "ext:list",
+    "ext:load",
+    "ext:remove",
+    "pass:list",
+    "pass:add",
+    "pass:remove",
+    "pass:reveal",
+    "pass:copy",
+    "pass:fill",
+    "app:quit",
   ];
 
   for (const channel of channels) {
     ipcMain.handle(channel, (event, ...args) => {
-      const state = [...windows].find((w) => w.chrome?.webContents?.id === event.sender.id);
+      const state = [...windows].find(
+        (w) =>
+          w.chrome?.webContents?.id === event.sender.id ||
+          w.rail?.webContents?.id === event.sender.id,
+      );
       if (!state) return null;
       const fn = state.handlers[channel];
       return fn ? fn(event, ...args) : null;
@@ -786,6 +981,7 @@ app.whenReady().then(() => {
   log(`ready v${app.getVersion()} userData=${app.getPath("userData")}`);
   ensureData();
   Menu.setApplicationMenu(null);
+  void restoreExtensions();
   session.defaultSession.setPermissionRequestHandler(async (webContents, permission, callback, details) => {
     const requestingUrl = details?.requestingUrl || webContents.getURL();
     let origin;

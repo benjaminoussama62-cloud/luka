@@ -21,9 +21,7 @@
     btnExtensions: document.getElementById("btnExtensions"),
     btnCopilot: document.getElementById("btnCopilot"),
     btnProfile: document.getElementById("btnProfile"),
-    btnAllBookmarks: document.getElementById("btnAllBookmarks"),
     downloadBadge: document.getElementById("downloadBadge"),
-    bookmarksBar: document.getElementById("bookmarksBar"),
     iconSearch: document.querySelector(".icon-search"),
     iconLock: document.querySelector(".icon-lock"),
     zoomLabel: document.getElementById("zoomLabel"),
@@ -38,6 +36,7 @@
     favSearch: document.getElementById("favSearch"),
     favSearchBox: document.getElementById("favSearchBox"),
     favFilter: document.getElementById("favFilter"),
+    favAddCurrent: document.getElementById("favAddCurrent"),
     panel: document.getElementById("panel"),
     panelTitle: document.getElementById("panelTitle"),
     panelBody: document.getElementById("panelBody"),
@@ -64,6 +63,7 @@
   };
   let omniDirty = false;
   let openOverlay = null;
+  let overlayOpenedAt = 0;
   let favCache = [];
 
   // The main process resizes the chrome view: 126px when nothing is open so
@@ -101,12 +101,8 @@
   }
 
   function fileIcon(name) {
-    const ext = (name || "").split(".").pop()?.toLowerCase();
-    if (ext === "exe" || ext === "msi") return "⚙";
-    if (ext === "zip" || ext === "rar") return "📦";
-    if (ext === "pdf") return "📄";
-    if (ext === "mp4" || ext === "mkv") return "🎬";
-    return "⬇";
+    const ext = (name || "").split(".").pop()?.toLowerCase() || "";
+    return ext.length <= 4 ? ext || "fichier" : ext.slice(0, 4);
   }
 
   function renderTabs() {
@@ -237,6 +233,17 @@
           <strong>${escapeHtml(item.title || item.url)}</strong>
           <span>${escapeHtml(item.url)}</span>
         </div>`;
+      const rm = document.createElement("button");
+      rm.type = "button";
+      rm.className = "fav-remove";
+      rm.textContent = "×";
+      rm.title = "Retirer";
+      rm.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        favCache = (await api.invoke("fav:remove", item.url)) || [];
+        renderFavList(favCache, els.favFilter?.value || "");
+      });
+      b.appendChild(rm);
       b.addEventListener("click", () => {
         api.invoke("nav:go", item.url);
         closeAllOverlays();
@@ -267,7 +274,7 @@
 
   function setBackdrop(on) {
     if (!els.backdrop) return;
-    els.backdrop.hidden = !on;
+    els.backdrop.hidden = false;
     els.backdrop.classList.toggle("open", on);
   }
 
@@ -309,6 +316,7 @@
     }
     if (target.backdrop) setBackdrop(true);
     openOverlay = name;
+    overlayOpenedAt = Date.now();
     syncChromeBounds();
   }
 
@@ -320,6 +328,7 @@
     requestAnimationFrame(() => els.panel.classList.add("open"));
     setBackdrop(true);
     openOverlay = "panel";
+    overlayOpenedAt = Date.now();
     syncChromeBounds();
 
     const data = await api.invoke("settings:get");
@@ -342,6 +351,129 @@
     }
   }
 
+  async function showExtensions() {
+    closeAllOverlays();
+    els.panel.hidden = false;
+    els.panelTitle.textContent = "Extensions";
+    els.panelBody.innerHTML = "<div class='panel-empty'>Chargement…</div>";
+    requestAnimationFrame(() => els.panel.classList.add("open"));
+    setBackdrop(true);
+    openOverlay = "panel";
+    overlayOpenedAt = Date.now();
+    syncChromeBounds();
+
+    const render = async () => {
+      const list = (await api.invoke("ext:list")) || [];
+      els.panelBody.innerHTML = `
+        <p class="panel-lead">Extensions Chromium installées dans ce navigateur. Chargez un dossier contenant un <em>manifest.json</em> — elles sont réellement exécutées par le moteur.</p>
+        <div class="panel-form">
+          <button type="button" class="panel-cta" id="extLoadBtn">Charger une extension (dossier)</button>
+          <p class="panel-note">Les extensions décompressées sont rechargées automatiquement à chaque démarrage.</p>
+        </div>
+        <div id="extList"></div>`;
+      const holder = els.panelBody.querySelector("#extList");
+      if (!list.length) {
+        holder.innerHTML = '<div class="panel-empty">Aucune extension installée.</div>';
+      }
+      for (const ext of list) {
+        const row = document.createElement("div");
+        row.className = "ext-row";
+        row.innerHTML = `
+          <div class="ext-badge">${escapeHtml((ext.name || "E").slice(0, 1).toUpperCase())}</div>
+          <div class="ext-meta"><strong>${escapeHtml(ext.name)}</strong><span>v${escapeHtml(ext.version || "?")} · ${escapeHtml(ext.path || "")}</span></div>
+          <div class="row-actions"><button type="button" class="mini-btn danger" data-rm="${escapeHtml(ext.id)}">Retirer</button></div>`;
+        holder.appendChild(row);
+      }
+      els.panelBody.querySelector("#extLoadBtn").addEventListener("click", async () => {
+        const r = await api.invoke("ext:load");
+        if (r?.error) {
+          els.panelBody.querySelector("#extList").insertAdjacentHTML(
+            "afterbegin",
+            `<p class="panel-note" style="color:var(--danger)">Échec : ${escapeHtml(r.error)}</p>`,
+          );
+          return;
+        }
+        if (!r?.cancelled) await render();
+      });
+      holder.querySelectorAll("[data-rm]").forEach((b) =>
+        b.addEventListener("click", async () => {
+          await api.invoke("ext:remove", b.dataset.rm);
+          await render();
+        }),
+      );
+    };
+    await render();
+  }
+
+  async function showPasswords() {
+    closeAllOverlays();
+    els.panel.hidden = false;
+    els.panelTitle.textContent = "Mots de passe";
+    els.panelBody.innerHTML = "<div class='panel-empty'>Chargement…</div>";
+    requestAnimationFrame(() => els.panel.classList.add("open"));
+    setBackdrop(true);
+    openOverlay = "panel";
+    overlayOpenedAt = Date.now();
+    syncChromeBounds();
+
+    const render = async () => {
+      const list = (await api.invoke("pass:list")) || [];
+      els.panelBody.innerHTML = `
+        <p class="panel-lead">Coffre local chiffré par Windows (DPAPI). « Remplir » injecte les identifiants dans le formulaire de connexion de l'onglet actif.</p>
+        <div class="panel-form">
+          <input type="text" id="pwSite" placeholder="Site (ex : ayeba.app)" />
+          <input type="text" id="pwUser" placeholder="Identifiant" />
+          <input type="password" id="pwPass" placeholder="Mot de passe" />
+          <button type="button" class="panel-cta" id="pwAddBtn">Enregistrer</button>
+        </div>
+        <div id="passList"></div>`;
+      const holder = els.panelBody.querySelector("#passList");
+      if (!list.length) holder.innerHTML = '<div class="panel-empty">Aucun mot de passe enregistré.</div>';
+      for (const p of list) {
+        const row = document.createElement("div");
+        row.className = "pass-row";
+        row.innerHTML = `
+          <div class="ext-badge">${escapeHtml((p.origin || "?").slice(0, 1).toUpperCase())}</div>
+          <div class="pass-meta"><strong>${escapeHtml(p.origin)}</strong><span>${escapeHtml(p.username || "")}</span></div>
+          <div class="row-actions">
+            <button type="button" class="mini-btn" data-fill="${escapeHtml(p.id)}">Remplir</button>
+            <button type="button" class="mini-btn" data-copy="${escapeHtml(p.id)}">Copier</button>
+            <button type="button" class="mini-btn danger" data-rm="${escapeHtml(p.id)}">Suppr.</button>
+          </div>`;
+        holder.appendChild(row);
+      }
+      els.panelBody.querySelector("#pwAddBtn").addEventListener("click", async () => {
+        const site = els.panelBody.querySelector("#pwSite").value;
+        const user = els.panelBody.querySelector("#pwUser").value;
+        const pass = els.panelBody.querySelector("#pwPass").value;
+        if (!site || !pass) return;
+        await api.invoke("pass:add", { origin: site, username: user, password: pass });
+        await render();
+      });
+      holder.querySelectorAll("[data-fill]").forEach((b) =>
+        b.addEventListener("click", async () => {
+          const ok = await api.invoke("pass:fill", b.dataset.fill);
+          b.textContent = ok ? "Rempli ✓" : "Aucun champ";
+          setTimeout(() => (b.textContent = "Remplir"), 1500);
+        }),
+      );
+      holder.querySelectorAll("[data-copy]").forEach((b) =>
+        b.addEventListener("click", async () => {
+          await api.invoke("pass:copy", b.dataset.copy);
+          b.textContent = "Copié ✓";
+          setTimeout(() => (b.textContent = "Copier"), 1500);
+        }),
+      );
+      holder.querySelectorAll("[data-rm]").forEach((b) =>
+        b.addEventListener("click", async () => {
+          await api.invoke("pass:remove", b.dataset.rm);
+          await render();
+        }),
+      );
+    };
+    await render();
+  }
+
   async function showList(kind) {
     closeAllOverlays();
     els.panel.hidden = false;
@@ -350,6 +482,7 @@
     requestAnimationFrame(() => els.panel.classList.add("open"));
     setBackdrop(true);
     openOverlay = "panel";
+    overlayOpenedAt = Date.now();
     syncChromeBounds();
 
     const items = await api.invoke(kind === "favorites" ? "fav:list" : "history:list");
@@ -378,6 +511,7 @@
     requestAnimationFrame(() => els.panel.classList.add("open"));
     setBackdrop(true);
     openOverlay = "panel";
+    overlayOpenedAt = Date.now();
     syncChromeBounds();
 
     els.panelBody.innerHTML = "";
@@ -428,7 +562,7 @@
   els.btnHome?.addEventListener("click", () => api.invoke("nav:home"));
   els.btnOmniFav?.addEventListener("click", () => addFavorite());
   els.btnCopilot?.addEventListener("click", () => api.invoke("nav:go", "https://ayeba.app/?ai=1"));
-  els.btnExtensions?.addEventListener("click", () => showSettings());
+  els.btnExtensions?.addEventListener("click", () => showExtensions());
 
   els.btnProfile?.addEventListener("click", (e) => {
     e.stopPropagation();
@@ -450,9 +584,9 @@
     await renderFavoritesDrawer();
   });
 
-  els.btnAllBookmarks?.addEventListener("click", async () => {
-    openFlyout("favorites");
-    await renderFavoritesDrawer();
+  els.favAddCurrent?.addEventListener("click", async () => {
+    await addFavorite();
+    await renderFavoritesDrawer(els.favFilter?.value || "");
   });
 
   els.downloadsOpenFolder?.addEventListener("click", () => api.invoke("downloads:show-folder"));
@@ -470,15 +604,11 @@
     }
     const act = e.target.closest("[data-act]");
     if (act?.dataset.act === "settings") showSettings();
+    if (act?.dataset.act === "passwords") showPasswords();
     if (act?.dataset.act === "guest") {
       api.invoke("window:new-private");
       closeAllOverlays();
     }
-  });
-
-  els.bookmarksBar?.addEventListener("click", (e) => {
-    const btn = e.target.closest("button[data-url]");
-    if (btn) api.invoke("nav:go", btn.dataset.url);
   });
 
   els.favSearch?.addEventListener("click", () => {
@@ -509,12 +639,15 @@
 
   document.addEventListener("click", (e) => {
     if (!openOverlay) return;
+    // Le rail agrandit la vue chrome pendant que le clic physique finit :
+    // ignorer les clics fantômes juste après l'ouverture d'un overlay.
+    if (Date.now() - overlayOpenedAt < 250) return;
     const roots = [els.menu, els.profileFlyout, els.downloadsFlyout, els.panel];
     const btns = [els.btnMenu, els.btnProfile, els.btnDownloads, els.btnCollections];
     const inside = roots.some((r) => r && !r.hidden && r.contains(e.target));
     const onBtn = btns.some((b) => b && b.contains(e.target));
     if (openOverlay === "favorites") {
-      if (!els.favoritesDrawer?.contains(e.target) && !els.btnCollections?.contains(e.target) && !els.btnAllBookmarks?.contains(e.target)) {
+      if (!els.favoritesDrawer?.contains(e.target) && !els.btnCollections?.contains(e.target)) {
         closeAllOverlays();
       }
       return;
@@ -522,7 +655,10 @@
     if (!inside && !onBtn) closeAllOverlays();
   });
 
-  els.backdrop?.addEventListener("click", () => closeAllOverlays());
+  els.backdrop?.addEventListener("click", () => {
+    if (Date.now() - overlayOpenedAt < 250) return;
+    closeAllOverlays();
+  });
 
   els.menu?.addEventListener("click", async (e) => {
     const btn = e.target.closest("button[data-act]");
@@ -539,7 +675,10 @@
     }
     if (act === "history") showList("history");
     if (act === "tab-groups") showTabsPanel();
-    if (act === "settings" || act === "extensions" || act === "passwords") showSettings();
+    if (act === "settings") showSettings();
+    if (act === "extensions") showExtensions();
+    if (act === "passwords") showPasswords();
+    if (act === "quit") api.invoke("app:quit");
     if (act === "ayebi") api.invoke("nav:ayebi");
     if (act === "downloads") openFlyout("downloads");
     if (act === "find") openFind();
@@ -550,7 +689,7 @@
       await api.invoke("history:clear");
     }
     if (act === "about") api.invoke("app:about");
-    if (!["favorites", "history", "find", "settings", "downloads"].includes(act)) closeAllOverlays();
+    if (!["favorites", "history", "find", "settings", "downloads", "extensions", "passwords"].includes(act)) closeAllOverlays();
   });
 
   els.panelClose?.addEventListener("click", () => closeAllOverlays());
@@ -577,13 +716,15 @@
     const k = e.key.toLowerCase();
     if (k === "w") { e.preventDefault(); api.invoke("tabs:close", state.activeId); }
     if (k === "t") { e.preventDefault(); api.invoke("tabs:new"); }
-    if (k === "n") { e.preventDefault(); api.invoke("window:new"); }
+    if (k === "n") { e.preventDefault(); api.invoke(e.shiftKey ? "window:new-private" : "window:new"); }
     if (k === "j") { e.preventDefault(); openFlyout("downloads"); }
     if (k === "h") { e.preventDefault(); showList("history"); }
     if (k === "l") { e.preventDefault(); els.omni.focus(); els.omni.select(); }
     if (k === "r") { e.preventDefault(); api.invoke("nav:reload", e.shiftKey); }
     if (k === "f") { e.preventDefault(); openFind(); }
     if (k === "p") { e.preventDefault(); api.invoke("page:print"); }
+    if (k === "d") { e.preventDefault(); void addFavorite(); }
+    if (k === "o" && e.shiftKey) { e.preventDefault(); openFlyout("favorites"); void renderFavoritesDrawer(); }
     if (e.key === "Tab" && mod) {
       e.preventDefault();
       const tabs = state.tabs;
@@ -591,6 +732,17 @@
       const idx = tabs.findIndex((t) => t.id === state.activeId);
       api.invoke("tabs:activate", tabs[(idx + (e.shiftKey ? -1 : 1) + tabs.length) % tabs.length].id);
     }
+  });
+
+  // Actions envoyées par le rail latéral (via le processus principal).
+  api.on("ui:open", async (name) => {
+    if (name === "tabs") showTabsPanel();
+    else if (name === "favorites") { openFlyout("favorites"); await renderFavoritesDrawer(); }
+    else if (name === "history") showList("history");
+    else if (name === "downloads") openFlyout("downloads");
+    else if (name === "extensions") await showExtensions();
+    else if (name === "passwords") await showPasswords();
+    else if (name === "settings") await showSettings();
   });
 
   api.onState((next) => {
