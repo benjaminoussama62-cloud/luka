@@ -6,11 +6,9 @@ import { CursorGradient } from "@/components/effects/CursorGradient";
 import { GradientStage } from "@/components/effects/GradientStage";
 import { LoginModal, ProfileMenu } from "@/components/auth/AuthUI";
 import { AyebaWordmark } from "@/components/brand/AyebaIcon";
-import { AppTabBar } from "@/components/shell/AppTabBar";
-import { InAppBrowser } from "@/components/shell/InAppBrowser";
 import { BrowserShellProvider, useBrowserShell } from "@/lib/browser-shell";
 import { useI18n } from "@/lib/i18n";
-import { isMobileApp } from "@/lib/mobile-app";
+import { isMobileApp, externalLinkProps } from "@/lib/mobile-app";
 import { useAyeba } from "@/lib/store";
 import type { MapPlace, MediaResult, SearchTab, ShopItem } from "@/lib/types";
 import { AlgorithmSliders } from "./AlgorithmSliders";
@@ -108,7 +106,6 @@ function KnowledgeCard() {
 
 function WikipediaCard() {
   const { response } = useAyeba();
-  const { openWebTab } = useBrowserShell();
   const k = response?.wikipediaKnowledge;
   if (!k) return null;
   const wikiUrl = k.facts.find((f) => f.label === "Lien")?.value;
@@ -127,13 +124,9 @@ function WikipediaCard() {
         <p className="mt-1 text-sm text-[var(--faint)]">{k.subtitle}</p>
         <p className="mt-3 text-[14px] leading-[1.7] text-[var(--muted)]">{k.summary.slice(0, 320)}…</p>
         {wikiUrl ? (
-          <button
-            type="button"
-            className="ayeba-pill mt-4 px-4 py-2 text-xs"
-            onClick={() => openWebTab(wikiUrl, k.title)}
-          >
+          <a href={wikiUrl} {...externalLinkProps()} className="ayeba-pill mt-4 inline-block px-4 py-2 text-xs">
             Lire sur Wikipédia
-          </button>
+          </a>
         ) : null}
       </div>
     </aside>
@@ -142,7 +135,6 @@ function WikipediaCard() {
 
 function FeaturedSnippetCard() {
   const { response } = useAyeba();
-  const { openWebTab } = useBrowserShell();
   const sn = response?.featuredSnippet;
   if (!sn) return null;
   const isCalc = sn.url === "#calc";
@@ -157,13 +149,12 @@ function FeaturedSnippetCard() {
     return <div className="ayeba-snippet mb-8 block animate-rise p-5 sm:p-7">{inner}</div>;
   }
   return (
-    <button
-      type="button"
-      onClick={() => openWebTab(sn.url, sn.title)}
+    <a
+      href={sn.url}
       className="ayeba-snippet mb-8 block w-full animate-rise p-5 text-left sm:p-7"
     >
       {inner}
-    </button>
+    </a>
   );
 }
 
@@ -185,7 +176,6 @@ function LocalPack({ places }: { places: MapPlace[] }) {
 
 function ImageRail({ items }: { items: MediaResult[] }) {
   const { setTab } = useAyeba();
-  const { openWebTab } = useBrowserShell();
   const pics = items.filter((m) => m.thumb.startsWith("http")).slice(0, 8);
   if (!pics.length) return null;
   return (
@@ -196,15 +186,15 @@ function ImageRail({ items }: { items: MediaResult[] }) {
       </div>
       <div className="ayeba-image-rail">
         {pics.map((m) => (
-          <button
+          <a
             key={m.id}
-            type="button"
-            onClick={() => openWebTab(m.url, m.title)}
+            href={m.url}
+            {...externalLinkProps()}
             className="ayeba-panel overflow-hidden text-left"
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={m.thumb} alt="" className="h-28 w-full object-cover" />
-          </button>
+          </a>
         ))}
       </div>
     </section>
@@ -230,7 +220,7 @@ function MediaGrid({ items }: { items: MediaResult[] }) {
   return (
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
       {items.map((m) => (
-        <a key={m.id} href={m.url} target="_blank" rel="noreferrer" className="ayeba-panel overflow-hidden">
+        <a key={m.id} href={m.url} {...externalLinkProps()} className="ayeba-panel overflow-hidden">
           {m.thumb.startsWith("http") ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={m.thumb} alt="" className="h-48 w-full object-cover" />
@@ -248,7 +238,7 @@ function MapsPanel({ places }: { places: MapPlace[] }) {
     <ul className="grid gap-3 sm:grid-cols-2">
       {places.map((p) => (
         <li key={p.id}>
-          <a href={p.url} target="_blank" rel="noreferrer" className="ayeba-panel block p-4">
+          <a href={p.url} {...externalLinkProps()} className="ayeba-panel block p-4">
             <span className="font-medium text-white">{p.name}</span>
             <span className="mt-1 block text-sm text-[var(--muted)]">{p.address}</span>
           </a>
@@ -262,7 +252,7 @@ function ShoppingGrid({ items }: { items: ShopItem[] }) {
   return (
     <div className="grid gap-4 sm:grid-cols-2">
       {items.map((s) => (
-        <a key={s.id} href={s.url} target="_blank" rel="noreferrer" className="ayeba-panel p-5">
+        <a key={s.id} href={s.url} {...externalLinkProps()} className="ayeba-panel p-5">
           <p className="font-medium text-white">{s.title}</p>
           <p className="mt-2 text-sm text-[var(--muted)]">{s.price} · {s.store}</p>
         </a>
@@ -396,7 +386,7 @@ export function AyebaApp() {
 function AyebaAppBody() {
   const { hasSearched, response, searching, searchError, search, tab, setTab, splitScreen, resetHome, setDeepResearchOpen } = useAyeba();
   const { t } = useI18n();
-  const { activeTab, openHomeTab, webGoBack, webGoForward, navigateWebTab, activateTab, tabs } = useBrowserShell();
+  const { openHomeTab } = useBrowserShell();
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -410,34 +400,6 @@ function AyebaAppBody() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [resetHome, openHomeTab]);
-
-  if (activeTab.kind === "web") {
-    const webTab = activeTab;
-    return (
-      <>
-        <Stage />
-        <div className="relative z-10 flex min-h-dvh flex-col">
-          <AppTabBar />
-          <InAppBrowser
-            url={webTab.url}
-            title={webTab.title}
-            canGoBack={webTab.historyIndex > 0}
-            canGoForward={webTab.historyIndex < webTab.history.length - 1}
-            onBack={webGoBack}
-            onForward={webGoForward}
-            onNavigate={(u) => navigateWebTab(u)}
-            onHome={() => {
-              const homeTab = tabs.find((t) => t.kind === "home");
-              if (homeTab) activateTab(homeTab.id);
-              else openHomeTab();
-              resetHome();
-            }}
-          />
-        </div>
-        <Modals />
-      </>
-    );
-  }
 
   if (!hasSearched) {
     return (

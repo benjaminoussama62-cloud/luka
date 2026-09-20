@@ -23,3 +23,13 @@ export function markMobileAppSession(): void {
     /* private mode */
   }
 }
+
+/**
+ * Props for external anchors. On the web, open a real new tab (like Google).
+ * Inside the native app WebView, _blank is unsupported — navigate same-tab
+ * instead (Safari-style; the native back button returns to Ayeba).
+ */
+export function externalLinkProps(): { target?: string; rel?: string } {
+  if (typeof window !== "undefined" && isMobileApp()) return {};
+  return { target: "_blank", rel: "noopener noreferrer" };
+}
