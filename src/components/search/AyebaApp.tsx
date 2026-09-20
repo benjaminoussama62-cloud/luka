@@ -20,6 +20,7 @@ import { HomeSearchPanel } from "./HomeSearchPanel";
 import { HomeSplashGate } from "./HomeSplashGate";
 import { InteractiveMapPanel } from "./InteractiveMapPanel";
 import { NativeMediaGrid } from "./NativeMediaGrid";
+import { AnnouncementBanner } from "./AnnouncementBanner";
 import { NativeShoppingPanel } from "./NativeShoppingPanel";
 import { InstantAnswerCard, AyebiSerpRail } from "./InstantAnswerCard";
 import { InteractiveCanvas } from "./InteractiveCanvas";
@@ -406,6 +407,7 @@ function AyebaAppBody() {
       <>
         <Stage home />
         <div className="relative z-10 flex min-h-dvh flex-col">
+          <AnnouncementBanner />
           <main className="ayeba-home-shell mx-auto flex w-full flex-1 flex-col px-3 pb-10 sm:max-w-xl sm:px-4 sm:pb-12">
             <HomeSplashGate
               header={
@@ -462,6 +464,8 @@ function AyebaAppBody() {
           </div>
           {searching ? <div className="progress-shimmer w-full" /> : null}
         </header>
+
+        <AnnouncementBanner />
 
         <div className={`ayeba-serp-body ${response?.knowledge || response?.wikipediaKnowledge ? "ayeba-serp-body-with-aside" : ""}`}>
           <div className="ayeba-serp-main">

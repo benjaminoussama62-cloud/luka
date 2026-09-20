@@ -13,8 +13,8 @@ android {
         applicationId "app.ayeba.mobile"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode (System.getenv("AYEBA_VERSION_CODE") ?: "2").toInteger()
-        versionName System.getenv("AYEBA_VERSION") ?: "1.0.1"
+        versionCode = ((System.getenv("AYEBA_VERSION_CODE") ?: "2") as String).toInteger()
+        versionName = System.getenv("AYEBA_VERSION") ?: "1.0.1"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

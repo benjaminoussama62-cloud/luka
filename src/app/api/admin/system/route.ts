@@ -25,6 +25,9 @@ const COUNTED_TABLES = [
   "moderation_queue",
   "admin_audit_log",
   "admin_chat_messages",
+  "announcements",
+  "incidents",
+  "incident_updates",
 ] as const;
 
 /** GET /api/admin/system — état technique: base, tables, jobs, API. */

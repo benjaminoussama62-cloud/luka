@@ -3525,3 +3525,62 @@ select option {
   transform: translateY(-1px);
 }
 
+
+/* ---- Announcement banner (admin broadcast) ---- */
+.ayeba-announcements {
+  position: relative;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 16px 0;
+  max-width: 880px;
+  margin: 0 auto;
+  width: 100%;
+}
+.ayeba-announcement {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 120, 212, 0.14);
+  backdrop-filter: blur(10px);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+.ayeba-announcement-warning {
+  background: rgba(234, 179, 8, 0.14);
+  border-color: rgba(234, 179, 8, 0.3);
+}
+.ayeba-announcement-critical {
+  background: rgba(220, 38, 38, 0.16);
+  border-color: rgba(220, 38, 38, 0.4);
+}
+.ayeba-announcement-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ayeba-announcement-text strong {
+  font-weight: 600;
+}
+.ayeba-announcement-text span {
+  color: var(--muted);
+}
+.ayeba-announcement > button {
+  flex-shrink: 0;
+  border: 0;
+  background: none;
+  color: var(--faint);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 6px;
+}
+.ayeba-announcement > button:hover {
+  color: var(--ink);
+}

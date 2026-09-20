@@ -22,6 +22,16 @@ export default function StatusPage() {
   let jobs = 0;
   let ayebi = 0;
   let dbError: string | null = null;
+  let incidents: {
+    id: string;
+    title: string;
+    severity: string;
+    status: string;
+    affected_services: string;
+    created_at: string;
+    resolved_at: string | null;
+  }[] = [];
+  let updates: { incident_id: string; status: string; message: string; created_at: string }[] = [];
 
   try {
     getDb();
@@ -37,9 +47,30 @@ export default function StatusPage() {
     ayebi = (
       getDb().prepare("SELECT COUNT(*) as c FROM ayebi_articles").get() as { c: number }
     ).c;
+    try {
+      incidents = getDb()
+        .prepare(
+          `SELECT id, title, severity, status, affected_services, created_at, resolved_at
+           FROM incidents ORDER BY created_at DESC LIMIT 10`,
+        )
+        .all() as typeof incidents;
+      updates = getDb()
+        .prepare("SELECT incident_id, status, message, created_at FROM incident_updates ORDER BY created_at ASC")
+        .all() as typeof updates;
+    } catch {
+      /* tables pas encore migrées */
+    }
   } catch (e) {
     dbError = e instanceof Error ? e.message : "Erreur base";
   }
+
+  const activeIncidents = incidents.filter((i) => i.status !== "resolved");
+  const STATUS_LABEL: Record<string, string> = {
+    investigating: "Investigation",
+    identified: "Cause identifiée",
+    monitoring: "Surveillance",
+    resolved: "Résolu",
+  };
 
   const mode = currentDbMode();
   const modeLabel =
@@ -115,6 +146,67 @@ export default function StatusPage() {
             <div className="ayeba-panel mt-6 border border-amber-400/30 p-5 text-sm text-amber-200">
               Les données détaillées sont temporairement limitées. Les services principaux restent surveillés.
             </div>
+          ) : null}
+
+          {activeIncidents.length ? (
+            <section className="mt-8">
+              <p className="ayeba-kicker text-amber-300">Incidents en cours</p>
+              <div className="mt-4 space-y-4">
+                {activeIncidents.map((inc) => (
+                  <article key={inc.id} className="ayeba-panel border border-amber-400/25 p-6">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <h2 className="text-lg font-semibold text-white">{inc.title}</h2>
+                      <span className="rounded-full border border-amber-400/40 bg-amber-400/10 px-3 py-1 text-xs text-amber-200">
+                        {STATUS_LABEL[inc.status] ?? inc.status}
+                      </span>
+                    </div>
+                    {(() => {
+                      try {
+                        const svcs = JSON.parse(inc.affected_services) as string[];
+                        return svcs.length ? (
+                          <p className="mt-2 text-xs text-[var(--faint)]">Services : {svcs.join(" · ")}</p>
+                        ) : null;
+                      } catch {
+                        return null;
+                      }
+                    })()}
+                    <ol className="mt-4 space-y-3 border-l border-[var(--line)] pl-4">
+                      {updates
+                        .filter((u) => u.incident_id === inc.id)
+                        .map((u, i) => (
+                          <li key={i}>
+                            <p className="text-xs text-[var(--faint)]">
+                              {STATUS_LABEL[u.status] ?? u.status} — {new Date(u.created_at).toLocaleString("fr-FR")}
+                            </p>
+                            <p className="mt-1 text-sm text-[var(--muted)]">{u.message}</p>
+                          </li>
+                        ))}
+                    </ol>
+                  </article>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
+          {incidents.some((i) => i.status === "resolved") ? (
+            <section className="mt-8">
+              <p className="ayeba-kicker ayeba-kicker-accent">Historique des incidents</p>
+              <div className="ayeba-panel mt-4 divide-y divide-[var(--line)]">
+                {incidents
+                  .filter((i) => i.status === "resolved")
+                  .map((inc) => (
+                    <div key={inc.id} className="flex flex-wrap items-center justify-between gap-2 px-5 py-3.5">
+                      <div>
+                        <p className="text-sm text-white">{inc.title}</p>
+                        <p className="text-xs text-[var(--faint)]">{new Date(inc.created_at).toLocaleDateString("fr-FR")}</p>
+                      </div>
+                      <span className="rounded-full border border-emerald-400/40 bg-emerald-400/10 px-3 py-1 text-xs text-emerald-300">
+                        Résolu
+                      </span>
+                    </div>
+                  ))}
+              </div>
+            </section>
           ) : null}
 
           <section className="mt-10">

@@ -34,7 +34,9 @@ type Tab =
   | "system"
   | "audit"
   | "team"
-  | "chat";
+  | "chat"
+  | "broadcast"
+  | "incidents";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "Vue d'ensemble" },
@@ -47,6 +49,8 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "search", label: "Recherche & Index" },
   { id: "ecosystem", label: "Écosystème" },
   { id: "security", label: "Sécurité" },
+  { id: "broadcast", label: "Annonces" },
+  { id: "incidents", label: "Incidents" },
   { id: "system", label: "Système" },
   { id: "audit", label: "Journal & alertes" },
   { id: "team", label: "Équipe admin" },
@@ -74,6 +78,14 @@ async function api<T = Row>(path: string, init?: RequestInit): Promise<T | null>
 function post(path: string, body: Row) {
   return api(path, {
     method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+function patch(path: string, body: Row) {
+  return api(path, {
+    method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
@@ -190,6 +202,15 @@ export function AdminConsole({
   const [newAdminRole, setNewAdminRole] = useState("support");
   const [newAdminPassword, setNewAdminPassword] = useState<string | null>(null);
 
+  // broadcast + incidents forms
+  const [annTitle, setAnnTitle] = useState("");
+  const [annBody, setAnnBody] = useState("");
+  const [annSeverity, setAnnSeverity] = useState("info");
+  const [incTitle, setIncTitle] = useState("");
+  const [incSeverity, setIncSeverity] = useState("minor");
+  const [incServices, setIncServices] = useState<string[]>([]);
+  const [incUpdateMsg, setIncUpdateMsg] = useState<Record<string, string>>({});
+
   // chat state
   const [chatChannel, setChatChannel] = useState("team");
   const [chatMessages, setChatMessages] = useState<Row[]>([]);
@@ -221,6 +242,8 @@ export function AdminConsole({
         t === "search" ? "/api/admin/search" :
         t === "ecosystem" ? "/api/admin/ecosystem" :
         t === "security" ? "/api/admin/security" :
+        t === "broadcast" ? "/api/admin/announcements" :
+        t === "incidents" ? "/api/admin/incidents" :
         t === "system" ? "/api/admin/system" :
         t === "team" ? "/api/admin/admins" :
         "/api/admin/audit";
@@ -261,6 +284,16 @@ export function AdminConsole({
     return () => { alive = false; clearInterval(iv); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, chatChannel]);
+
+  const patchAct = async (path: string, body: Row, okMsg: string) => {
+    const res = await patch(path, body);
+    if (res) {
+      flash(okMsg);
+      await loadTab(tab, userQuery);
+    } else {
+      flash("Action échouée");
+    }
+  };
 
   const act = async (path: string, body: Row, okMsg: string) => {
     const res = await post(path, body);
@@ -896,6 +929,215 @@ export function AdminConsole({
                 />
               </div>
             </div>
+          </section>
+        )}
+
+        {tab === "broadcast" && (
+          <section className="space-y-4">
+            <header>
+              <h2 className="text-xl font-semibold">Annonces</h2>
+              <p className="text-sm opacity-60">
+                Bandeaux diffusés sur ayeba.app — visibles par tous les visiteurs en temps réel
+              </p>
+            </header>
+            <div className="ayeba-panel p-4">
+              <p className="ayeba-kicker mb-3">Nouvelle annonce</p>
+              <div className="grid gap-3">
+                <input
+                  className="ayeba-input w-full"
+                  placeholder="Titre (ex. Maintenance planifiée)"
+                  value={annTitle}
+                  onChange={(e) => setAnnTitle(e.target.value)}
+                />
+                <textarea
+                  className="ayeba-input w-full"
+                  rows={2}
+                  placeholder="Message affiché dans le bandeau…"
+                  value={annBody}
+                  onChange={(e) => setAnnBody(e.target.value)}
+                />
+                <div className="flex flex-wrap items-center gap-3">
+                  <select
+                    className="ayeba-input"
+                    value={annSeverity}
+                    onChange={(e) => setAnnSeverity(e.target.value)}
+                  >
+                    <option value="info">Info</option>
+                    <option value="warning">Avertissement</option>
+                    <option value="critical">Critique</option>
+                  </select>
+                  <Btn
+                    onClick={async () => {
+                      const res = await post("/api/admin/announcements", {
+                        title: annTitle, body: annBody, severity: annSeverity, status: "active",
+                      });
+                      if (res) {
+                        setAnnTitle(""); setAnnBody(""); setAnnSeverity("info");
+                        flash("Annonce publiée — visible sur ayeba.app");
+                        await loadTab(tab);
+                      } else flash("Échec de publication");
+                    }}
+                  >
+                    Publier maintenant
+                  </Btn>
+                  <Btn
+                    onClick={async () => {
+                      const res = await post("/api/admin/announcements", {
+                        title: annTitle, body: annBody, severity: annSeverity, status: "draft",
+                      });
+                      if (res) {
+                        setAnnTitle(""); setAnnBody("");
+                        flash("Brouillon enregistré");
+                        await loadTab(tab);
+                      } else flash("Échec");
+                    }}
+                  >
+                    Brouillon
+                  </Btn>
+                </div>
+              </div>
+            </div>
+            <div className="ayeba-panel p-4">
+              <p className="ayeba-kicker mb-3">Annonces ({num(((data.announcements as Row[]) ?? []).length)})</p>
+              <Table
+                head={["Sévérité", "Titre", "Message", "Statut", "Créée", "Actions"]}
+                rows={((data.announcements as Row[]) ?? []).map((a) => [
+                  <Badge key="sev" tone={a.severity === "critical" ? "bad" : a.severity === "warning" ? "warn" : "info"}>
+                    {s(a.severity)}
+                  </Badge>,
+                  s(a.title),
+                  <span key="b" className="max-w-[280px] truncate inline-block">{s(a.body)}</span>,
+                  <Badge key="st" tone={statusTone(a.status)}>{s(a.status)}</Badge>,
+                  dt(a.created_at),
+                  <span key="ac" className="flex gap-2">
+                    {a.status !== "active" ? (
+                      <Btn onClick={() => void patchAct("/api/admin/announcements", { id: a.id, status: "active" }, "Annonce activée")}>
+                        Activer
+                      </Btn>
+                    ) : (
+                      <Btn onClick={() => void patchAct("/api/admin/announcements", { id: a.id, status: "archived" }, "Annonce retirée")}>
+                        Retirer
+                      </Btn>
+                    )}
+                  </span>,
+                ])}
+                empty="Aucune annonce"
+              />
+            </div>
+          </section>
+        )}
+
+        {tab === "incidents" && (
+          <section className="space-y-4">
+            <header>
+              <h2 className="text-xl font-semibold">Incidents</h2>
+              <p className="text-sm opacity-60">
+                Journal opérationnel — publié sur la page /status (style status.google.com)
+              </p>
+            </header>
+            <div className="ayeba-panel p-4">
+              <p className="ayeba-kicker mb-3">Déclarer un incident</p>
+              <div className="grid gap-3">
+                <input
+                  className="ayeba-input w-full"
+                  placeholder="Titre (ex. Latence élevée sur la recherche)"
+                  value={incTitle}
+                  onChange={(e) => setIncTitle(e.target.value)}
+                />
+                <div className="flex flex-wrap items-center gap-3">
+                  <select
+                    className="ayeba-input"
+                    value={incSeverity}
+                    onChange={(e) => setIncSeverity(e.target.value)}
+                  >
+                    <option value="minor">Mineur</option>
+                    <option value="major">Majeur</option>
+                    <option value="critical">Critique</option>
+                  </select>
+                  <div className="flex flex-wrap gap-2">
+                    {((data.services as string[]) ?? []).map((svc) => (
+                      <label key={svc} className="flex items-center gap-1.5 text-xs">
+                        <input
+                          type="checkbox"
+                          checked={incServices.includes(svc)}
+                          onChange={(e) =>
+                            setIncServices((prev) =>
+                              e.target.checked ? [...prev, svc] : prev.filter((x) => x !== svc),
+                            )
+                          }
+                        />
+                        {svc}
+                      </label>
+                    ))}
+                  </div>
+                  <Btn
+                    onClick={async () => {
+                      const res = await post("/api/admin/incidents", {
+                        title: incTitle, severity: incSeverity, affectedServices: incServices,
+                      });
+                      if (res) {
+                        setIncTitle(""); setIncSeverity("minor"); setIncServices([]);
+                        flash("Incident déclaré — visible sur /status");
+                        await loadTab(tab);
+                      } else flash("Échec");
+                    }}
+                  >
+                    Déclarer
+                  </Btn>
+                </div>
+              </div>
+            </div>
+            {((data.incidents as Row[]) ?? []).map((inc) => (
+              <div key={String(inc.id)} className="ayeba-panel p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="font-medium">{s(inc.title)}</p>
+                    <p className="text-xs opacity-60">
+                      {s(inc.severity)} · {s(inc.author)} · {dt(inc.created_at)}
+                      {((inc.affected_services as string[]) ?? []).length
+                        ? ` · ${(inc.affected_services as string[]).join(" · ")}`
+                        : ""}
+                    </p>
+                  </div>
+                  <Badge tone={statusTone(inc.status)}>{s(inc.status)}</Badge>
+                </div>
+                <ol className="mt-3 space-y-2 border-l pl-3 text-xs" style={{ borderColor: "var(--line)" }}>
+                  {((inc.updates as Row[]) ?? []).map((u, i) => (
+                    <li key={i}>
+                      <span className="opacity-50">{dt(u.created_at)} — {s(u.status)}</span>
+                      <p className="opacity-80">{s(u.message)}</p>
+                    </li>
+                  ))}
+                </ol>
+                {inc.status !== "resolved" ? (
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <input
+                      className="ayeba-input min-w-[240px] flex-1"
+                      placeholder="Message de mise à jour…"
+                      value={incUpdateMsg[String(inc.id)] ?? ""}
+                      onChange={(e) =>
+                        setIncUpdateMsg((prev) => ({ ...prev, [String(inc.id)]: e.target.value }))
+                      }
+                    />
+                    {["identified", "monitoring", "resolved"].map((st) => (
+                      <Btn
+                        key={st}
+                        onClick={() =>
+                          void patchAct("/api/admin/incidents", {
+                            id: inc.id, status: st, message: incUpdateMsg[String(inc.id)] ?? "",
+                          }, st === "resolved" ? "Incident résolu" : "Mise à jour publiée")
+                        }
+                      >
+                        {st === "identified" ? "Cause identifiée" : st === "monitoring" ? "Surveillance" : "Résoudre"}
+                      </Btn>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ))}
+            {!((data.incidents as Row[]) ?? []).length ? (
+              <p className="py-6 text-center text-sm opacity-50">Aucun incident — tout est nominal.</p>
+            ) : null}
           </section>
         )}
 

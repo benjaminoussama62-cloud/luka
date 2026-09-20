@@ -154,6 +154,45 @@ CREATE TABLE IF NOT EXISTS admin_settings (
   updated_at TEXT NOT NULL
 );
 
+-- PUBLIC ANNOUNCEMENTS (banner broadcast to ayeba.app users)
+CREATE TABLE IF NOT EXISTS announcements (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  body TEXT NOT NULL,
+  severity TEXT NOT NULL DEFAULT 'info',
+  status TEXT NOT NULL DEFAULT 'draft',
+  created_by TEXT REFERENCES admin_users(id),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_announcements_status ON announcements(status);
+
+-- OPERATIONAL INCIDENTS (public status page + ops tracking)
+CREATE TABLE IF NOT EXISTS incidents (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  severity TEXT NOT NULL DEFAULT 'minor',
+  status TEXT NOT NULL DEFAULT 'investigating',
+  affected_services TEXT NOT NULL DEFAULT '[]',
+  created_by TEXT REFERENCES admin_users(id),
+  created_at TEXT NOT NULL,
+  resolved_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_incidents_status ON incidents(status);
+
+CREATE TABLE IF NOT EXISTS incident_updates (
+  id TEXT PRIMARY KEY,
+  incident_id TEXT NOT NULL REFERENCES incidents(id) ON DELETE CASCADE,
+  status TEXT NOT NULL,
+  message TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_incident_updates_incident ON incident_updates(incident_id);
+
 -- ADMIN NOTIFICATIONS
 CREATE TABLE IF NOT EXISTS admin_notifications (
   id TEXT PRIMARY KEY,
