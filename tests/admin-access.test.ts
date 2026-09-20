@@ -47,11 +47,11 @@ describe("admin section access", () => {
 
   it("analyst is nearly read-only", () => {
     const s = adminOf("analyst");
-    expect(allowedSections(s, false)).toEqual(["overview", "chat"]);
+    expect(allowedSections(s, false)).toEqual(["overview", "search", "system", "chat"]);
   });
 
   it("env-listed admin without a row acts as super_admin", () => {
-    expect(allowedSections(null, true).length).toBe(10);
+    expect(allowedSections(null, true).length).toBe(14);
     expect(canAccessSection(null, true, "team")).toBe(true);
   });
 

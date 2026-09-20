@@ -181,6 +181,34 @@ CREATE TABLE IF NOT EXISTS admin_chat_messages (
 );
 
 CREATE INDEX IF NOT EXISTS idx_chat_channel ON admin_chat_messages(channel, created_at);
+
+-- ADMIN SESSIONS (dedicated back-office auth — separate from user sessions)
+CREATE TABLE IF NOT EXISTS admin_sessions (
+  id TEXT PRIMARY KEY,
+  admin_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  ip TEXT NOT NULL DEFAULT '',
+  user_agent TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  revoked_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_admin_sessions_admin ON admin_sessions(admin_id);
+CREATE INDEX IF NOT EXISTS idx_admin_sessions_expiry ON admin_sessions(expires_at);
+
+-- ADMIN LOGIN ATTEMPTS (rate limiting + security audit)
+CREATE TABLE IF NOT EXISTS admin_login_attempts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  email TEXT NOT NULL,
+  ip TEXT NOT NULL DEFAULT '',
+  success INTEGER NOT NULL DEFAULT 0,
+  detail TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_admin_attempts_email ON admin_login_attempts(email, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_admin_attempts_ip ON admin_login_attempts(ip, created_at DESC);
 `;
 
 export function applyAdminSchema(db: { exec(sql: string): unknown }) {
@@ -280,6 +308,19 @@ export function applyAdminSchema(db: { exec(sql: string): unknown }) {
     "ALTER TABLE admin_notifications ADD COLUMN link TEXT",
     "ALTER TABLE admin_notifications ADD COLUMN read TEXT",
     "ALTER TABLE admin_notifications ADD COLUMN created_at TEXT",
+    "ALTER TABLE admin_sessions ADD COLUMN id TEXT",
+    "ALTER TABLE admin_sessions ADD COLUMN admin_id TEXT",
+    "ALTER TABLE admin_sessions ADD COLUMN user_id TEXT",
+    "ALTER TABLE admin_sessions ADD COLUMN ip TEXT",
+    "ALTER TABLE admin_sessions ADD COLUMN user_agent TEXT",
+    "ALTER TABLE admin_sessions ADD COLUMN created_at TEXT",
+    "ALTER TABLE admin_sessions ADD COLUMN expires_at TEXT",
+    "ALTER TABLE admin_sessions ADD COLUMN revoked_at TEXT",
+    "ALTER TABLE admin_login_attempts ADD COLUMN email TEXT",
+    "ALTER TABLE admin_login_attempts ADD COLUMN ip TEXT",
+    "ALTER TABLE admin_login_attempts ADD COLUMN success TEXT",
+    "ALTER TABLE admin_login_attempts ADD COLUMN detail TEXT",
+    "ALTER TABLE admin_login_attempts ADD COLUMN created_at TEXT",
   ];
 
   for (const sql of migrations) {

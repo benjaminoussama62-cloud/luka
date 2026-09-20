@@ -752,6 +752,11 @@ function migrateUserRows(db: AyebaDatabase) {
     /* column exists */
   }
   try {
+    db.exec("ALTER TABLE users ADD COLUMN status TEXT NOT NULL DEFAULT 'active'");
+  } catch {
+    /* column exists */
+  }
+  try {
     db.exec(
       "UPDATE users SET name = substr(email, 1, instr(email, '@') - 1) WHERE name IS NULL OR trim(name) = ''",
     );

@@ -47,7 +47,8 @@ export async function readSessionToken(token: string) {
     const { payload } = await jwtVerify(token, secretKey());
     if (!payload.sub) return null;
     const user = await findUserById(payload.sub as string);
-    if (!user) return null;
+    // Suspended accounts lose their session immediately.
+    if (!user || user.status === "suspended") return null;
     return toSessionUser(user);
   } catch {
     return null;
@@ -119,6 +120,7 @@ export async function registerUser(email: string, password: string, name?: strin
     avatarColor: COLORS[Math.floor(Math.random() * COLORS.length)],
     provider: "email",
     createdAt: new Date().toISOString(),
+    status: "active",
   };
   const users = await getUsers();
   await saveUsers([...users, user]);
@@ -131,6 +133,9 @@ export async function loginUser(email: string, password: string) {
   if (!user) return { error: "Identifiants invalides." as const };
   const ok = await verifyPassword(password, user.passwordHash);
   if (!ok) return { error: "Identifiants invalides." as const };
+  if (user.status === "suspended") {
+    return { error: "Compte suspendu. Contacte le support." as const };
+  }
   syncUserToSqlite(user);
   return { user: toSessionUser(user) };
 }
@@ -153,15 +158,22 @@ export async function upsertOAuthUser(profile: {
   if (!user) {
     user = {
       id: profile.sub || crypto.randomUUID(),
-      name: profile.name,
+      // Provider may omit display name — never store NULL (users.name is NOT NULL).
+      name: profile.name?.trim() || email.split("@")[0],
       email,
       passwordHash: "",
       avatarColor: brandColors[profile.provider] ?? "#e85d04",
       provider: profile.provider,
       createdAt: new Date().toISOString(),
+      status: "active",
     };
     await saveUsers([...users, user]);
   } else {
+    // Heal legacy rows that were written with an empty/null name.
+    if (!user.name?.trim()) {
+      user.name = email.split("@")[0];
+      await saveUsers(users.map((u) => (u.id === user!.id ? user! : u)));
+    }
     syncUserToSqlite(user);
   }
   return toSessionUser(user);

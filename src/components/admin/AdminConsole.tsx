@@ -28,6 +28,10 @@ type Tab =
   | "billing"
   | "network"
   | "content"
+  | "search"
+  | "ecosystem"
+  | "security"
+  | "system"
   | "audit"
   | "team"
   | "chat";
@@ -40,6 +44,10 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "billing", label: "Facturation" },
   { id: "network", label: "Réseau pubs" },
   { id: "content", label: "Contenu & accès" },
+  { id: "search", label: "Recherche & Index" },
+  { id: "ecosystem", label: "Écosystème" },
+  { id: "security", label: "Sécurité" },
+  { id: "system", label: "Système" },
   { id: "audit", label: "Journal & alertes" },
   { id: "team", label: "Équipe admin" },
   { id: "chat", label: "Chat équipe" },
@@ -177,6 +185,7 @@ export function AdminConsole({
   const [ticket, setTicket] = useState<Row | null>(null);
   const [reply, setReply] = useState("");
   const [userQuery, setUserQuery] = useState("");
+  const [userDossier, setUserDossier] = useState<Row | null>(null);
   const [newAdminEmail, setNewAdminEmail] = useState("");
   const [newAdminRole, setNewAdminRole] = useState("support");
   const [newAdminPassword, setNewAdminPassword] = useState<string | null>(null);
@@ -209,6 +218,10 @@ export function AdminConsole({
         t === "billing" ? "/api/admin/billing" :
         t === "network" ? "/api/admin/network" :
         t === "content" ? "/api/admin/content" :
+        t === "search" ? "/api/admin/search" :
+        t === "ecosystem" ? "/api/admin/ecosystem" :
+        t === "security" ? "/api/admin/security" :
+        t === "system" ? "/api/admin/system" :
         t === "team" ? "/api/admin/admins" :
         "/api/admin/audit";
       const d = await api<Row>(path);
@@ -295,7 +308,19 @@ export function AdminConsole({
         <div className="border-t pt-3 text-xs" style={{ borderColor: "var(--line)" }}>
           <p className="font-medium">{adminName}</p>
           <p className="opacity-60">{adminEmail}</p>
-          <Badge tone="info">{adminRole}</Badge>
+          <div className="mt-2 flex items-center justify-between gap-2">
+            <Badge tone="info">{adminRole}</Badge>
+            <button
+              className="rounded-md px-2 py-1 text-[11px] transition"
+              style={{ border: "1px solid #ef444466", color: "#f87171" }}
+              onClick={async () => {
+                await fetch("/api/admin/auth/logout", { method: "POST" });
+                window.location.href = "/admin/connexion";
+              }}
+            >
+              Verrouiller
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -366,13 +391,57 @@ export function AdminConsole({
             </header>
             <div className="ayeba-panel p-4">
               <Table
-                head={["Nom", "Email", "Provider", "Rôle", "Inscrit le"]}
+                head={["Nom", "Email", "Provider", "Rôle", "Statut", "Inscrit le", "Actions"]}
                 rows={((data.users as Row[]) ?? []).map((u) => [
-                  s(u.name), s(u.email), s(u.provider), <Badge key="r" tone={statusTone(u.role)}>{s(u.role)}</Badge>, dt(u.created_at),
+                  <button key="n" className="underline underline-offset-2" onClick={async () => {
+                    const d = await api<Row>(`/api/admin/users?id=${u.id}`);
+                    if (d) setUserDossier(d);
+                  }}>{s(u.name)}</button>,
+                  s(u.email), s(u.provider), <Badge key="r" tone={statusTone(u.role)}>{s(u.role)}</Badge>,
+                  <Badge key="st" tone={statusTone(u.status)}>{s(u.status, "active")}</Badge>,
+                  dt(u.created_at),
+                  u.status === "suspended" ? (
+                    <Btn key="a" onClick={() => void act("/api/admin/users", { action: "activate", userId: u.id }, "Compte réactivé")}>Réactiver</Btn>
+                  ) : (
+                    <Btn key="s" danger onClick={() => {
+                      if (window.confirm(`Suspendre ${s(u.email)} ? Ses sessions seront coupées.`)) {
+                        void act("/api/admin/users", { action: "suspend", userId: u.id }, "Compte suspendu");
+                      }
+                    }}>Suspendre</Btn>
+                  ),
                 ])}
                 empty="Aucun utilisateur"
               />
             </div>
+
+            {userDossier ? (
+              <div className="ayeba-panel p-4">
+                <div className="mb-3 flex items-start justify-between">
+                  <div>
+                    <p className="ayeba-kicker">Dossier utilisateur</p>
+                    <h3 className="font-semibold">{s((userDossier.user as Row)?.name)} · {s((userDossier.user as Row)?.email)}</h3>
+                    <p className="text-xs opacity-60">
+                      {s((userDossier.user as Row)?.provider)} · 2FA {((userDossier.detail as Row)?.totpEnabled) ? "activée" : "inactive"} · {num((userDossier.detail as Row)?.searches)} recherches · {num((userDossier.detail as Row)?.revisions)} révisions Ayebi
+                    </p>
+                  </div>
+                  <Btn onClick={() => setUserDossier(null)}>Fermer</Btn>
+                </div>
+                <div className="grid gap-4 lg:grid-cols-3">
+                  <div>
+                    <p className="ayeba-kicker mb-2">Sites Studio</p>
+                    <Table head={["Domaine", "Statut"]} rows={(((userDossier.detail as Row)?.sites as Row[]) ?? []).map((x) => [s(x.domain), <Badge key="s" tone={statusTone(x.status)}>{s(x.status)}</Badge>])} empty="Aucun site" />
+                  </div>
+                  <div>
+                    <p className="ayeba-kicker mb-2">Articles Ayebi</p>
+                    <Table head={["Article", "Créé"]} rows={(((userDossier.detail as Row)?.articles as Row[]) ?? []).map((x) => [s(x.title), dt(x.created_at)])} empty="Aucun article" />
+                  </div>
+                  <div>
+                    <p className="ayeba-kicker mb-2">Tickets support</p>
+                    <Table head={["Sujet", "Statut"]} rows={(((userDossier.detail as Row)?.tickets as Row[]) ?? []).map((x) => [s(x.subject), <Badge key="s" tone={statusTone(x.status)}>{s(x.status)}</Badge>])} empty="Aucun ticket" />
+                  </div>
+                </div>
+              </div>
+            ) : null}
           </section>
         )}
 
@@ -617,6 +686,213 @@ export function AdminConsole({
                     dt(c.created_at),
                   ])}
                   empty="Aucun client"
+                />
+              </div>
+            </div>
+          </section>
+        )}
+
+        {tab === "search" && (
+          <section className="space-y-4">
+            <header>
+              <h2 className="text-xl font-semibold">Recherche & Index</h2>
+              <p className="text-sm opacity-60">
+                {num(((data.index as Row)?.totalDocuments))} documents indexés · {num(((data.queue as Row)?.pending))} URLs en file
+              </p>
+            </header>
+            <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+              <Stat label="Documents indexés" value={num(((data.index as Row)?.totalDocuments)).toLocaleString("fr-CD")} hint={`${num(((data.index as Row)?.localDocuments))} locaux (RDC)`} />
+              <Stat label="File de crawl" value={num(((data.queue as Row)?.pending))} hint={`${num(((data.queue as Row)?.failed))} en échec`} />
+              <Stat label="Recherches totales" value={num(((data.queries as Row)?.totalSearches)).toLocaleString("fr-CD")} />
+              <Stat label="Impressions 7j" value={num(((data.queries as Row)?.impressions7d))} hint={`${num(((data.queries as Row)?.clicks7d))} clics`} />
+            </div>
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className="ayeba-panel p-4">
+                <p className="ayeba-kicker mb-3">Top requêtes (7 jours)</p>
+                <Table
+                  head={["Requête", "Volume"]}
+                  rows={(((data.queries as Row)?.top7d as Row[]) ?? []).map((x) => [s(x.query), num(x.n)])}
+                  empty="Aucune requête enregistrée"
+                />
+              </div>
+              <div className="ayeba-panel p-4">
+                <p className="ayeba-kicker mb-3">Requêtes récentes</p>
+                <Table
+                  head={["Requête", "Utilisateur", "Date"]}
+                  rows={(((data.queries as Row)?.recent as Row[]) ?? []).map((x) => [s(x.query), s(x.user_email, "anonyme"), dt(x.created_at)])}
+                  empty="—"
+                />
+              </div>
+            </div>
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className="ayeba-panel p-4">
+                <p className="ayeba-kicker mb-3">Domaines les plus indexés</p>
+                <Table
+                  head={["Domaine", "Pages", "Crédibilité moy."]}
+                  rows={(((data.index as Row)?.topDomains as Row[]) ?? []).map((x) => [s(x.domain), num(x.pages), `${(num(x.avg_credibility) * 100).toFixed(0)}%`])}
+                  empty="Index vide"
+                />
+              </div>
+              <div className="ayeba-panel p-4">
+                <p className="ayeba-kicker mb-3">Erreurs de crawl récentes</p>
+                <Table
+                  head={["URL", "Erreur", "Essais"]}
+                  rows={(((data.queue as Row)?.recentErrors as Row[]) ?? []).map((x) => [s(x.url).slice(0, 45), s(x.last_error).slice(0, 50), num(x.attempts)])}
+                  empty="Aucune erreur"
+                />
+              </div>
+            </div>
+            <div className="ayeba-panel p-4">
+              <p className="ayeba-kicker mb-3">Ayebi (encyclopédie)</p>
+              <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+                <Stat label="Articles" value={num(((data.articles as Row)?.total))} hint={`${num(((data.articles as Row)?.stubs))} ébauches`} />
+                <Stat label="Vues cumulées" value={num(((data.articles as Row)?.views)).toLocaleString("fr-CD")} />
+                <Stat label="Signalements" value={num(((data.articles as Row)?.flagged))} />
+                <Stat label="Index par source" value={(((data.index as Row)?.bySourceType as Row[]) ?? []).map((x) => `${s(x.source_type)}: ${num(x.n)}`).join(" · ") || "—"} />
+              </div>
+            </div>
+          </section>
+        )}
+
+        {tab === "ecosystem" && (
+          <section className="space-y-4">
+            <header>
+              <h2 className="text-xl font-semibold">Écosystème</h2>
+              <p className="text-sm opacity-60">
+                {num(((data.totals as Row)?.clients))} clients OAuth · {num(((data.totals as Row)?.activeTokens))} tokens actifs · {num(((data.totals as Row)?.verified))} vérifiés
+              </p>
+            </header>
+            <div className="ayeba-panel p-4">
+              <p className="ayeba-kicker mb-3">Applications sœurs</p>
+              <Table
+                head={["App", "Domaine", "Enregistrée", "Client ID", "Secret"]}
+                rows={((data.sisters as Row[]) ?? []).map((a) => [
+                  <Badge key="a" tone="info">{s(a.name)}</Badge>,
+                  s(a.domain),
+                  <Badge key="r" tone={a.registered ? "ok" : "warn"}>{a.registered ? "oui" : "non"}</Badge>,
+                  <Badge key="c" tone={a.clientIdConfigured ? "ok" : "dim"}>{a.clientIdConfigured ? "configuré" : "défaut"}</Badge>,
+                  <Badge key="s" tone={a.secretConfigured ? "ok" : "bad"}>{a.secretConfigured ? "configuré" : "manquant"}</Badge>,
+                ])}
+                empty="—"
+              />
+            </div>
+            <div className="ayeba-panel p-4">
+              <p className="ayeba-kicker mb-3">Clients OAuth enregistrés</p>
+              <Table
+                head={["Nom", "Client ID", "Type", "Tier", "Propriétaire", "Tokens", "Consents", "Vérifié"]}
+                rows={((data.clients as Row[]) ?? []).map((c) => [
+                  s(c.name),
+                  <code key="id" className="text-xs">{s(c.client_id).slice(0, 18)}…</code>,
+                  s(c.client_type),
+                  <Badge key="t" tone={statusTone(c.tier)}>{s(c.tier)}</Badge>,
+                  s(c.owner_email, "système"),
+                  num(c.active_tokens),
+                  num(c.consents),
+                  <Badge key="v" tone={c.verified ? "ok" : "dim"}>{c.verified ? "oui" : "non"}</Badge>,
+                ])}
+                empty="Aucun client"
+              />
+            </div>
+          </section>
+        )}
+
+        {tab === "security" && (
+          <section className="space-y-4">
+            <header>
+              <h2 className="text-xl font-semibold">Sécurité</h2>
+              <p className="text-sm opacity-60">
+                {num(((data.stats as Row)?.activeSessions))} sessions admin actives · {num(((data.stats as Row)?.failedLogins24h))} échecs de connexion (24 h)
+              </p>
+            </header>
+            <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+              <Stat label="Sessions admin actives" value={num(((data.stats as Row)?.activeSessions))} />
+              <Stat label="Échecs login (24 h)" value={num(((data.stats as Row)?.failedLogins24h))} />
+              <Stat label="Comptes avec 2FA" value={num(((data.stats as Row)?.users2fa))} />
+              <Stat label="Tokens OAuth" value={num(((data.stats as Row)?.oauthTokens))} hint={`${num(((data.stats as Row)?.revokedTokens))} révoqués`} />
+            </div>
+            <div className="ayeba-panel p-4">
+              <p className="ayeba-kicker mb-3">Sessions admin actives</p>
+              <Table
+                head={["Admin", "IP", "Appareil", "Ouverte", "Expire", "Action"]}
+                rows={((data.sessions as Row[]) ?? []).map((x) => [
+                  <span key="a">{s(x.admin_name)} <span className="opacity-50">({s(x.admin_email)})</span></span>,
+                  s(x.ip, "—"),
+                  <span key="ua" className="text-xs opacity-70">{s(x.user_agent).slice(0, 45)}</span>,
+                  dt(x.created_at),
+                  dt(x.expires_at),
+                  <Btn key="r" danger onClick={() => {
+                    if (window.confirm("Révoquer cette session admin ?")) {
+                      void act("/api/admin/security", { action: "revoke", sessionId: x.id }, "Session révoquée");
+                    }
+                  }}>Révoquer</Btn>,
+                ])}
+                empty="Aucune session active"
+              />
+            </div>
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className="ayeba-panel p-4">
+                <p className="ayeba-kicker mb-3">Tentatives de connexion admin</p>
+                <Table
+                  head={["Email", "IP", "Résultat", "Détail", "Date"]}
+                  rows={((data.loginAttempts as Row[]) ?? []).map((x) => [
+                    s(x.email), s(x.ip, "—"),
+                    <Badge key="r" tone={x.success ? "ok" : "bad"}>{x.success ? "succès" : "échec"}</Badge>,
+                    s(x.detail), dt(x.created_at),
+                  ])}
+                  empty="Aucune tentative"
+                />
+              </div>
+              <div className="ayeba-panel p-4">
+                <p className="ayeba-kicker mb-3">Événements OAuth</p>
+                <Table
+                  head={["Événement", "Client", "IP", "Date"]}
+                  rows={((data.oauthEvents as Row[]) ?? []).map((x) => [
+                    <Badge key="e" tone={String(x.event_type).includes("denied") || String(x.event_type).includes("fail") ? "bad" : "info"}>{s(x.event_type)}</Badge>,
+                    s(x.client_id).slice(0, 18), s(x.ip, "—"), dt(x.created_at),
+                  ])}
+                  empty="Aucun événement"
+                />
+              </div>
+            </div>
+          </section>
+        )}
+
+        {tab === "system" && (
+          <section className="space-y-4">
+            <header>
+              <h2 className="text-xl font-semibold">Système</h2>
+              <p className="text-sm opacity-60">
+                Base <code>{s(((data.runtime as Row)?.dbMode))}</code> · {s(((data.runtime as Row)?.env))} · région {s(((data.runtime as Row)?.region))}
+              </p>
+            </header>
+            <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+              <Stat label="Mode base de données" value={<Badge tone={((data.runtime as Row)?.dbMode) === "turso" ? "ok" : "warn"}>{s(((data.runtime as Row)?.dbMode))}</Badge>} hint={s(((data.runtime as Row)?.node))} />
+              <Stat label="Appels API (24 h)" value={num(((data.api24h as Row)?.calls))} hint={`${num(((data.api24h as Row)?.errors))} erreurs`} />
+              <Stat label="Latence moy. API" value={`${num(((data.api24h as Row)?.avgLatencyMs))} ms`} />
+              <Stat label="Heure serveur" value={dt(((data.runtime as Row)?.serverTime))} />
+            </div>
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className="ayeba-panel p-4">
+                <p className="ayeba-kicker mb-3">Volumes par table</p>
+                <Table
+                  head={["Table", "Lignes"]}
+                  rows={Object.entries(((data.tables as Record<string, number>) ?? {})).map(([t, n]) => [
+                    <code key="t" className="text-xs">{t}</code>,
+                    n < 0 ? <Badge key="n" tone="bad">absente</Badge> : n.toLocaleString("fr-CD"),
+                  ])}
+                  empty="—"
+                />
+              </div>
+              <div className="ayeba-panel p-4">
+                <p className="ayeba-kicker mb-3">Jobs récents</p>
+                <Table
+                  head={["Job", "Statut", "Démarré", "Terminé"]}
+                  rows={((data.jobs as Row[]) ?? []).map((x) => [
+                    s(x.job_type),
+                    <Badge key="s" tone={statusTone(x.status)}>{s(x.status)}</Badge>,
+                    dt(x.started_at), dt(x.finished_at),
+                  ])}
+                  empty="Aucun job enregistré"
                 />
               </div>
             </div>

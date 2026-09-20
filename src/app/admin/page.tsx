@@ -1,36 +1,22 @@
 import { redirect } from "next/navigation";
-import { getSessionFromCookies } from "@/lib/auth-server";
-import { allowedSections, getAdminByUserId, isAdminEmail } from "@/lib/admin/auth";
+import { getAdminSession } from "@/lib/admin/session";
+import { allowedSections, isAdminEmail } from "@/lib/admin/access";
 import { AdminConsole } from "@/components/admin/AdminConsole";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Ayeba · Back Office" };
 
 export default async function AdminPage() {
-  const user = await getSessionFromCookies();
-  if (!user) redirect("/ayebi/connexion?redirect=/admin");
-
-  const admin = getAdminByUserId(user.id);
-  if (!admin && !isAdminEmail(user.email)) {
-    return (
-      <main className="flex min-h-screen items-center justify-center px-6">
-        <div className="ayeba-panel max-w-md p-8 text-center">
-          <p className="ayeba-kicker ayeba-kicker-accent mb-2">Accès refusé</p>
-          <h1 className="text-xl font-semibold">Zone réservée</h1>
-          <p className="mt-2 text-sm opacity-70">
-            Ce compte n&apos;a pas les droits d&apos;administration Ayeba.
-          </p>
-        </div>
-      </main>
-    );
-  }
+  // Dedicated admin session only — a regular Ayeba login never suffices.
+  const session = await getAdminSession();
+  if (!session) redirect("/admin/connexion");
 
   return (
     <AdminConsole
-      adminName={admin?.name ?? user.name}
-      adminEmail={admin?.email ?? user.email}
-      adminRole={admin?.role ?? "super_admin"}
-      sections={allowedSections(admin, isAdminEmail(user.email))}
+      adminName={session.admin.name}
+      adminEmail={session.admin.email}
+      adminRole={session.admin.role}
+      sections={allowedSections(session.admin, isAdminEmail(session.user.email))}
     />
   );
 }

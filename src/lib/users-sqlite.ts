@@ -13,7 +13,7 @@ export function syncUserToSqlite(user: DbUser, role: AyebiRole = "contributor") 
     )
     .run(
       user.id,
-      user.name,
+      user.name?.trim() || user.email.split("@")[0],
       user.email,
       user.passwordHash,
       user.avatarColor,

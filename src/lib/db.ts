@@ -12,6 +12,7 @@ export type DbUser = {
   avatarColor: string;
   provider: "email" | "google" | "github" | "microsoft" | "apple";
   createdAt: string;
+  status: "active" | "suspended";
 };
 
 export type CrawlDoc = {
@@ -36,23 +37,30 @@ function shouldUseSqliteStore() {
   return true;
 }
 
-function rowToUser(row: {
+const USER_COLUMNS =
+  "id, name, email, password_hash, avatar_color, provider, status, created_at";
+
+type UserRow = {
   id: string;
   name: string;
   email: string;
   password_hash: string;
   avatar_color: string;
   provider: string;
+  status?: string;
   created_at: string;
-}): DbUser {
+};
+
+function rowToUser(row: UserRow): DbUser {
   return {
     id: row.id,
-    name: row.name,
+    name: row.name?.trim() || row.email.split("@")[0],
     email: row.email,
     passwordHash: row.password_hash,
     avatarColor: row.avatar_color,
     provider: row.provider as DbUser["provider"],
     createdAt: row.created_at,
+    status: row.status === "suspended" ? "suspended" : "active",
   };
 }
 
@@ -95,18 +103,8 @@ async function writeJson<T>(file: string, data: T) {
 export async function getUsers(): Promise<DbUser[]> {
   if (shouldUseSqliteStore()) {
     const rows = getDb()
-      .prepare(
-        "SELECT id, name, email, password_hash, avatar_color, provider, created_at FROM users ORDER BY created_at",
-      )
-      .all() as Array<{
-      id: string;
-      name: string;
-      email: string;
-      password_hash: string;
-      avatar_color: string;
-      provider: string;
-      created_at: string;
-    }>;
+      .prepare(`SELECT ${USER_COLUMNS} FROM users ORDER BY created_at`)
+      .all() as UserRow[];
     if (rows.length > 0) return rows.map(rowToUser);
 
     // One-time hydrate from legacy JSON (local only).
@@ -140,7 +138,8 @@ export async function saveUsers(users: DbUser[]) {
   for (const u of users) {
     upsert.run(
       u.id,
-      u.name,
+      // Never bind NULL — a single null-name row would fail every upsert batch.
+      u.name?.trim() || u.email.split("@")[0],
       u.email,
       u.passwordHash,
       u.avatarColor,
@@ -158,20 +157,8 @@ export async function saveUsers(users: DbUser[]) {
 export async function findUserByEmail(email: string) {
   if (shouldUseSqliteStore()) {
     const row = getDb()
-      .prepare(
-        "SELECT id, name, email, password_hash, avatar_color, provider, created_at FROM users WHERE lower(email) = lower(?)",
-      )
-      .get(email) as
-      | {
-          id: string;
-          name: string;
-          email: string;
-          password_hash: string;
-          avatar_color: string;
-          provider: string;
-          created_at: string;
-        }
-      | undefined;
+      .prepare(`SELECT ${USER_COLUMNS} FROM users WHERE lower(email) = lower(?)`)
+      .get(email) as UserRow | undefined;
     if (row) return rowToUser(row);
   }
   const users = await getUsers();
@@ -181,20 +168,8 @@ export async function findUserByEmail(email: string) {
 export async function findUserById(id: string) {
   if (shouldUseSqliteStore()) {
     const row = getDb()
-      .prepare(
-        "SELECT id, name, email, password_hash, avatar_color, provider, created_at FROM users WHERE id = ?",
-      )
-      .get(id) as
-      | {
-          id: string;
-          name: string;
-          email: string;
-          password_hash: string;
-          avatar_color: string;
-          provider: string;
-          created_at: string;
-        }
-      | undefined;
+      .prepare(`SELECT ${USER_COLUMNS} FROM users WHERE id = ?`)
+      .get(id) as UserRow | undefined;
     if (row) return rowToUser(row);
   }
   const users = await getUsers();
