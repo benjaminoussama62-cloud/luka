@@ -212,6 +212,7 @@ function createBrowserWindow(isPrivate = false) {
     nextId: 1,
     findOpen: false,
     isPrivate,
+    overlayOpen: false,
   };
 
   const chrome = new WebContentsView({
@@ -238,7 +239,10 @@ function createBrowserWindow(isPrivate = false) {
 
   function layout() {
     const { width, height } = win.getContentBounds();
-    chrome.setBounds({ x: 0, y: 0, width, height });
+    // The chrome view is the topmost view: it must only cover the toolbar,
+    // otherwise it swallows every click meant for the page below. It expands
+    // to full height only while an overlay (menu, flyouts, findbar) is open.
+    chrome.setBounds({ x: 0, y: 0, width, height: state.overlayOpen ? height : CHROME_H });
     for (const t of state.tabs) {
       t.view.setBounds({ x: 0, y: CHROME_H, width, height: Math.max(0, height - CHROME_H) });
     }
@@ -699,6 +703,10 @@ function createBrowserWindow(isPrivate = false) {
       const t = activeTab();
       if (t) t.view.webContents.loadURL("https://ayeba.app/ayebi");
     },
+    "chrome:overlay": (_e, open) => {
+      state.overlayOpen = !!open;
+      layout();
+    },
   };
 
   windows.add(state);
@@ -746,6 +754,7 @@ function bindIpc() {
     "settings:set",
     "settings:search-url",
     "nav:ayebi",
+    "chrome:overlay",
   ];
 
   for (const channel of channels) {

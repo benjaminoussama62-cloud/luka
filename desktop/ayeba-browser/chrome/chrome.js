@@ -66,6 +66,12 @@
   let openOverlay = null;
   let favCache = [];
 
+  // The main process resizes the chrome view: 126px when nothing is open so
+  // page clicks reach the content view, full height while an overlay shows.
+  function syncChromeBounds() {
+    api.invoke("chrome:overlay", !!openOverlay || (els.findbar && !els.findbar.hidden));
+  }
+
   function displayUrl(url) {
     if (!url) return "";
     if (url.startsWith("file:") && url.includes("/newtab/")) return "";
@@ -277,6 +283,7 @@
     els.favSearchBox && (els.favSearchBox.hidden = true);
     setBackdrop(false);
     openOverlay = null;
+    syncChromeBounds();
   }
 
   function openFlyout(name) {
@@ -302,6 +309,7 @@
     }
     if (target.backdrop) setBackdrop(true);
     openOverlay = name;
+    syncChromeBounds();
   }
 
   async function showSettings() {
@@ -312,6 +320,7 @@
     requestAnimationFrame(() => els.panel.classList.add("open"));
     setBackdrop(true);
     openOverlay = "panel";
+    syncChromeBounds();
 
     const data = await api.invoke("settings:get");
     const engines = data?.engines || state.searchEngines || [];
@@ -341,6 +350,7 @@
     requestAnimationFrame(() => els.panel.classList.add("open"));
     setBackdrop(true);
     openOverlay = "panel";
+    syncChromeBounds();
 
     const items = await api.invoke(kind === "favorites" ? "fav:list" : "history:list");
     if (!items?.length) {
@@ -368,6 +378,7 @@
     requestAnimationFrame(() => els.panel.classList.add("open"));
     setBackdrop(true);
     openOverlay = "panel";
+    syncChromeBounds();
 
     els.panelBody.innerHTML = "";
     for (const t of state.tabs) {
@@ -398,6 +409,7 @@
   function openFind() {
     closeAllOverlays();
     els.findbar.hidden = false;
+    syncChromeBounds();
     els.findInput.focus();
     els.findInput.select();
   }
@@ -546,12 +558,14 @@
   els.findPrev?.addEventListener("click", () => api.invoke("find:prev", els.findInput.value));
   els.findClose?.addEventListener("click", () => {
     els.findbar.hidden = true;
+    syncChromeBounds();
     api.invoke("find:stop");
   });
   els.findInput?.addEventListener("keydown", (e) => {
     if (e.key === "Enter") api.invoke("find:next", els.findInput.value);
     if (e.key === "Escape") {
       els.findbar.hidden = true;
+      syncChromeBounds();
       api.invoke("find:stop");
     }
   });
