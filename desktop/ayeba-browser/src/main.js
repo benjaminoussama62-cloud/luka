@@ -176,9 +176,9 @@ function revealWindow(win) {
   win.focus();
 }
 
-function createBrowserWindow() {
+function createBrowserWindow(isPrivate = false) {
   ensureData();
-  log(`createBrowserWindow execPath=${process.execPath}`);
+  log(`createBrowserWindow execPath=${process.execPath} private=${isPrivate}`);
 
   let win;
   try {
@@ -188,7 +188,7 @@ function createBrowserWindow() {
       minWidth: 720,
       minHeight: 480,
       backgroundColor: "#050507",
-      title: "AYEBA",
+      title: isPrivate ? "AYEBA — InPrivate" : "AYEBA",
       autoHideMenuBar: true,
       // BaseWindow often never fires ready-to-show — show immediately so the app is visible.
       show: true,
@@ -211,6 +211,7 @@ function createBrowserWindow() {
     activeId: null,
     nextId: 1,
     findOpen: false,
+    isPrivate,
   };
 
   const chrome = new WebContentsView({
@@ -251,12 +252,14 @@ function createBrowserWindow() {
   }
 
   function tabSnapshot() {
-    return state.tabs.map((t) => ({
+    const sorted = [...state.tabs].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
+    return sorted.map((t) => ({
       id: t.id,
       title: t.title,
       url: t.url,
       favicon: t.favicon,
       loading: t.loading,
+      pinned: !!t.pinned,
       active: t.id === state.activeId,
       canGoBack: canBack(t.view.webContents),
       canGoForward: canForward(t.view.webContents),
@@ -272,6 +275,7 @@ function createBrowserWindow() {
       url: active?.url || "",
       title: active?.title || "AYEBA",
       loading: !!active?.loading,
+      isPrivate: !!state.isPrivate,
       canGoBack: active ? canBack(active.view.webContents) : false,
       canGoForward: active ? canForward(active.view.webContents) : false,
       zoomFactor: active && !active.view.webContents.isDestroyed() ? active.view.webContents.getZoomFactor() : 1,
@@ -328,7 +332,7 @@ function createBrowserWindow() {
       tab.loading = false;
       tab.url = wc.getURL();
       tab.title = wc.getTitle() || tab.title;
-      if (!isNewTab(tab.url) && tab.url.startsWith("http")) {
+      if (!state.isPrivate && !isNewTab(tab.url) && tab.url.startsWith("http")) {
         pushHistory({ title: tab.title, url: tab.url });
       }
       pushChromeState();
@@ -348,6 +352,75 @@ function createBrowserWindow() {
       // Speed: block heavy media autoplay noise by default policy already set on session
       pushChromeState();
     });
+
+    // Real browser context menu (Edge-style right click on pages).
+    wc.on("context-menu", (_e, params) => {
+      const items = [];
+      if (params.linkURL) {
+        items.push(
+          {
+            label: "Ouvrir le lien dans un nouvel onglet",
+            click: () => createTab(params.linkURL, true),
+          },
+          {
+            label: "Copier l'adresse du lien",
+            click: () => require("electron").clipboard.writeText(params.linkURL),
+          },
+          { type: "separator" },
+        );
+      }
+      if (params.mediaType === "image" && params.srcURL) {
+        items.push(
+          {
+            label: "Ouvrir l'image dans un nouvel onglet",
+            click: () => createTab(params.srcURL, true),
+          },
+          {
+            label: "Copier l'adresse de l'image",
+            click: () => require("electron").clipboard.writeText(params.srcURL),
+          },
+          { type: "separator" },
+        );
+      }
+      if (params.isEditable) {
+        items.push(
+          { role: "undo", label: "Annuler" },
+          { role: "redo", label: "Rétablir" },
+          { type: "separator" },
+          { role: "cut", label: "Couper" },
+          { role: "copy", label: "Copier" },
+          { role: "paste", label: "Coller" },
+          { role: "selectAll", label: "Tout sélectionner" },
+          { type: "separator" },
+        );
+      } else if (params.selectionText) {
+        items.push(
+          { role: "copy", label: "Copier" },
+          {
+            label: `Rechercher « ${String(params.selectionText).slice(0, 40)} » avec Ayeba`,
+            click: () =>
+              createTab(buildSearchUrl(String(params.selectionText), readSettings().searchEngine), true),
+          },
+          { type: "separator" },
+        );
+      }
+      items.push(
+        {
+          label: "Précédent",
+          enabled: canBack(wc),
+          click: () => wc.goBack(),
+        },
+        {
+          label: "Suivant",
+          enabled: canForward(wc),
+          click: () => wc.goForward(),
+        },
+        { label: "Actualiser", click: () => wc.reload() },
+        { type: "separator" },
+        { label: "Inspecter", click: () => wc.openDevTools({ mode: "detach" }) },
+      );
+      Menu.buildFromTemplate(items).popup({ window: win });
+    });
   }
 
   function createTab(url = HOME_URL, activate = true) {
@@ -360,6 +433,8 @@ function createBrowserWindow() {
         sandbox: true,
         backgroundThrottling: false,
         spellcheck: true,
+        // InPrivate: in-memory partition — cookies/cache wiped when the window closes.
+        ...(state.isPrivate ? { partition: "ayeba-inprivate" } : {}),
       },
     });
 
@@ -440,6 +515,36 @@ function createBrowserWindow() {
     "tabs:new": () => createTab(HOME_URL, true),
     "tabs:close": (_e, id) => closeTab(id || state.activeId),
     "tabs:activate": (_e, id) => showTab(id),
+    "tabs:duplicate": (_e, id) => {
+      const src = state.tabs.find((t) => t.id === (id ?? state.activeId));
+      if (src) createTab(src.url, true);
+    },
+    "tabs:close-others": (_e, id) => {
+      const keep = id ?? state.activeId;
+      for (const t of [...state.tabs]) {
+        if (t.id !== keep) closeTab(t.id);
+      }
+    },
+    "tabs:toggle-pin": (_e, id) => {
+      const t = state.tabs.find((x) => x.id === (id ?? state.activeId));
+      if (!t) return;
+      t.pinned = !t.pinned;
+      pushChromeState();
+    },
+    "tabs:menu": (_e, id) => {
+      const t = state.tabs.find((x) => x.id === id);
+      if (!t) return;
+      Menu.buildFromTemplate([
+        { label: "Nouvel onglet", click: () => createTab(HOME_URL, true) },
+        { label: "Dupliquer", click: () => state.handlers["tabs:duplicate"](_e, id) },
+        { label: t.pinned ? "Détacher l'onglet" : "Épingler l'onglet", click: () => state.handlers["tabs:toggle-pin"](_e, id) },
+        { type: "separator" },
+        { label: "Actualiser l'onglet", click: () => t.view.webContents.reload() },
+        { type: "separator" },
+        { label: "Fermer les autres onglets", click: () => state.handlers["tabs:close-others"](_e, id) },
+        { label: "Fermer l'onglet", click: () => closeTab(id) },
+      ]).popup({ window: win });
+    },
     "nav:back": () => {
       const t = activeTab();
       if (t && canBack(t.view.webContents)) t.view.webContents.goBack();
@@ -487,6 +592,11 @@ function createBrowserWindow() {
       if (!t) return;
       t.view.webContents.findInPage(String(text || ""), { forward: true, findNext: true });
     },
+    "find:prev": (_e, text) => {
+      const t = activeTab();
+      if (!t) return;
+      t.view.webContents.findInPage(String(text || ""), { forward: false, findNext: true });
+    },
     "find:stop": () => {
       const t = activeTab();
       if (t) t.view.webContents.stopFindInPage("clearSelection");
@@ -494,6 +604,33 @@ function createBrowserWindow() {
     "page:print": () => {
       const t = activeTab();
       if (t) t.view.webContents.print({});
+    },
+    "page:screenshot": async () => {
+      const t = activeTab();
+      if (!t) return false;
+      try {
+        const image = await t.view.webContents.capturePage();
+        const file = path.join(
+          app.getPath("downloads"),
+          `capture-ayeba-${new Date().toISOString().replace(/[:.]/g, "-")}.png`,
+        );
+        fs.writeFileSync(file, image.toPNG());
+        downloadLog.unshift({
+          id: `${Date.now()}-shot`,
+          filename: path.basename(file),
+          url: t.url,
+          path: file,
+          state: "completed",
+          received: image.getSize().width * image.getSize().height * 4,
+          total: image.getSize().width * image.getSize().height * 4,
+          at: Date.now(),
+        });
+        pushAllChrome();
+        return file;
+      } catch (err) {
+        log(`screenshot failed: ${err?.message || err}`);
+        return false;
+      }
     },
     "fav:list": () => readJson(FAV_FILE, []),
     "fav:add": (_e, item) => {
@@ -537,6 +674,7 @@ function createBrowserWindow() {
       if (typeof url === "string" && /^https?:/i.test(url)) shell.openExternal(url);
     },
     "window:new": () => createBrowserWindow(),
+    "window:new-private": () => createBrowserWindow(true),
     "app:about": () => {
       dialog.showMessageBox(win, {
         type: "info",
@@ -573,6 +711,10 @@ function bindIpc() {
     "tabs:new",
     "tabs:close",
     "tabs:activate",
+    "tabs:duplicate",
+    "tabs:close-others",
+    "tabs:toggle-pin",
+    "tabs:menu",
     "nav:back",
     "nav:forward",
     "nav:reload",
@@ -582,8 +724,10 @@ function bindIpc() {
     "zoom:step",
     "find:start",
     "find:next",
+    "find:prev",
     "find:stop",
     "page:print",
+    "page:screenshot",
     "fav:list",
     "fav:add",
     "fav:remove",
@@ -596,6 +740,7 @@ function bindIpc() {
     "downloads:show-folder",
     "shell:open-external",
     "window:new",
+    "window:new-private",
     "app:about",
     "settings:get",
     "settings:set",

@@ -108,7 +108,7 @@
     for (const tab of state.tabs) {
       const btn = document.createElement("button");
       btn.type = "button";
-      btn.className = `tab${tab.active ? " active" : ""}${tab.loading ? " loading" : ""}`;
+      btn.className = `tab${tab.active ? " active" : ""}${tab.loading ? " loading" : ""}${tab.pinned ? " pinned" : ""}`;
       btn.title = tab.title;
 
       const fav = document.createElement(tab.favicon ? "img" : "span");
@@ -118,21 +118,34 @@
         fav.alt = "";
       }
 
-      const title = document.createElement("span");
-      title.className = "tab-title";
-      title.textContent = tab.title || "Nouvel onglet";
+      btn.appendChild(fav);
+      if (!tab.pinned) {
+        const title = document.createElement("span");
+        title.className = "tab-title";
+        title.textContent = tab.title || "Nouvel onglet";
 
-      const close = document.createElement("button");
-      close.type = "button";
-      close.className = "tab-close";
-      close.textContent = "×";
-      close.addEventListener("click", (e) => {
-        e.stopPropagation();
-        api.invoke("tabs:close", tab.id);
-      });
+        const close = document.createElement("button");
+        close.type = "button";
+        close.className = "tab-close";
+        close.textContent = "×";
+        close.addEventListener("click", (e) => {
+          e.stopPropagation();
+          api.invoke("tabs:close", tab.id);
+        });
+        btn.append(title, close);
+      }
 
-      btn.append(fav, title, close);
       btn.addEventListener("click", () => api.invoke("tabs:activate", tab.id));
+      btn.addEventListener("auxclick", (e) => {
+        if (e.button === 1) {
+          e.preventDefault();
+          api.invoke("tabs:close", tab.id);
+        }
+      });
+      btn.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+        api.invoke("tabs:menu", tab.id);
+      });
       els.tabs.appendChild(btn);
     }
   }
@@ -234,6 +247,9 @@
   function renderChrome() {
     renderTabs();
     renderDownloads();
+    document.body.classList.toggle("inprivate", !!state.isPrivate);
+    const badge = document.getElementById("inprivateBadge");
+    if (badge) badge.hidden = !state.isPrivate;
     els.btnBack.disabled = !state.canGoBack;
     els.btnForward.disabled = !state.canGoForward;
     els.progress.hidden = !state.loading;
@@ -345,6 +361,40 @@
     }
   }
 
+  function showTabsPanel() {
+    closeAllOverlays();
+    els.panel.hidden = false;
+    els.panelTitle.textContent = "Onglets ouverts";
+    requestAnimationFrame(() => els.panel.classList.add("open"));
+    setBackdrop(true);
+    openOverlay = "panel";
+
+    els.panelBody.innerHTML = "";
+    for (const t of state.tabs) {
+      const row = document.createElement("div");
+      row.className = "panel-item tab-manager-row";
+      row.innerHTML = `
+        <strong>${t.pinned ? "📌 " : ""}${escapeHtml(t.title || "Nouvel onglet")}</strong>
+        <span>${escapeHtml(displayUrl(t.url) || "Nouvel onglet")}</span>`;
+      row.addEventListener("click", () => {
+        api.invoke("tabs:activate", t.id);
+        closeAllOverlays();
+      });
+      const close = document.createElement("button");
+      close.type = "button";
+      close.className = "tab-mgr-close";
+      close.textContent = "×";
+      close.title = "Fermer";
+      close.addEventListener("click", (e) => {
+        e.stopPropagation();
+        api.invoke("tabs:close", t.id);
+        setTimeout(showTabsPanel, 120);
+      });
+      row.appendChild(close);
+      els.panelBody.appendChild(row);
+    }
+  }
+
   function openFind() {
     closeAllOverlays();
     els.findbar.hidden = false;
@@ -409,7 +459,7 @@
     const act = e.target.closest("[data-act]");
     if (act?.dataset.act === "settings") showSettings();
     if (act?.dataset.act === "guest") {
-      api.invoke("data:clear");
+      api.invoke("window:new-private");
       closeAllOverlays();
     }
   });
@@ -468,7 +518,7 @@
     const act = btn.dataset.act;
     if (act === "new-tab") api.invoke("tabs:new");
     if (act === "new-window") api.invoke("window:new");
-    if (act === "new-private") api.invoke("window:new");
+    if (act === "new-private") api.invoke("window:new-private");
     if (act === "zoom-in") api.invoke("zoom:step", 0.1);
     if (act === "zoom-out") api.invoke("zoom:step", -0.1);
     if (act === "favorites") {
@@ -476,12 +526,13 @@
       await renderFavoritesDrawer();
     }
     if (act === "history") showList("history");
+    if (act === "tab-groups") showTabsPanel();
     if (act === "settings" || act === "extensions" || act === "passwords") showSettings();
     if (act === "ayebi") api.invoke("nav:ayebi");
     if (act === "downloads") openFlyout("downloads");
     if (act === "find") openFind();
     if (act === "print") api.invoke("page:print");
-    if (act === "screenshot") api.invoke("page:print");
+    if (act === "screenshot") api.invoke("page:screenshot");
     if (act === "clear") {
       await api.invoke("data:clear");
       await api.invoke("history:clear");
@@ -492,7 +543,7 @@
 
   els.panelClose?.addEventListener("click", () => closeAllOverlays());
   els.findNext?.addEventListener("click", () => api.invoke("find:next", els.findInput.value));
-  els.findPrev?.addEventListener("click", () => api.invoke("find:next", els.findInput.value));
+  els.findPrev?.addEventListener("click", () => api.invoke("find:prev", els.findInput.value));
   els.findClose?.addEventListener("click", () => {
     els.findbar.hidden = true;
     api.invoke("find:stop");

@@ -11,23 +11,19 @@ export const metadata: Metadata = {
     "AYEBA, l'expérience de recherche et de navigation pensée pour le web mondial et l'Afrique centrale.",
   openGraph: {
     title: "Télécharger AYEBA",
-    description: "Une expérience AYEBA cohérente sur Windows, iOS et Android.",
+    description: "AYEBA Browser pour Windows, et bientôt sur iOS et Android.",
     url: "https://ayeba.app/telecharger",
   },
 };
 
-const VERSION = process.env.NEXT_PUBLIC_BROWSER_VERSION || "1.0.4";
+const VERSION = process.env.NEXT_PUBLIC_BROWSER_VERSION || "1.0.7";
 const FILENAME = `AYEBA-Setup-${VERSION}.exe`;
 const SETUP_URL =
   process.env.NEXT_PUBLIC_BROWSER_SETUP_URL ||
   `https://github.com/benjaminoussama62-cloud/luka/releases/latest/download/${FILENAME}`;
 
-const PLAY_STORE_URL =
-  process.env.NEXT_PUBLIC_PLAY_STORE_URL ||
-  "https://play.google.com/store/apps/details?id=app.ayeba.mobile";
-
-const APP_STORE_URL =
-  process.env.NEXT_PUBLIC_APP_STORE_URL || "https://ayeba.app/?app=1";
+const PLAY_STORE_URL = process.env.NEXT_PUBLIC_PLAY_STORE_URL;
+const APP_STORE_URL = process.env.NEXT_PUBLIC_APP_STORE_URL;
 const PORTABLE_URL = process.env.NEXT_PUBLIC_BROWSER_DOWNLOAD_URL;
 
 const FEATURES = [
@@ -102,41 +98,69 @@ export default function TelechargerPage() {
                 <p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">
                   Une interface pensée pour le tactile, les connexions mobiles et les écrans compacts, avec la même identité et le même accès au web.
                 </p>
+                <p className="mt-3 inline-flex items-center gap-2 rounded-full border border-[var(--line)] px-3 py-1 text-xs font-medium text-[var(--muted)]">
+                  Applications iOS et Android en cours de publication
+                </p>
               </div>
               <div className="flex flex-col items-center gap-4 sm:items-end">
-                <a
-                  href={APP_STORE_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="store-badge-link"
-                  aria-label="Télécharger sur l’App Store"
-                >
-                  {/* Badge officiel Apple — Marketing Resources */}
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src="/brand/store-badges/app-store-fr.svg"
-                    alt="Télécharger dans l’App Store"
-                    width={156}
-                    height={52}
-                    className="h-[52px] w-auto"
-                  />
-                </a>
-                <a
-                  href={PLAY_STORE_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="store-badge-link"
-                  aria-label="Disponible sur Google Play"
-                >
-                  {/* Badge officiel Google Play */}
-                  <Image
-                    src="/brand/store-badges/google-play-fr.png"
-                    alt="Disponible sur Google Play"
-                    width={180}
-                    height={52}
-                    className="h-[52px] w-auto"
-                  />
-                </a>
+                {APP_STORE_URL ? (
+                  <a
+                    href={APP_STORE_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="store-badge-link"
+                    aria-label="Télécharger sur l’App Store"
+                  >
+                    {/* Badge officiel Apple — Marketing Resources */}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src="/brand/store-badges/app-store-fr.svg"
+                      alt="Télécharger dans l’App Store"
+                      width={156}
+                      height={52}
+                      className="h-[52px] w-auto"
+                    />
+                  </a>
+                ) : (
+                  <div className="store-badge-link opacity-60" aria-label="Bientôt disponible sur l’App Store" title="Bientôt disponible">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src="/brand/store-badges/app-store-fr.svg"
+                      alt="Bientôt disponible sur l’App Store"
+                      width={156}
+                      height={52}
+                      className="h-[52px] w-auto grayscale"
+                    />
+                  </div>
+                )}
+                {PLAY_STORE_URL ? (
+                  <a
+                    href={PLAY_STORE_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="store-badge-link"
+                    aria-label="Disponible sur Google Play"
+                  >
+                    {/* Badge officiel Google Play */}
+                    <Image
+                      src="/brand/store-badges/google-play-fr.png"
+                      alt="Disponible sur Google Play"
+                      width={180}
+                      height={52}
+                      className="h-[52px] w-auto"
+                    />
+                  </a>
+                ) : (
+                  <div className="store-badge-link opacity-60" aria-label="Bientôt disponible sur Google Play" title="Bientôt disponible">
+                    <Image
+                      src="/brand/store-badges/google-play-fr.png"
+                      alt="Bientôt disponible sur Google Play"
+                      width={180}
+                      height={52}
+                      className="h-[52px] w-auto grayscale"
+                    />
+                  </div>
+                )}
               </div>
             </div>
           </section>
