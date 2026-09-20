@@ -224,7 +224,7 @@ function createBrowserWindow(isPrivate = false) {
     },
   });
   state.chrome = chrome;
-  chrome.webContents.setBackgroundColor("#00000000");
+  chrome.setBackgroundColor("#00000000");
   win.contentView.addChildView(chrome);
   chrome.webContents.loadURL(CHROME_URL);
 
