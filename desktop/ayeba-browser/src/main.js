@@ -10,6 +10,8 @@ const {
   nativeTheme,
   safeStorage,
   clipboard,
+  webContents,
+  net,
 } = require("electron");
 const { autoUpdater } = require("electron-updater");
 const path = require("path");
@@ -105,32 +107,92 @@ function pushAllChrome() {
 const windows = new Set();
 const permissionDecisions = new Map();
 
+const DEFAULT_SETTINGS = {
+  searchEngine: DEFAULT_ENGINE,
+  extensions: [],
+  doNotTrack: true,
+  blockThirdPartyCookies: false,
+  askSavePath: false,
+};
+
 function ensureData() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
   if (!fs.existsSync(HISTORY_FILE)) fs.writeFileSync(HISTORY_FILE, "[]");
   if (!fs.existsSync(FAV_FILE)) fs.writeFileSync(FAV_FILE, "[]");
   if (!fs.existsSync(SETTINGS_FILE)) {
-    fs.writeFileSync(SETTINGS_FILE, JSON.stringify({ searchEngine: DEFAULT_ENGINE }, null, 2));
+    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(DEFAULT_SETTINGS, null, 2));
   }
 }
 
 function readSettings() {
-  const raw = readJson(SETTINGS_FILE, { searchEngine: DEFAULT_ENGINE, extensions: [] });
-  const searchEngine = isEngine(raw.searchEngine) ? raw.searchEngine : DEFAULT_ENGINE;
-  const extensions = Array.isArray(raw.extensions)
-    ? raw.extensions.filter((p) => typeof p === "string" && p)
+  const merged = { ...DEFAULT_SETTINGS, ...readJson(SETTINGS_FILE, {}) };
+  const searchEngine = isEngine(merged.searchEngine) ? merged.searchEngine : DEFAULT_ENGINE;
+  const extensions = Array.isArray(merged.extensions)
+    ? merged.extensions.filter((p) => typeof p === "string" && p)
     : [];
-  return { searchEngine, extensions };
+  return {
+    searchEngine,
+    extensions,
+    doNotTrack: merged.doNotTrack !== false,
+    blockThirdPartyCookies: !!merged.blockThirdPartyCookies,
+    askSavePath: !!merged.askSavePath,
+  };
 }
 
 function writeSettings(patch) {
   const next = { ...readSettings(), ...patch };
   if (!isEngine(next.searchEngine)) next.searchEngine = DEFAULT_ENGINE;
   writeJson(SETTINGS_FILE, next);
+  applyPrivacy();
   for (const state of windows) {
     if (state.pushChromeState) state.pushChromeState();
   }
   return next;
+}
+
+// Vie privée réelle : en-tête « Do Not Track » + blocage des cookies tiers
+// (les en-têtes Set-Cookie hors site visité sont supprimés dans webRequest).
+function applyPrivacy() {
+  const s = readSettings();
+  const ses = session.defaultSession;
+  ses.webRequest.onBeforeSendHeaders((details, callback) => {
+    if (s.doNotTrack) details.requestHeaders["DNT"] = "1";
+    callback({ requestHeaders: details.requestHeaders });
+  });
+  ses.webRequest.onHeadersReceived((details, callback) => {
+    if (!s.blockThirdPartyCookies || !details.responseHeaders) return callback({});
+    try {
+      const reqHost = new URL(details.url).hostname;
+      let topHost = reqHost;
+      const wc = details.webContentsId != null ? webContents.fromId(details.webContentsId) : null;
+      const topUrl = wc && !wc.isDestroyed() ? wc.getURL() : "";
+      if (topUrl && /^https?:/.test(topUrl)) topHost = new URL(topUrl).hostname;
+      const sameSite =
+        reqHost === topHost ||
+        reqHost.endsWith(`.${topHost}`) ||
+        topHost.endsWith(`.${reqHost}`);
+      if (sameSite) return callback({});
+      const responseHeaders = { ...details.responseHeaders };
+      for (const key of Object.keys(responseHeaders)) {
+        if (key.toLowerCase() === "set-cookie") delete responseHeaders[key];
+      }
+      return callback({ responseHeaders });
+    } catch {
+      return callback({});
+    }
+  });
+}
+
+function uniqueDownloadPath(dir, name) {
+  let target = path.join(dir, name);
+  if (!fs.existsSync(target)) return target;
+  const ext = path.extname(name);
+  const base = name.slice(0, name.length - ext.length);
+  for (let i = 1; i < 1000; i++) {
+    target = path.join(dir, `${base} (${i})${ext}`);
+    if (!fs.existsSync(target)) return target;
+  }
+  return target;
 }
 
 function readJson(file, fallback) {
@@ -295,7 +357,9 @@ function createBrowserWindow(isPrivate = false) {
     },
   });
   state.chrome = chrome;
-  chrome.setBackgroundColor("#0a0c11");
+  // Transparent : quand la vue s'étend pour un panneau, la page web reste
+  // visible derrière (floutée par le backdrop CSS), comme sur ayeba.app.
+  chrome.setBackgroundColor("#00000000");
   win.contentView.addChildView(chrome);
   chrome.webContents.loadURL(CHROME_URL);
 
@@ -319,6 +383,12 @@ function createBrowserWindow(isPrivate = false) {
     try {
       win.contentView.removeChildView(chrome);
       win.contentView.addChildView(chrome);
+      // Quand l'overlay est ouvert, la vue chrome couvre toute la fenêtre :
+      // le rail repasse au-dessus pour rester visible et cliquable.
+      if (state.overlayOpen && state.rail && !state.rail.webContents.isDestroyed()) {
+        win.contentView.removeChildView(state.rail);
+        win.contentView.addChildView(state.rail);
+      }
     } catch {}
   }
 
@@ -390,7 +460,10 @@ function createBrowserWindow(isPrivate = false) {
       })),
     });
     if (state.rail && !state.rail.webContents.isDestroyed()) {
-      state.rail.webContents.send("browser:state", { isPrivate: !!state.isPrivate });
+      state.rail.webContents.send("rail:state", {
+        isPrivate: !!state.isPrivate,
+        downloading: downloadLog.some((d) => d.state === "progressing"),
+      });
     }
   }
 
@@ -414,7 +487,7 @@ function createBrowserWindow(isPrivate = false) {
     });
 
     wc.on("page-title-updated", (_e, title) => {
-      tab.title = title || "AYEBA";
+      tab.title = isNewTab(tab.url) ? "Nouvel onglet" : (title || "AYEBA");
       pushChromeState();
     });
 
@@ -431,7 +504,7 @@ function createBrowserWindow(isPrivate = false) {
     wc.on("did-stop-loading", () => {
       tab.loading = false;
       tab.url = wc.getURL();
-      tab.title = wc.getTitle() || tab.title;
+      tab.title = isNewTab(tab.url) ? "Nouvel onglet" : (wc.getTitle() || tab.title);
       if (!state.isPrivate && !isNewTab(tab.url) && tab.url.startsWith("http")) {
         pushHistory({ title: tab.title, url: tab.url });
       }
@@ -764,10 +837,19 @@ function createBrowserWindow(isPrivate = false) {
       writeJson(HISTORY_FILE, []);
       return [];
     },
-    "data:clear": async () => {
-      await session.defaultSession.clearCache();
-      await session.defaultSession.clearStorageData();
-      writeJson(HISTORY_FILE, []);
+    "data:clear": async (_e, scope = {}) => {
+      const jobs = [];
+      if (scope.cache !== false) jobs.push(session.defaultSession.clearCache());
+      if (scope.cookies) {
+        jobs.push(session.defaultSession.clearStorageData({ storages: ["cookies"] }));
+      }
+      if (scope.siteData) jobs.push(session.defaultSession.clearStorageData());
+      if (scope.history !== false) writeJson(HISTORY_FILE, []);
+      if (scope.downloads) {
+        downloadLog.length = 0;
+        pushAllChrome();
+      }
+      await Promise.all(jobs);
       return true;
     },
     "shell:open-downloads": () => {
@@ -797,7 +879,46 @@ function createBrowserWindow(isPrivate = false) {
         buttons: ["OK"],
       });
     },
-    "settings:get": () => ({ ...readSettings(), engines: engineList().map(({ id, name }) => ({ id, name })) }),
+    "settings:get": () => ({
+      ...readSettings(),
+      version: app.getVersion(),
+      engines: engineList().map(({ id, name }) => ({ id, name })),
+    }),
+    // Vrai compte Ayeba : même cookie de session que le site (partagé via la
+    // session Chromium) → le navigateur affiche le profil réel de l'utilisateur.
+    "account:get": async () => {
+      try {
+        const jar = await session.defaultSession.cookies.get({
+          url: "https://ayeba.app",
+          name: "ayeba_session",
+        });
+        const token = jar[0]?.value;
+        if (!token) return { user: null };
+        const res = await net.fetch("https://ayeba.app/api/auth/omega/session", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+        return { user: data?.user || null };
+      } catch (err) {
+        log(`account:get ${err?.message || err}`);
+        return { user: null };
+      }
+    },
+    "account:logout": async () => {
+      try {
+        await session.defaultSession.cookies.remove("https://ayeba.app", "ayeba_session");
+      } catch {}
+      return { ok: true };
+    },
+    "app:check-update": async () => {
+      if (!app.isPackaged) return { version: app.getVersion(), dev: true };
+      try {
+        await autoUpdater.checkForUpdates();
+      } catch (err) {
+        log(`update check: ${err?.message || err}`);
+      }
+      return { version: app.getVersion() };
+    },
     "settings:set": (_e, patch) => writeSettings(patch || {}),
     "settings:search-url": (_e, query) => {
       const { searchEngine } = readSettings();
@@ -813,8 +934,10 @@ function createBrowserWindow(isPrivate = false) {
     },
     // Le rail envoie ses actions ici ; le main les relaie au chrome qui
     // affiche l'overlay correspondant (ui:open).
-    "rail:action": (_e, name) => {
-      emitChrome("ui:open", name);
+    "rail:action": (_e, payload) => {
+      // p.y = hauteur du bouton dans la vue rail → coordonnées fenêtre (+CHROME_H)
+      const p = typeof payload === "object" && payload ? payload : { act: payload };
+      emitChrome("ui:open", { name: p.act, y: (typeof p.y === "number" ? p.y : 240) + CHROME_H });
       return true;
     },
     // ── Extensions réelles ──
@@ -959,6 +1082,9 @@ function bindIpc() {
     "pass:copy",
     "pass:fill",
     "app:quit",
+    "app:check-update",
+    "account:get",
+    "account:logout",
   ];
 
   for (const channel of channels) {
@@ -994,6 +1120,7 @@ app.whenReady().then(() => {
   log(`ready v${app.getVersion()} userData=${app.getPath("userData")}`);
   ensureData();
   Menu.setApplicationMenu(null);
+  applyPrivacy();
   void restoreExtensions();
   session.defaultSession.setPermissionRequestHandler(async (webContents, permission, callback, details) => {
     const requestingUrl = details?.requestingUrl || webContents.getURL();
@@ -1052,6 +1179,18 @@ app.whenReady().then(() => {
   }
 
   session.defaultSession.on("will-download", (_event, item) => {
+    const s = readSettings();
+    const downloadsDir = app.getPath("downloads");
+    if (s.askSavePath) {
+      dialog
+        .showSaveDialog({ defaultPath: path.join(downloadsDir, item.getFilename()) })
+        .then((r) => {
+          if (r.canceled || !r.filePath) item.cancel();
+          else item.setSavePath(r.filePath);
+        });
+    } else {
+      item.setSavePath(uniqueDownloadPath(downloadsDir, item.getFilename()));
+    }
     const entry = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       filename: item.getFilename(),
