@@ -7,6 +7,7 @@ import {
 } from "@/lib/oauth-provider/sister-apps";
 import { applyEnterpriseSchema } from "@/lib/studio/enterprise-schema";
 import { applyAdminSchema } from "@/lib/admin/admin-schema";
+import { applyMailSchema } from "@/lib/mail/mail-schema";
 
 /** Minimal surface shared by better-sqlite3 and libsql sync drivers. */
 export type AyebaDatabase = {
@@ -691,6 +692,7 @@ function migrate(db: AyebaDatabase) {
     seedOAuthClients,
     applyEnterpriseSchema,
     applyAdminSchema,
+    applyMailSchema,
   ]) {
     try {
       step(db);
