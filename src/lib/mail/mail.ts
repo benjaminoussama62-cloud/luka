@@ -43,6 +43,9 @@ export type MailAccount = {
   address: string;
   email: string;
   phone: string;
+  displayName: string;
+  birthdate: string;
+  recoveryEmail: string;
   createdAt: string;
 };
 
@@ -52,7 +55,16 @@ type AccountRow = {
   address: string;
   email: string;
   phone: string;
+  display_name?: string;
+  birthdate?: string;
+  recovery_email?: string;
   created_at: string;
+};
+
+export type MailProfile = {
+  displayName: string;
+  birthdate: string;
+  recoveryEmail: string;
 };
 
 export type MailMessage = {
@@ -96,6 +108,9 @@ function toAccount(r: AccountRow): MailAccount {
     address: r.address,
     email: r.email,
     phone: r.phone,
+    displayName: r.display_name || r.address,
+    birthdate: r.birthdate || "",
+    recoveryEmail: r.recovery_email || "",
     createdAt: r.created_at,
   };
 }
@@ -176,10 +191,40 @@ export function normalizePhone(raw: string): string | null {
 
 // ── Inscription (code SMS) ─────────────────────────────────────────────────
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MIN_AGE = 13;
+
+/** Valide le profil d'inscription : nom affiché, âge ≥ 13, email de secours. */
+export function validateProfile(p: {
+  displayName?: string;
+  birthdate?: string;
+  recoveryEmail?: string;
+}): { ok: true; profile: MailProfile } | { ok: false; error: string } {
+  const displayName = String(p.displayName || "").replace(/\s+/g, " ").trim();
+  if (displayName.length < 2 || displayName.length > 60 || /[<>@]/.test(displayName)) {
+    return { ok: false, error: "Nom complet invalide (2–60 caractères)." };
+  }
+  const birthdate = String(p.birthdate || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(birthdate)) {
+    return { ok: false, error: "Date de naissance invalide." };
+  }
+  const born = new Date(`${birthdate}T00:00:00Z`);
+  const age = (Date.now() - born.getTime()) / (365.25 * 24 * 3600 * 1000);
+  if (isNaN(born.getTime()) || age < MIN_AGE || age > 120) {
+    return { ok: false, error: `Vous devez avoir au moins ${MIN_AGE} ans.` };
+  }
+  const recoveryEmail = String(p.recoveryEmail || "").trim().toLowerCase();
+  if (recoveryEmail && !EMAIL_RE.test(recoveryEmail)) {
+    return { ok: false, error: "Adresse de récupération invalide." };
+  }
+  return { ok: true, profile: { displayName, birthdate, recoveryEmail } };
+}
+
 export function createVerification(
   userId: string,
   phone: string,
   address: string,
+  profile: MailProfile,
 ): { id: string; code: string } | { error: string } {
   const check = validateAddress(address);
   if (!check.ok) return { error: check.reason! };
@@ -197,9 +242,9 @@ export function createVerification(
   const id = uid();
   db()
     .prepare(
-      "INSERT INTO mail_verifications (id, user_id, phone, address, code_hash, attempts, expires_at, created_at) VALUES (?, ?, ?, ?, ?, 0, ?, ?)",
+      "INSERT INTO mail_verifications (id, user_id, phone, address, code_hash, attempts, expires_at, created_at, display_name, birthdate, recovery_email) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)",
     )
-    .run(id, userId, phone, a, hashCode(code), new Date(Date.now() + OTP_TTL_MS).toISOString(), now());
+    .run(id, userId, phone, a, hashCode(code), new Date(Date.now() + OTP_TTL_MS).toISOString(), now(), profile.displayName, profile.birthdate, profile.recoveryEmail);
   return { id, code };
 }
 
@@ -213,7 +258,16 @@ export function verifyAndCreateAccount(
       "SELECT * FROM mail_verifications WHERE user_id = ? AND phone = ? ORDER BY created_at DESC LIMIT 1",
     )
     .get(userId, phone) as
-    | { id: string; address: string; code_hash: string; attempts: number; expires_at: string }
+    | {
+        id: string;
+        address: string;
+        code_hash: string;
+        attempts: number;
+        expires_at: string;
+        display_name?: string;
+        birthdate?: string;
+        recovery_email?: string;
+      }
     | undefined;
 
   if (!v) return { ok: false, error: "Aucune vérification en cours pour ce numéro." };
@@ -243,9 +297,12 @@ export function verifyAndCreateAccount(
   try {
     db()
       .prepare(
-        "INSERT INTO mail_accounts (id, user_id, address, email, phone, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+        "INSERT INTO mail_accounts (id, user_id, address, email, phone, created_at, display_name, birthdate, recovery_email) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
       )
-      .run(uid(), userId, v.address, email, phone, now());
+      .run(
+        uid(), userId, v.address, email, phone, now(),
+        v.display_name || "", v.birthdate || "", v.recovery_email || "",
+      );
   } catch {
     return { ok: false, error: "Cette adresse n'est plus disponible." };
   }
@@ -346,13 +403,14 @@ export function sendMail(
     }
   }
 
+  const senderName = sender.displayName || sender.address;
   // Copie « Envoyés » chez l'expéditeur (toujours — trace fidèle).
   insertMessage({
     threadId,
     accountId: sender.id,
     folder: "sent",
     from: sender.email,
-    fromName: sender.address,
+    fromName: senderName,
     to: cleanTo,
     subject: subj,
     body,
@@ -366,7 +424,7 @@ export function sendMail(
       accountId: acc.id,
       folder: "inbox",
       from: sender.email,
-      fromName: sender.address,
+      fromName: senderName,
       to: cleanTo,
       subject: subj,
       body,

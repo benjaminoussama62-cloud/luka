@@ -37,6 +37,11 @@ const LANGS = [
   { id: "en", label: "English" },
 ];
 
+// Date max de naissance (13 ans) — calculée une fois au chargement du module.
+const MAX_BIRTHDATE = new Date(Date.now() - 13 * 365.25 * 86400e3)
+  .toISOString()
+  .slice(0, 10);
+
 function fmtTime(iso: string) {
   const d = new Date(iso);
   const today = new Date();
@@ -188,7 +193,7 @@ export function MailApp() {
   }
 
   if (!account) {
-    return <SignupFlow onDone={() => void loadAccount()} />;
+    return <SignupFlow defaultName={user.name} onDone={() => void loadAccount()} />;
   }
 
   // ── Webmail ──
@@ -421,10 +426,13 @@ function ComposePanel({
 }
 
 /* ── Inscription : adresse → téléphone → code SMS ───────────────────── */
-function SignupFlow({ onDone }: { onDone: () => void }) {
+function SignupFlow({ defaultName, onDone }: { defaultName: string; onDone: () => void }) {
   const [step, setStep] = useState(1);
   const [address, setAddress] = useState("");
   const [avail, setAvail] = useState<null | { ok: boolean; msg: string }>(null);
+  const [displayName, setDisplayName] = useState(defaultName);
+  const [birthdate, setBirthdate] = useState("");
+  const [recoveryEmail, setRecoveryEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
   const [devCode, setDevCode] = useState("");
@@ -456,7 +464,7 @@ function SignupFlow({ onDone }: { onDone: () => void }) {
       const res = await fetch("/api/mail/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ address, phone }),
+        body: JSON.stringify({ address, phone, displayName, birthdate, recoveryEmail }),
       });
       const data = (await res.json()) as { ok?: boolean; sms?: boolean; devCode?: string; error?: string };
       if (!res.ok || data.error) return setErr(data.error || "Envoi impossible.");
@@ -525,12 +533,31 @@ function SignupFlow({ onDone }: { onDone: () => void }) {
 
           {step === 2 && (
             <>
-              <h2>Vérifiez votre téléphone</h2>
+              <h2>Votre identité</h2>
               <p className="sub">
-                Un code SMS à 6 chiffres sécurise votre compte{" "}
-                <b>{address}@ayeba.app</b>. Un numéro = un compte.
+                Comme toute messagerie sérieuse : nom complet, âge (13 ans
+                minimum) et téléphone — ce dernier prouvé par code SMS pour{" "}
+                <b>{address}@ayeba.app</b>.
               </p>
               {err && <div className="mail-err">{err}</div>}
+              <div className="mail-field">
+                <label>Nom complet</label>
+                <input
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  placeholder="Benjamin Oussama"
+                  autoFocus
+                />
+              </div>
+              <div className="mail-field">
+                <label>Date de naissance</label>
+                <input
+                  type="date"
+                  value={birthdate}
+                  onChange={(e) => setBirthdate(e.target.value)}
+                  max={MAX_BIRTHDATE}
+                />
+              </div>
               <div className="mail-field">
                 <label>Numéro de téléphone</label>
                 <input
@@ -538,10 +565,22 @@ function SignupFlow({ onDone }: { onDone: () => void }) {
                   onChange={(e) => setPhone(e.target.value)}
                   placeholder="+243 9XX XXX XXX"
                   inputMode="tel"
-                  autoFocus
                 />
               </div>
-              <button className="mail-cta" disabled={busy || phone.length < 8} onClick={() => void sendCode()}>
+              <div className="mail-field">
+                <label>Email de récupération (optionnel)</label>
+                <input
+                  type="email"
+                  value={recoveryEmail}
+                  onChange={(e) => setRecoveryEmail(e.target.value)}
+                  placeholder="autre@exemple.com"
+                />
+              </div>
+              <button
+                className="mail-cta"
+                disabled={busy || displayName.trim().length < 2 || !birthdate || phone.length < 8}
+                onClick={() => void sendCode()}
+              >
                 {busy ? "Envoi…" : "Recevoir le code"}
               </button>
               <button className="mail-btn link" style={{ marginTop: 12 }} onClick={() => setStep(1)}>

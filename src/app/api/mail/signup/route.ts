@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSessionFromCookies } from "@/lib/auth-server";
 import { clientIp, rateLimit, rateLimitResponse } from "@/lib/rate-limit";
-import { createVerification, normalizePhone } from "@/lib/mail/mail";
+import { createVerification, normalizePhone, validateProfile } from "@/lib/mail/mail";
 import { sendSms, smsConfigured } from "@/lib/mail/sms";
 
 export async function POST(req: Request) {
@@ -9,13 +9,21 @@ export async function POST(req: Request) {
   if (!user) return NextResponse.json({ error: "auth required" }, { status: 401 });
   if (!rateLimit(`mail-signup:${clientIp(req)}`, 10, 60_000)) return rateLimitResponse();
 
-  const body = (await req.json().catch(() => null)) as { address?: string; phone?: string } | null;
+  const body = (await req.json().catch(() => null)) as
+    | { address?: string; phone?: string; displayName?: string; birthdate?: string; recoveryEmail?: string }
+    | null;
   const address = String(body?.address || "").toLowerCase().trim();
   const phone = normalizePhone(String(body?.phone || ""));
   if (!phone) return NextResponse.json({ error: "Numéro de téléphone invalide." }, { status: 400 });
+  const profile = validateProfile({
+    displayName: body?.displayName,
+    birthdate: body?.birthdate,
+    recoveryEmail: body?.recoveryEmail,
+  });
+  if (!profile.ok) return NextResponse.json({ error: profile.error }, { status: 400 });
   if (!rateLimit(`mail-otp:${phone}`, 4, 10 * 60_000)) return rateLimitResponse();
 
-  const v = createVerification(user.id, phone, address);
+  const v = createVerification(user.id, phone, address, profile.profile);
   if ("error" in v) return NextResponse.json({ error: v.error }, { status: 409 });
 
   const text = `Ayeba Mail — votre code de vérification : ${v.code} (valide 5 min)`;

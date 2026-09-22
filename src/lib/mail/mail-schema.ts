@@ -62,6 +62,16 @@ CREATE INDEX IF NOT EXISTS idx_mail_msg_thread ON mail_messages(account_id, thre
 CREATE INDEX IF NOT EXISTS idx_mail_msg_unread ON mail_messages(account_id, folder, is_read);
 `;
 
+// Colonnes ajoutées après coup — ALTER idempotent via try/catch.
+const MIGRATIONS = [
+  "ALTER TABLE mail_accounts ADD COLUMN display_name TEXT NOT NULL DEFAULT ''",
+  "ALTER TABLE mail_accounts ADD COLUMN birthdate TEXT NOT NULL DEFAULT ''",
+  "ALTER TABLE mail_accounts ADD COLUMN recovery_email TEXT NOT NULL DEFAULT ''",
+  "ALTER TABLE mail_verifications ADD COLUMN display_name TEXT NOT NULL DEFAULT ''",
+  "ALTER TABLE mail_verifications ADD COLUMN birthdate TEXT NOT NULL DEFAULT ''",
+  "ALTER TABLE mail_verifications ADD COLUMN recovery_email TEXT NOT NULL DEFAULT ''",
+];
+
 export function applyMailSchema(db: AyebaDatabase) {
   for (const raw of MAIL_SCHEMA.split(";")) {
     const stmt = raw.trim();
@@ -70,6 +80,13 @@ export function applyMailSchema(db: AyebaDatabase) {
       db.exec(stmt);
     } catch (e) {
       console.warn("[db] mail schema statement skipped:", (e as Error).message);
+    }
+  }
+  for (const sql of MIGRATIONS) {
+    try {
+      db.exec(sql);
+    } catch {
+      /* colonne déjà présente */
     }
   }
 }
