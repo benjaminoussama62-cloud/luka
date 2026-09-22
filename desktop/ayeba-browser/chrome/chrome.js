@@ -7,6 +7,7 @@
     tabs: document.getElementById("tabs"),
     omni: document.getElementById("omni"),
     omniForm: document.getElementById("omniForm"),
+    omniSuggest: document.getElementById("omniSuggest"),
     progress: document.getElementById("omniProgress"),
     menu: document.getElementById("menu"),
     btnMenu: document.getElementById("btnMenu"),
@@ -59,8 +60,13 @@
 
   // The main process resizes the chrome view: 126px when nothing is open so
   // page clicks reach the content view, full height while an overlay shows.
+  let suggestOpen = false;
+
   function syncChromeBounds() {
-    api.invoke("chrome:overlay", !!openOverlay || (els.findbar && !els.findbar.hidden));
+    api.invoke(
+      "chrome:overlay",
+      !!openOverlay || suggestOpen || (els.findbar && !els.findbar.hidden),
+    );
   }
 
   function displayUrl(url) {
@@ -808,7 +814,34 @@
           <span class="p-link-hint">Fenêtre InPrivate</span>
         </button>
       </div>
+      ${u ? `<div class="profile-searches" id="profileSearches"></div>` : ""}
       ${u ? `<button type="button" class="p-logout" data-act="logout">Déconnexion</button>` : ""}`;
+    if (u) void fillRecentSearches();
+  }
+
+  // « Recherches récentes » du panneau Compte — même source que le site
+  // (/api/history, cookie de session partagé).
+  async function fillRecentSearches() {
+    const box = document.getElementById("profileSearches");
+    if (!box) return;
+    try {
+      const r = await api.invoke("history:searches");
+      const list = (r?.history || [])
+        .map((s) => (typeof s === "string" ? s : s?.query || ""))
+        .filter(Boolean)
+        .slice(0, 5);
+      if (!list.length || !document.getElementById("profileSearches")) return;
+      box.innerHTML = `
+        <p class="profile-label" style="margin:12px 4px 4px">Recherches récentes</p>
+        ${list
+          .map(
+            (s) => `
+          <button type="button" class="p-link" data-go="https://ayeba.app/?q=${encodeURIComponent(s)}">
+            <span class="p-link-label">${escapeHtml(s)}</span>
+          </button>`,
+          )
+          .join("")}`;
+    } catch {}
   }
 
   // ── Events ──
@@ -867,15 +900,137 @@
   els.favFilter?.addEventListener("input", () => renderFavList(favCache, els.favFilter.value));
   els.favoritesClose?.addEventListener("click", () => closeAllOverlays());
 
+  // ── Suggestions de l'omnibox : /api/suggest du site + historique local ──
+  let suggestTimer = 0;
+  let suggestItems = [];
+  let suggestIndex = -1;
+  let suggestSeq = 0;
+
+  function hideSuggest() {
+    suggestItems = [];
+    suggestIndex = -1;
+    if (els.omniSuggest) els.omniSuggest.hidden = true;
+    if (suggestOpen) {
+      suggestOpen = false;
+      syncChromeBounds();
+    }
+  }
+
+  function renderSuggest() {
+    if (!els.omniSuggest) return;
+    if (!suggestItems.length) {
+      hideSuggest();
+      return;
+    }
+    els.omniSuggest.innerHTML = suggestItems
+      .map(
+        (s, i) => `
+        <button type="button" class="sug-item${i === suggestIndex ? " sel" : ""}" data-i="${i}">
+          ${s.kind === "history"
+            ? '<svg class="sug-ic" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M4.5 5.5A7.3 7.3 0 1110 17.3 7.3 7.3 0 014 13"/><path d="M4 3.5v2.5h2.5"/><path d="M10 6.8V10l2.6 1.6"/></svg>'
+            : s.kind === "url"
+              ? '<svg class="sug-ic" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="10" cy="10" r="7"/><path d="M3.5 10h13M10 3c2.2 2 3.2 4.4 3.2 7S12.2 15 10 17c-2.2-2-3.2-4.4-3.2-7S7.8 5 10 3z"/></svg>'
+              : '<svg class="sug-ic" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="9" cy="9" r="5.5"/><path d="M13.5 13.5 17.5 17.5"/></svg>'}
+          <span class="sug-txt">${escapeHtml(s.label)}</span>
+          ${s.kind === "history" ? '<span class="sug-tag">Historique</span>' : ""}
+        </button>`,
+      )
+      .join("");
+    els.omniSuggest.hidden = false;
+    if (!suggestOpen) {
+      suggestOpen = true;
+      syncChromeBounds();
+    }
+  }
+
+  function pickSuggest(i) {
+    const s = suggestItems[i];
+    if (!s) return;
+    hideSuggest();
+    omniDirty = false;
+    api.invoke("nav:go", s.url || s.label);
+  }
+
+  els.omniSuggest?.addEventListener("mousedown", (e) => {
+    const b = e.target.closest("[data-i]");
+    if (b) {
+      e.preventDefault();
+      pickSuggest(Number(b.dataset.i));
+    }
+  });
+
+  async function refreshSuggest(q) {
+    const seq = ++suggestSeq;
+    const ql = q.toLowerCase();
+    const items = [];
+    // Une URL tapée → proposition directe en tête.
+    if (/^[\w-]+(\.[\w-]+)+(\/\S*)?$/.test(q)) {
+      items.push({ label: q, url: `https://${q}`, kind: "url" });
+    }
+    try {
+      const r = await api.invoke("suggest:get", q);
+      if (seq !== suggestSeq) return;
+      const seenLabel = new Set(items.map((it) => it.label.toLowerCase()));
+      for (const h of r?.history || []) {
+        const label = h.title || h.url;
+        if (seenLabel.has(label.toLowerCase())) continue;
+        seenLabel.add(label.toLowerCase());
+        items.push({ label, url: h.url, kind: "history" });
+      }
+      for (const s of r?.suggestions || []) {
+        const label = String(s);
+        if (!items.some((it) => it.label.toLowerCase() === label.toLowerCase())) {
+          items.push({ label, kind: "search" });
+        }
+      }
+    } catch {}
+    if (seq !== suggestSeq) return;
+    suggestItems = items.slice(0, 9);
+    suggestIndex = -1;
+    renderSuggest();
+  }
+
   els.omni?.addEventListener("input", () => {
     omniDirty = true;
+    clearTimeout(suggestTimer);
+    const q = els.omni.value.trim();
+    if (!q) {
+      hideSuggest();
+      return;
+    }
+    suggestTimer = setTimeout(() => refreshSuggest(q), 140);
+  });
+  els.omni?.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      hideSuggest();
+      return;
+    }
+    if (!suggestItems.length) return;
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      const d = e.key === "ArrowDown" ? 1 : -1;
+      suggestIndex = (suggestIndex + d + suggestItems.length + 1) % (suggestItems.length + 1) - 1;
+      renderSuggest();
+    } else if (e.key === "Enter" && suggestIndex >= 0) {
+      e.preventDefault();
+      e.stopPropagation();
+      pickSuggest(suggestIndex);
+    }
   });
   els.omni?.addEventListener("blur", () => {
     omniDirty = false;
+    // mousedown sur une suggestion arrive avant blur → délai court.
+    setTimeout(() => {
+      if (document.activeElement !== els.omni) hideSuggest();
+    }, 120);
+  });
+  els.omni?.addEventListener("focus", () => {
+    if (els.omni.value.trim()) refreshSuggest(els.omni.value.trim());
   });
   els.omniForm?.addEventListener("submit", (e) => {
     e.preventDefault();
     omniDirty = false;
+    hideSuggest();
     api.invoke("nav:go", els.omni.value);
   });
 
@@ -885,6 +1040,7 @@
   });
 
   document.addEventListener("click", (e) => {
+    if (suggestOpen && !els.omniForm?.contains(e.target)) hideSuggest();
     if (!openOverlay) return;
     // Le rail agrandit la vue chrome pendant que le clic physique finit :
     // ignorer les clics fantômes juste après l'ouverture d'un overlay.

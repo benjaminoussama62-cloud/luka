@@ -16,6 +16,7 @@ const {
 const { autoUpdater } = require("electron-updater");
 const path = require("path");
 const fs = require("fs");
+const crypto = require("crypto");
 const { pathToFileURL } = require("url");
 
 // Must run before app ready — avoid cache lock / multi-instance GPU errors on Windows
@@ -88,10 +89,61 @@ const LOCAL_NTP_URL = pathToFileURL(path.join(__dirname, "..", "newtab", "index.
 const CHROME_URL = pathToFileURL(path.join(__dirname, "..", "chrome", "index.html")).href;
 const RAIL_URL = pathToFileURL(path.join(__dirname, "..", "chrome", "rail.html")).href;
 const DATA_DIR = path.join(app.getPath("userData"), "data");
-const HISTORY_FILE = path.join(DATA_DIR, "history.json");
-const FAV_FILE = path.join(DATA_DIR, "favorites.json");
 const SETTINGS_FILE = path.join(DATA_DIR, "settings.json");
-const PASS_FILE = path.join(DATA_DIR, "passwords.json");
+
+// ── Données personnelles : chaque compte Ayeba a son propre espace ──
+// history/favorites/passwords sont rangés dans data/<clé-compte>/ ; un invité
+// utilise data/invite/. La clé dérive de l'email du compte (hash local).
+const USER_FILES = ["history.json", "favorites.json", "passwords.json"];
+let keyCache = { key: "invite", at: 0 };
+let migrated = false;
+
+async function fetchSessionUser() {
+  try {
+    const jar = await session.defaultSession.cookies.get({
+      url: "https://ayeba.app",
+      name: "ayeba_session",
+    });
+    const token = jar[0]?.value;
+    if (!token) return null;
+    const res = await net.fetch("https://ayeba.app/api/auth/omega/session", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const data = await res.json();
+    return data?.user || null;
+  } catch {
+    return null;
+  }
+}
+
+async function accountKey() {
+  if (Date.now() - keyCache.at < 10_000) return keyCache.key;
+  const user = await fetchSessionUser();
+  const email = String(user?.email || "").toLowerCase().trim();
+  const key = email
+    ? "u_" + crypto.createHash("sha256").update(email).digest("hex").slice(0, 16)
+    : "invite";
+  keyCache = { key, at: Date.now() };
+  return key;
+}
+
+async function userFile(name) {
+  const dir = path.join(DATA_DIR, await accountKey());
+  fs.mkdirSync(dir, { recursive: true });
+  // Migration : les anciens fichiers à la racine de data/ rejoignent le
+  // premier compte résolu (l'utilisateur actuel conserve son historique).
+  if (!migrated) {
+    migrated = true;
+    for (const f of USER_FILES) {
+      const legacy = path.join(DATA_DIR, f);
+      const target = path.join(dir, f);
+      try {
+        if (fs.existsSync(legacy) && !fs.existsSync(target)) fs.renameSync(legacy, target);
+      } catch {}
+    }
+  }
+  return path.join(dir, name);
+}
 
 const CHROME_H = 96;
 const RAIL_W = 52;
@@ -117,8 +169,6 @@ const DEFAULT_SETTINGS = {
 
 function ensureData() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
-  if (!fs.existsSync(HISTORY_FILE)) fs.writeFileSync(HISTORY_FILE, "[]");
-  if (!fs.existsSync(FAV_FILE)) fs.writeFileSync(FAV_FILE, "[]");
   if (!fs.existsSync(SETTINGS_FILE)) {
     fs.writeFileSync(SETTINGS_FILE, JSON.stringify(DEFAULT_SETTINGS, null, 2));
   }
@@ -207,23 +257,25 @@ function writeJson(file, data) {
   fs.writeFileSync(file, JSON.stringify(data, null, 2));
 }
 
-function pushHistory(entry) {
-  const list = readJson(HISTORY_FILE, []);
+async function pushHistory(entry) {
+  const file = await userFile("history.json");
+  const list = readJson(file, []);
   list.unshift({ ...entry, at: Date.now() });
-  writeJson(HISTORY_FILE, list.slice(0, 500));
+  writeJson(file, list.slice(0, 500));
 }
 
 // ── Coffre de mots de passe local (chiffré via safeStorage / DPAPI) ──
-function readVault() {
-  return readJson(PASS_FILE, []);
+async function readVault() {
+  return readJson(await userFile("passwords.json"), []);
 }
 
-function writeVault(vault) {
-  writeJson(PASS_FILE, vault.slice(0, 300));
+async function writeVault(vault) {
+  writeJson(await userFile("passwords.json"), vault.slice(0, 300));
 }
 
-function vaultPublic() {
-  return readVault().map(({ id, origin, username, at }) => ({ id, origin, username, at }));
+async function vaultPublic() {
+  const vault = await readVault();
+  return vault.map(({ id, origin, username, at }) => ({ id, origin, username, at }));
 }
 
 function vaultDecrypt(entry) {
@@ -813,10 +865,11 @@ function createBrowserWindow(isPrivate = false) {
         return false;
       }
     },
-    "fav:list": () => readJson(FAV_FILE, []),
-    "fav:add": (_e, item) => {
+    "fav:list": async () => readJson(await userFile("favorites.json"), []),
+    "fav:add": async (_e, item) => {
       const t = activeTab();
-      const list = readJson(FAV_FILE, []);
+      const file = await userFile("favorites.json");
+      const list = readJson(file, []);
       const entry = {
         title: item?.title || t?.title || "Favori",
         url: item?.url || t?.url || "",
@@ -824,18 +877,60 @@ function createBrowserWindow(isPrivate = false) {
       };
       if (!entry.url) return list;
       const next = [entry, ...list.filter((f) => f.url !== entry.url)].slice(0, 200);
-      writeJson(FAV_FILE, next);
+      writeJson(file, next);
       return next;
     },
-    "fav:remove": (_e, url) => {
-      const next = readJson(FAV_FILE, []).filter((f) => f.url !== url);
-      writeJson(FAV_FILE, next);
+    "fav:remove": async (_e, url) => {
+      const file = await userFile("favorites.json");
+      const next = readJson(file, []).filter((f) => f.url !== url);
+      writeJson(file, next);
       return next;
     },
-    "history:list": () => readJson(HISTORY_FILE, []),
-    "history:clear": () => {
-      writeJson(HISTORY_FILE, []);
+    "history:list": async () => readJson(await userFile("history.json"), []),
+    "history:clear": async () => {
+      writeJson(await userFile("history.json"), []);
       return [];
+    },
+    // Recherches du compte (même historique que le site — cookie partagé).
+    "history:searches": async () => {
+      try {
+        const jar = await session.defaultSession.cookies.get({
+          url: "https://ayeba.app",
+          name: "ayeba_session",
+        });
+        if (!jar[0]?.value) return { history: [] };
+        const res = await net.fetch("https://ayeba.app/api/history", {
+          headers: { Cookie: `ayeba_session=${jar[0].value}` },
+        });
+        const data = await res.json();
+        return { history: Array.isArray(data?.history) ? data.history : [] };
+      } catch {
+        return { history: [] };
+      }
+    },
+    // Suggestions de l'omnibox : vrai endpoint /api/suggest du site +
+    // correspondances dans l'historique local du compte courant.
+    "suggest:get": async (_e, q) => {
+      const query = String(q || "").trim();
+      if (!query) return { suggestions: [], history: [] };
+      let remote = [];
+      try {
+        const res = await net.fetch(
+          `https://ayeba.app/api/suggest?q=${encodeURIComponent(query)}`,
+        );
+        const data = await res.json();
+        remote = Array.isArray(data?.suggestions) ? data.suggestions : [];
+      } catch {}
+      let local = [];
+      try {
+        const hist = readJson(await userFile("history.json"), []);
+        const ql = query.toLowerCase();
+        local = hist
+          .filter((h) => (h.title || "").toLowerCase().includes(ql) || (h.url || "").includes(ql))
+          .slice(0, 3)
+          .map((h) => ({ title: h.title || h.url, url: h.url }));
+      } catch {}
+      return { suggestions: remote.slice(0, 8), history: local };
     },
     "data:clear": async (_e, scope = {}) => {
       const jobs = [];
@@ -844,7 +939,7 @@ function createBrowserWindow(isPrivate = false) {
         jobs.push(session.defaultSession.clearStorageData({ storages: ["cookies"] }));
       }
       if (scope.siteData) jobs.push(session.defaultSession.clearStorageData());
-      if (scope.history !== false) writeJson(HISTORY_FILE, []);
+      if (scope.history !== false) writeJson(await userFile("history.json"), []);
       if (scope.downloads) {
         downloadLog.length = 0;
         pushAllChrome();
@@ -887,27 +982,20 @@ function createBrowserWindow(isPrivate = false) {
     // Vrai compte Ayeba : même cookie de session que le site (partagé via la
     // session Chromium) → le navigateur affiche le profil réel de l'utilisateur.
     "account:get": async () => {
-      try {
-        const jar = await session.defaultSession.cookies.get({
-          url: "https://ayeba.app",
-          name: "ayeba_session",
-        });
-        const token = jar[0]?.value;
-        if (!token) return { user: null };
-        const res = await net.fetch("https://ayeba.app/api/auth/omega/session", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const data = await res.json();
-        return { user: data?.user || null };
-      } catch (err) {
-        log(`account:get ${err?.message || err}`);
-        return { user: null };
-      }
+      const user = await fetchSessionUser();
+      keyCache = {
+        key: user?.email
+          ? "u_" + crypto.createHash("sha256").update(String(user.email).toLowerCase().trim()).digest("hex").slice(0, 16)
+          : "invite",
+        at: Date.now(),
+      };
+      return { user };
     },
     "account:logout": async () => {
       try {
         await session.defaultSession.cookies.remove("https://ayeba.app", "ayeba_session");
       } catch {}
+      keyCache = { key: "invite", at: Date.now() };
       return { ok: true };
     },
     "app:check-update": async () => {
@@ -966,12 +1054,12 @@ function createBrowserWindow(isPrivate = false) {
     },
     // ── Coffre de mots de passe (safeStorage → DPAPI Windows) ──
     "pass:list": () => vaultPublic(),
-    "pass:add": (_e, entry) => {
+    "pass:add": async (_e, entry) => {
       const origin = String(entry?.origin || "").trim();
       const username = String(entry?.username || "").trim();
       const password = String(entry?.password || "");
       if (!origin || !password || !safeStorage.isEncryptionAvailable()) return vaultPublic();
-      const vault = readVault();
+      const vault = await readVault();
       vault.unshift({
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         origin,
@@ -979,19 +1067,22 @@ function createBrowserWindow(isPrivate = false) {
         secret: safeStorage.encryptString(password).toString("base64"),
         at: Date.now(),
       });
-      writeVault(vault);
+      await writeVault(vault);
       return vaultPublic();
     },
-    "pass:remove": (_e, id) => {
-      writeVault(readVault().filter((p) => p.id !== id));
+    "pass:remove": async (_e, id) => {
+      const vault = await readVault();
+      await writeVault(vault.filter((p) => p.id !== id));
       return vaultPublic();
     },
-    "pass:reveal": (_e, id) => {
-      const entry = readVault().find((p) => p.id === id);
+    "pass:reveal": async (_e, id) => {
+      const vault = await readVault();
+      const entry = vault.find((p) => p.id === id);
       return entry ? vaultDecrypt(entry) : "";
     },
-    "pass:copy": (_e, id) => {
-      const entry = readVault().find((p) => p.id === id);
+    "pass:copy": async (_e, id) => {
+      const vault = await readVault();
+      const entry = vault.find((p) => p.id === id);
       const pw = entry ? vaultDecrypt(entry) : "";
       if (pw) {
         clipboard.writeText(pw);
@@ -1002,7 +1093,8 @@ function createBrowserWindow(isPrivate = false) {
     // Remplit le formulaire de connexion visible de l'onglet actif.
     "pass:fill": async (_e, id) => {
       const t = activeTab();
-      const entry = readVault().find((p) => p.id === id);
+      const vault = await readVault();
+      const entry = vault.find((p) => p.id === id);
       const pw = entry ? vaultDecrypt(entry) : "";
       if (!t || !pw || t.view.webContents.isDestroyed()) return false;
       const js = `(() => {
@@ -1057,6 +1149,8 @@ function bindIpc() {
     "fav:remove",
     "history:list",
     "history:clear",
+    "history:searches",
+    "suggest:get",
     "data:clear",
     "shell:open-downloads",
     "downloads:list",

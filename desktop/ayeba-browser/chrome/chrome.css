@@ -183,16 +183,69 @@ span.tab-fav { background: var(--surface-2); }
   display: grid;
   place-items: center;
   cursor: pointer;
-  opacity: 0;
+  opacity: 0.55;
   transition: opacity 0.12s, background 0.12s, color 0.12s;
   flex-shrink: 0;
 }
-.tab:hover .tab-close { opacity: 1; }
-.tab-close:hover { background: var(--surface-2); color: var(--ink); }
+.tab:hover .tab-close,
+.tab.active .tab-close { opacity: 1; }
+.tab-close:hover { background: var(--surface-2); color: var(--orange); }
 
 .tab-add {
   -webkit-app-region: no-drag;
   margin-bottom: 3px;
+}
+
+/* ── Suggestions de l'omnibox — dropdown façon barre de recherche du site ── */
+.omnibox { position: relative; }
+.omni-suggest {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 60;
+  padding: 6px;
+  background: rgba(8, 8, 10, 0.92);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(24px);
+  animation: tab-in 0.14s var(--ease-out);
+}
+.sug-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.sug-item:hover,
+.sug-item.sel { background: var(--surface); }
+.sug-item.sel { box-shadow: inset 2px 0 0 var(--orange); }
+.sug-ic { width: 15px; height: 15px; flex-shrink: 0; color: var(--muted); }
+.sug-item:hover .sug-ic,
+.sug-item.sel .sug-ic { color: var(--orange); }
+.sug-txt {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sug-tag {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--faint);
 }
 
 /* ── Barre d'outils ── */
@@ -605,6 +658,11 @@ span.tab-fav { background: var(--surface-2); }
 .p-logout:hover {
   color: #ff6b6b;
   border-color: rgba(255, 107, 107, 0.4);
+}
+
+.profile-searches {
+  border-top: 1px solid var(--line);
+  padding: 4px 10px 10px;
 }
 
 /* CTA blanc = .ayeba-cta du site */

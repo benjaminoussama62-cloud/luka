@@ -189,20 +189,20 @@ export async function getSearchHistory(userId: string): Promise<string[]> {
   if (shouldUseSqliteStore()) {
     const rows = getDb()
       .prepare(
-        "SELECT query FROM search_history WHERE user_id = ? ORDER BY created_at DESC LIMIT 40",
+        "SELECT query FROM search_history WHERE user_id = ? AND query IS NOT NULL AND query <> '' ORDER BY created_at DESC LIMIT 40",
       )
       .all(userId) as Array<{ query: string }>;
-    if (rows.length) return rows.map((r) => r.query);
+    if (rows.length) return rows.map((r) => r.query).filter(Boolean);
 
     if (getDbMode() === "local") {
       const data = await readJson<HistoryFile>("search-history.json", { byUser: {} });
-      return data.byUser[userId] ?? [];
+      return (data.byUser[userId] ?? []).filter(Boolean);
     }
     return [];
   }
 
   const data = await readJson<HistoryFile>("search-history.json", { byUser: {} });
-  return data.byUser[userId] ?? [];
+  return (data.byUser[userId] ?? []).filter(Boolean);
 }
 
 export async function pushSearchHistory(userId: string, query: string) {
