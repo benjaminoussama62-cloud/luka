@@ -8,7 +8,13 @@ export async function GET() {
   const account = getAccountByUser(user.id);
   if (!account) return NextResponse.json({ account: null });
   return NextResponse.json({
-    account: { email: account.email, address: account.address, createdAt: account.createdAt },
+    account: {
+      email: account.email,
+      address: account.address,
+      displayName: account.displayName,
+      status: account.status,
+      createdAt: account.createdAt,
+    },
     unread: unreadCount(account.id),
   });
 }

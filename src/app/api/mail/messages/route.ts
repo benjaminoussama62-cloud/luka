@@ -8,6 +8,9 @@ export async function GET(req: Request) {
   if (!user) return NextResponse.json({ error: "auth required" }, { status: 401 });
   const account = getAccountByUser(user.id);
   if (!account) return NextResponse.json({ error: "no mail account" }, { status: 404 });
+  if (account.status === "suspended") {
+    return NextResponse.json({ error: "Compte suspendu — contactez le support." }, { status: 403 });
+  }
 
   const url = new URL(req.url);
   const thread = url.searchParams.get("thread");
@@ -30,6 +33,9 @@ export async function POST(req: Request) {
   if (!user) return NextResponse.json({ error: "auth required" }, { status: 401 });
   const account = getAccountByUser(user.id);
   if (!account) return NextResponse.json({ error: "no mail account" }, { status: 404 });
+  if (account.status === "suspended") {
+    return NextResponse.json({ error: "Compte suspendu — contactez le support." }, { status: 403 });
+  }
   if (!rateLimit(`mail-send:${account.id}`, 60, 60_000)) return rateLimitResponse();
 
   const body = (await req.json().catch(() => null)) as

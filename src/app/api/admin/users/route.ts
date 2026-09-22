@@ -36,6 +36,8 @@ export async function GET(req: Request) {
         developerKeys: count("SELECT COUNT(*) AS n FROM developer_api_keys WHERE owner_user_id = ? AND status != 'revoked'", detail),
         searches: count("SELECT COUNT(*) AS n FROM search_history WHERE user_id = ?", detail),
         tickets: all("SELECT id, subject, status, created_at FROM support_tickets WHERE user_id = ? ORDER BY created_at DESC LIMIT 20", detail),
+        mailAccount: db.prepare("SELECT email, display_name, status, created_at FROM mail_accounts WHERE user_id = ?").get(detail) ?? null,
+        mailMessages: count("SELECT COUNT(*) AS n FROM mail_messages m JOIN mail_accounts a ON a.id = m.account_id WHERE a.user_id = ?", detail),
         totpEnabled: count("SELECT COUNT(*) AS n FROM user_security WHERE user_id = ? AND totp_enabled = 1", detail) === 1,
       },
     });

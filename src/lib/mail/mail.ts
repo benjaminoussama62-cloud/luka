@@ -46,6 +46,7 @@ export type MailAccount = {
   displayName: string;
   birthdate: string;
   recoveryEmail: string;
+  status: string;
   createdAt: string;
 };
 
@@ -58,6 +59,7 @@ type AccountRow = {
   display_name?: string;
   birthdate?: string;
   recovery_email?: string;
+  status?: string;
   created_at: string;
 };
 
@@ -111,6 +113,7 @@ function toAccount(r: AccountRow): MailAccount {
     displayName: r.display_name || r.address,
     birthdate: r.birthdate || "",
     recoveryEmail: r.recovery_email || "",
+    status: r.status || "active",
     createdAt: r.created_at,
   };
 }
@@ -532,6 +535,30 @@ export function deleteMessage(accountId: string, id: string) {
   } else {
     moveToFolder(accountId, id, "trash");
   }
+}
+
+/** Message système (back-office) dans la boîte d'un compte. */
+export function sendSystemMessage(accountId: string, subject: string, body: string) {
+  const acc = db()
+    .prepare("SELECT email FROM mail_accounts WHERE id = ?")
+    .get(accountId) as { email: string } | undefined;
+  if (!acc) return false;
+  insertMessage({
+    threadId: uid(),
+    accountId,
+    folder: "inbox",
+    from: `securite@${MAIL_DOMAIN}`,
+    fromName: "Ayeba Mail — Équipe",
+    to: [acc.email],
+    subject,
+    body,
+    kind: "system",
+  });
+  return true;
+}
+
+export function setAccountStatus(accountId: string, status: "active" | "suspended") {
+  db().prepare("UPDATE mail_accounts SET status = ? WHERE id = ?").run(status, accountId);
 }
 
 export function unreadCount(accountId: string): number {

@@ -36,7 +36,8 @@ type Tab =
   | "team"
   | "chat"
   | "broadcast"
-  | "incidents";
+  | "incidents"
+  | "mail";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "Vue d'ensemble" },
@@ -48,6 +49,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "content", label: "Contenu & accès" },
   { id: "search", label: "Recherche & Index" },
   { id: "ecosystem", label: "Écosystème" },
+  { id: "mail", label: "Ayeba Mail" },
   { id: "security", label: "Sécurité" },
   { id: "broadcast", label: "Annonces" },
   { id: "incidents", label: "Incidents" },
@@ -241,6 +243,7 @@ export function AdminConsole({
         t === "content" ? "/api/admin/content" :
         t === "search" ? "/api/admin/search" :
         t === "ecosystem" ? "/api/admin/ecosystem" :
+        t === "mail" ? "/api/admin/mail" :
         t === "security" ? "/api/admin/security" :
         t === "broadcast" ? "/api/admin/announcements" :
         t === "incidents" ? "/api/admin/incidents" :
@@ -475,6 +478,53 @@ export function AdminConsole({
                 </div>
               </div>
             ) : null}
+          </section>
+        )}
+
+        {tab === "mail" && (
+          <section className="space-y-4">
+            <header>
+              <h2 className="text-xl font-semibold">Ayeba Mail</h2>
+              <p className="text-sm opacity-60">
+                {num((data.stats as Row)?.accounts)} comptes · {num((data.stats as Row)?.messages)} messages ·{" "}
+                {num((data.stats as Row)?.bounces)} échecs de remise ·{" "}
+                {num((data.stats as Row)?.pendingVerifications)} vérifications en cours
+              </p>
+            </header>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <Stat label="Boîtes actives" value={num((data.stats as Row)?.accounts) - num((data.stats as Row)?.suspended)} />
+              <Stat label="Suspendues" value={num((data.stats as Row)?.suspended)} />
+              <Stat label="Messages stockés" value={num((data.stats as Row)?.messages)} hint="chiffrés au repos" />
+              <Stat label="Non lus (global)" value={num((data.stats as Row)?.unreadInboxes)} />
+            </div>
+            <div className="ayeba-panel p-4">
+              <Table
+                head={["Adresse", "Nom affiché", "Compte lié", "Téléphone", "Messages", "Statut", "Créée", "Actions"]}
+                rows={((data.accounts as Row[]) ?? []).map((a) => [
+                  <span key="e" className="font-medium">{s(a.email)}</span>,
+                  s(a.display_name),
+                  s(a.user_email),
+                  s(a.phone),
+                  num(a.messages),
+                  <Badge key="st" tone={statusTone(a.status)}>{s(a.status)}</Badge>,
+                  dt(a.created_at),
+                  <span key="a" className="flex gap-1">
+                    {a.status === "suspended" ? (
+                      <Btn onClick={() => void patchAct("/api/admin/mail", { accountId: a.id, status: "active" }, "Compte réactivé")}>Réactiver</Btn>
+                    ) : (
+                      <Btn danger onClick={() => void patchAct("/api/admin/mail", { accountId: a.id, status: "suspended" }, "Compte suspendu")}>Suspendre</Btn>
+                    )}
+                    <Btn onClick={() => {
+                      const suj = window.prompt("Sujet de la notification :");
+                      if (!suj) return;
+                      const msg = window.prompt("Message :");
+                      if (msg) void act("/api/admin/mail", { action: "notify", accountId: a.id, subject: suj, message: msg }, "Notification envoyée");
+                    }}>Notifier</Btn>
+                  </span>,
+                ])}
+                empty="Aucune boîte Ayeba Mail"
+              />
+            </div>
           </section>
         )}
 

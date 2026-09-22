@@ -57,7 +57,8 @@ export type AdminSection =
   | "team"
   | "chat"
   | "broadcast"
-  | "incidents";
+  | "incidents"
+  | "mail";
 
 /** Which back-office sections each role may open. super_admin sees all. */
 export const SECTION_ROLES: Record<AdminSection, AdminRole[]> = {
@@ -77,6 +78,7 @@ export const SECTION_ROLES: Record<AdminSection, AdminRole[]> = {
   chat: ["super_admin", "manager", "support", "moderator", "analyst"],
   broadcast: ["super_admin", "manager"],
   incidents: ["super_admin", "manager"],
+  mail: ["super_admin", "manager"],
 };
 
 /** Effective role: provisioned admin role, or super_admin for env-listed admins. */

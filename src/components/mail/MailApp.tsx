@@ -19,7 +19,7 @@ type Msg = {
   at: string;
 };
 
-type Account = { email: string; address: string; createdAt: string };
+type Account = { email: string; address: string; displayName: string; status: string; createdAt: string };
 
 const FOLDERS: { id: string; label: string; icon: string }[] = [
   { id: "inbox", label: "Boîte de réception", icon: "▤" },
@@ -194,6 +194,23 @@ export function MailApp() {
 
   if (!account) {
     return <SignupFlow defaultName={user.name} onDone={() => void loadAccount()} />;
+  }
+
+  if (account.status === "suspended") {
+    return (
+      <div className="mail-root">
+        <div className="mail-gate">
+          <div className="mail-gate-panel">
+            <span className="mail-kicker">AYEBA MAIL</span>
+            <h2>Compte suspendu</h2>
+            <p className="sub">
+              Votre boîte <b>{account.email}</b> est suspendue par l’équipe Ayeba.
+              Contactez le support pour plus d’informations.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   // ── Webmail ──
