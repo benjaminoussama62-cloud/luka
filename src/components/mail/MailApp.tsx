@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth";
-import { LoginModal } from "@/components/auth/AuthUI";
 
 type Msg = {
   id: string;
@@ -57,10 +56,11 @@ function fmtFull(iso: string) {
 }
 
 export function MailApp() {
-  const { user, ready, setLoginOpen } = useAuth();
+  const { user, ready, refreshSession } = useAuth();
   const [account, setAccount] = useState<Account | null>(null);
   const [unread, setUnread] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [gate, setGate] = useState<"landing" | "signup" | "signin">("landing");
 
   const [folder, setFolder] = useState("inbox");
   const [q, setQ] = useState("");
@@ -102,13 +102,9 @@ export function MailApp() {
   }, []);
 
   useEffect(() => {
-    if (ready && user) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      void loadAccount();
-    } else if (ready) {
-      setLoading(false);
-    }
-  }, [ready, user, loadAccount]);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (ready) void loadAccount();
+  }, [ready, loadAccount]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -170,30 +166,31 @@ export function MailApp() {
     );
   }
 
-  if (!user) {
-    return (
-      <div className="mail-root">
-        <div className="mail-gate">
-          <div className="mail-gate-panel">
-            <span className="mail-kicker">AYEBA MAIL</span>
-            <h2>Votre messagerie sécurisée</h2>
-            <p className="sub">
-              Une adresse <b>@ayeba.app</b> unique, un compte vérifié par
-              téléphone, des messages chiffrés. Connectez-vous à votre compte
-              Ayeba pour créer votre adresse.
-            </p>
-            <button className="mail-cta" onClick={() => setLoginOpen(true)}>
-              Se connecter — Ayeba
-            </button>
-          </div>
-        </div>
-        <LoginModal />
-      </div>
-    );
-  }
-
   if (!account) {
-    return <SignupFlow defaultName={user.name} onDone={() => void loadAccount()} />;
+    if (gate === "signup") {
+      return (
+        <SignupFlow
+          defaultName={user?.name || ""}
+          onDone={() => {
+            void refreshSession();
+            void loadAccount();
+          }}
+          onBack={() => setGate("landing")}
+        />
+      );
+    }
+    if (gate === "signin") {
+      return (
+        <SigninFlow
+          onDone={() => {
+            void refreshSession();
+            void loadAccount();
+          }}
+          onBack={() => setGate("landing")}
+        />
+      );
+    }
+    return <Landing onSignup={() => setGate("signup")} onSignin={() => setGate("signin")} />;
   }
 
   if (account.status === "suspended") {
@@ -442,8 +439,202 @@ function ComposePanel({
   );
 }
 
-/* ── Inscription : adresse → téléphone → code SMS ───────────────────── */
-function SignupFlow({ defaultName, onDone }: { defaultName: string; onDone: () => void }) {
+/* ── Landing — vraie page d'accueil produit ─────────────────────────── */
+const FEATURES = [
+  {
+    t: "Chiffré au repos",
+    d: "Objets et contenus chiffrés AES-256-GCM dans la base. Vos messages ne sont jamais lus ni analysés — pas de publicité, pas de profilage.",
+    i: "◆",
+  },
+  {
+    t: "Vérifié par téléphone",
+    d: "Un numéro, un code SMS, un compte. Pas de mot de passe à voler, pas de compte anonyme — l'identité est réelle.",
+    i: "✓",
+  },
+  {
+    t: "Adresse unique à vie",
+    d: "prenom@ayeba.app vous appartient pour toujours — jamais dupliquée, jamais réattribuée, même après suppression.",
+    i: "@",
+  },
+  {
+    t: "Remise garantie",
+    d: "Si un destinataire n'existe pas, vous le savez immédiatement — notification d'échec claire, jamais de silence.",
+    i: "↩",
+  },
+  {
+    t: "Quasi-0 data",
+    d: "En-têtes d'abord, corps à l'ouverture, images bloquées, extraits seulement. Conçu pour les connexions réelles.",
+    i: "▽",
+  },
+  {
+    t: "Traduire en un clic",
+    d: "Français, Lingala, Swahili, English — un bouton sous chaque message, comme sur X. Rien d'intrusif.",
+    i: "⇄",
+  },
+];
+
+function Landing({ onSignup, onSignin }: { onSignup: () => void; onSignin: () => void }) {
+  return (
+    <div className="mail-root mail-landing">
+      <header className="mail-topbar">
+        <div className="mail-brand">
+          <strong>AYEBA</strong>
+          <span className="mail-kicker">MAIL</span>
+        </div>
+        <button className="mail-btn" style={{ marginLeft: "auto" }} onClick={onSignin}>
+          Se connecter
+        </button>
+      </header>
+
+      <div className="mail-landing-scroll">
+        <section className="mail-hero">
+          <span className="mail-kicker">MESSAGERIE SÉCURISÉE · @AYEBA.APP</span>
+          <h1>
+            Votre messagerie.
+            <br />
+            <span>Vraiment à vous.</span>
+          </h1>
+          <p>
+            Une adresse <b>@ayeba.app</b> unique, vérifiée par votre numéro de
+            téléphone. Des messages chiffrés que personne n’analyse — même pas
+            nous. Conçu pour Kinshasa, ouvert au monde.
+          </p>
+          <div className="mail-hero-cta">
+            <button className="mail-cta" style={{ width: "auto", padding: "13px 34px" }} onClick={onSignup}>
+              Créer un compte
+            </button>
+            <button className="mail-btn" style={{ padding: "12px 22px", fontSize: 11 }} onClick={onSignin}>
+              J’ai déjà un compte
+            </button>
+          </div>
+        </section>
+
+        <section className="mail-features">
+          {FEATURES.map((f) => (
+            <div key={f.t} className="mail-feature">
+              <span className="mail-feature-i">{f.i}</span>
+              <h3>{f.t}</h3>
+              <p>{f.d}</p>
+            </div>
+          ))}
+        </section>
+
+        <section className="mail-band">
+          <span className="mail-kicker">ZÉRO GOOGLE · ZÉRO GMAIL</span>
+          <p>
+            Ayeba Mail est une infrastructure indépendante. Aucune connexion à
+            Google, aucune dépendance externe — votre boîte vit sur les
+            serveurs de l’écosystème Ayeba.
+          </p>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+/* ── Connexion : numéro → code SMS ──────────────────────────────────── */
+function SigninFlow({ onDone, onBack }: { onDone: () => void; onBack: () => void }) {
+  const [phone, setPhone] = useState("");
+  const [code, setCode] = useState("");
+  const [sent, setSent] = useState(false);
+  const [devCode, setDevCode] = useState("");
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const request = async () => {
+    setErr("");
+    setBusy(true);
+    try {
+      const res = await fetch("/api/mail/signin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone }),
+      });
+      const data = (await res.json()) as { ok?: boolean; devCode?: string; error?: string };
+      if (!res.ok || data.error) return setErr(data.error || "Envoi impossible.");
+      if (data.devCode) setDevCode(data.devCode);
+      setSent(true);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const verify = async () => {
+    setErr("");
+    setBusy(true);
+    try {
+      const res = await fetch("/api/mail/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone, code }),
+      });
+      const data = (await res.json()) as { ok?: boolean; error?: string };
+      if (!res.ok || data.error) return setErr(data.error || "Vérification échouée.");
+      onDone();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="mail-root">
+      <div className="mail-gate">
+        <div className="mail-gate-panel">
+          <span className="mail-kicker">AYEBA MAIL — CONNEXION</span>
+          <h2>Votre numéro, votre clé</h2>
+          <p className="sub">
+            Entrez le numéro lié à votre boîte — un code SMS vous connecte.
+            Pas de mot de passe.
+          </p>
+          {devCode && (
+            <div className="mail-dev-code">MODE DEV — code : {devCode}</div>
+          )}
+          {err && <div className="mail-err">{err}</div>}
+          {!sent ? (
+            <>
+              <div className="mail-field">
+                <label>Numéro de téléphone</label>
+                <input
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="+243 9XX XXX XXX"
+                  inputMode="tel"
+                  autoFocus
+                />
+              </div>
+              <button className="mail-cta" disabled={busy || phone.length < 8} onClick={() => void request()}>
+                {busy ? "Envoi…" : "Recevoir le code"}
+              </button>
+            </>
+          ) : (
+            <>
+              <div className="mail-field">
+                <label>Code reçu par SMS</label>
+                <input
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  placeholder="000000"
+                  inputMode="numeric"
+                  autoFocus
+                  style={{ letterSpacing: "0.5em", fontFamily: "var(--font-mono), monospace", fontSize: 20, textAlign: "center" }}
+                />
+              </div>
+              <button className="mail-cta" disabled={busy || code.length !== 6} onClick={() => void verify()}>
+                {busy ? "Vérification…" : "Se connecter"}
+              </button>
+            </>
+          )}
+          <button className="mail-btn link" style={{ marginTop: 14 }} onClick={onBack}>
+            ← Retour
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Inscription : adresse → identité → code SMS ────────────────────── */
+function SignupFlow({ defaultName, onDone, onBack }: { defaultName: string; onDone: () => void; onBack: () => void }) {
   const [step, setStep] = useState(1);
   const [address, setAddress] = useState("");
   const [avail, setAvail] = useState<null | { ok: boolean; msg: string }>(null);
@@ -635,6 +826,9 @@ function SignupFlow({ defaultName, onDone }: { defaultName: string; onDone: () =
               </button>
             </>
           )}
+          <button className="mail-btn link" style={{ marginTop: 14 }} onClick={onBack}>
+            ← Retour à l’accueil
+          </button>
         </div>
       </div>
     </div>

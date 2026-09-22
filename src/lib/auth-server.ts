@@ -13,7 +13,7 @@ export type SessionUser = {
   name: string;
   email: string;
   avatarColor: string;
-  provider: "email" | "google" | "github" | "microsoft" | "apple";
+  provider: "email" | "google" | "github" | "microsoft" | "apple" | "mail";
 };
 
 function secretKey() {

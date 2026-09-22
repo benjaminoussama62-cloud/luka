@@ -232,7 +232,7 @@ export function createVerification(
   const check = validateAddress(address);
   if (!check.ok) return { error: check.reason! };
   const a = address.toLowerCase();
-  if (getAccountByUser(userId)) return { error: "Ce compte Ayeba a déjà une adresse mail." };
+  if (userId && getAccountByUser(userId)) return { error: "Ce compte Ayeba a déjà une adresse mail." };
   if (!addressAvailable(a)) return { error: "Cette adresse est déjà prise." };
   if (phoneUsed(phone)) return { error: "Ce numéro est déjà lié à un compte Ayeba Mail." };
 
@@ -251,27 +251,51 @@ export function createVerification(
   return { id, code };
 }
 
-export function verifyAndCreateAccount(
-  userId: string,
+/** Code SMS de connexion — le téléphone est l'identité, comme WhatsApp. */
+export function createSigninCode(phone: string): { code: string } | { error: string } {
+  const acc = db()
+    .prepare("SELECT * FROM mail_accounts WHERE phone = ?")
+    .get(phone) as AccountRow | undefined;
+  if (!acc) return { error: "Aucun compte Ayeba Mail avec ce numéro." };
+  if ((acc.status || "active") === "suspended") return { error: "Compte suspendu." };
+
+  db().prepare("DELETE FROM mail_verifications WHERE phone = ?").run(phone);
+  const code = String(crypto.randomInt(100000, 999999));
+  db()
+    .prepare(
+      "INSERT INTO mail_verifications (id, user_id, phone, address, code_hash, attempts, expires_at, created_at) VALUES (?, ?, ?, ?, ?, 0, ?, ?)",
+    )
+    .run(uid(), acc.user_id, phone, acc.address, hashCode(code), new Date(Date.now() + OTP_TTL_MS).toISOString(), now());
+  return { code };
+}
+
+type VerifRow = {
+  id: string;
+  user_id: string;
+  address: string;
+  code_hash: string;
+  attempts: number;
+  expires_at: string;
+  display_name?: string;
+  birthdate?: string;
+  recovery_email?: string;
+};
+
+const AVATAR_COLORS = ["#e85d04", "#ff6b35", "#64748b", "#94a3b8", "#f97316", "#78716c"];
+
+/**
+ * Valide un code SMS et finalise :
+ * - compte mail existant pour ce numéro → connexion (retourne l'userId lié)
+ * - sinon → crée l'utilisateur Ayeba (provider « mail », sans mot de passe) +
+ *   la boîte. L'inscription Mail ne demande JAMAIS de session préalable.
+ */
+export function completeMailVerification(
   phone: string,
   code: string,
-): { ok: true; account: MailAccount } | { ok: false; error: string } {
+): { ok: true; account: MailAccount; userId: string; isNew: boolean } | { ok: false; error: string } {
   const v = db()
-    .prepare(
-      "SELECT * FROM mail_verifications WHERE user_id = ? AND phone = ? ORDER BY created_at DESC LIMIT 1",
-    )
-    .get(userId, phone) as
-    | {
-        id: string;
-        address: string;
-        code_hash: string;
-        attempts: number;
-        expires_at: string;
-        display_name?: string;
-        birthdate?: string;
-        recovery_email?: string;
-      }
-    | undefined;
+    .prepare("SELECT * FROM mail_verifications WHERE phone = ? ORDER BY created_at DESC LIMIT 1")
+    .get(phone) as VerifRow | undefined;
 
   if (!v) return { ok: false, error: "Aucune vérification en cours pour ce numéro." };
   if (v.expires_at < now()) return { ok: false, error: "Code expiré — recommencez." };
@@ -283,6 +307,16 @@ export function verifyAndCreateAccount(
     return { ok: false, error: "Code incorrect." };
   }
 
+  // Connexion : le compte existe déjà pour ce numéro.
+  const existingByPhone = db()
+    .prepare("SELECT * FROM mail_accounts WHERE phone = ?")
+    .get(phone) as AccountRow | undefined;
+  if (existingByPhone) {
+    db().prepare("DELETE FROM mail_verifications WHERE id = ?").run(v.id);
+    db().prepare("UPDATE mail_accounts SET last_login_at = ? WHERE id = ?").run(now(), existingByPhone.id);
+    return { ok: true, account: toAccount(existingByPhone), userId: existingByPhone.user_id, isNew: false };
+  }
+
   // Dernière ligne de défense contre une course : UNIQUE en base + re-check
   // sur les comptes réels uniquement (la vérification en cours réserve déjà
   // l'adresse — ne pas la compter contre elle-même).
@@ -292,11 +326,30 @@ export function verifyAndCreateAccount(
   if (taken) {
     return { ok: false, error: "Cette adresse vient d'être prise — choisissez-en une autre." };
   }
-  if (phoneUsed(phone)) {
-    return { ok: false, error: "Ce numéro est déjà lié à un compte." };
-  }
 
   const email = `${v.address}@${MAIL_DOMAIN}`;
+  let userId = v.user_id;
+
+  // Inscription anonyme : le compte Ayeba est créé ici — provider « mail ».
+  if (!userId) {
+    userId = crypto.randomUUID();
+    try {
+      db()
+        .prepare(
+          "INSERT INTO users (id, name, email, password_hash, avatar_color, provider, role, created_at) VALUES (?, ?, ?, '', ?, 'mail', 'contributor', ?)",
+        )
+        .run(
+          userId,
+          v.display_name || v.address,
+          email,
+          AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)],
+          now(),
+        );
+    } catch {
+      return { ok: false, error: "Création impossible — réessayez." };
+    }
+  }
+
   try {
     db()
       .prepare(
@@ -325,7 +378,7 @@ export function verifyAndCreateAccount(
     kind: "system",
     read: false,
   });
-  return { ok: true, account };
+  return { ok: true, account, userId, isNew: true };
 }
 
 // ── Messages ───────────────────────────────────────────────────────────────

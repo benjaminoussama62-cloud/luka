@@ -15,7 +15,7 @@ export type AyebaUser = {
   name: string;
   email: string;
   avatarColor: string;
-  provider: "email" | "google" | "github" | "microsoft" | "apple";
+  provider: "email" | "google" | "github" | "microsoft" | "apple" | "mail";
 };
 
 type AuthState = {

@@ -10,7 +10,7 @@ export type DbUser = {
   email: string;
   passwordHash: string;
   avatarColor: string;
-  provider: "email" | "google" | "github" | "microsoft" | "apple";
+  provider: "email" | "google" | "github" | "microsoft" | "apple" | "mail";
   createdAt: string;
   status: "active" | "suspended";
 };

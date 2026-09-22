@@ -11,7 +11,8 @@ import {
   unreadCount,
   validateAddress,
   validateProfile,
-  verifyAndCreateAccount,
+  completeMailVerification,
+  createSigninCode,
 } from "@/lib/mail/mail";
 
 let pass = 0, fail = 0;
@@ -25,7 +26,7 @@ const db = getDb();
 db.prepare("DELETE FROM mail_messages").run();
 db.prepare("DELETE FROM mail_verifications").run();
 db.prepare("DELETE FROM mail_accounts WHERE address LIKE '%.test' OR phone LIKE '+2438%'").run();
-db.prepare("DELETE FROM users WHERE id LIKE 'u_%'").run();
+db.prepare("DELETE FROM users WHERE id LIKE 'u_%' OR email LIKE '%@ayeba.app'").run();
 
 const mkUser = (email: string) => {
   const id = `u_${email.split("@")[0]}`;
@@ -66,13 +67,21 @@ check("code généré 6 chiffres", "code" in v1 && /^\d{6}$/.test(v1.code));
 const vDup = createVerification(u2, "+243812345679", "alice.test", PROF2);
 check("adresse prise bloquée (verif en cours)", "error" in vDup && /prise/.test(vDup.error));
 
-const badCode = verifyAndCreateAccount(u1, "+243812345678", "000000");
+const badCode = completeMailVerification("+243812345678", "000000");
 check("mauvais code refusé", !badCode.ok && /incorrect/i.test(badCode.error));
 
 if ("code" in v1) {
-  const acc = verifyAndCreateAccount(u1, "+243812345678", v1.code);
+  const acc = completeMailVerification("+243812345678", v1.code);
   check("compte créé avec bon code", acc.ok);
   check("email = alice.test@ayeba.app", acc.ok && acc.account.email === "alice.test@ayeba.app");
+}
+
+// Inscription anonyme (sans session préalable) — le compte Ayeba est créé.
+const vAnon = createVerification("", "+243812345700", "anon.test", { displayName: "Anon", birthdate: "1990-01-01", recoveryEmail: "" });
+if ("code" in vAnon) {
+  const ra = completeMailVerification("+243812345700", vAnon.code);
+  check("inscription sans session → user créé", ra.ok && ra.isNew && ra.account.email === "anon.test@ayeba.app");
+  check("user provider mail en base", !!db.prepare("SELECT 1 x FROM users WHERE provider='mail' AND email='anon.test@ayeba.app'").get());
 }
 
 const vPhone = createVerification(u2, "+243812345678", "bob.test", PROF2);
@@ -84,7 +93,7 @@ check("nom complet enregistré", acc1.displayName === "Alice Test");
 
 console.log("\n── Envoi interne + bounce ──");
 const v2 = createVerification(u2, "+243812345679", "bob.test", PROF2);
-if ("code" in v2) verifyAndCreateAccount(u2, "+243812345679", v2.code);
+if ("code" in v2) completeMailVerification("+243812345679", v2.code);
 const acc2 = getAccountByUser(u2)!;
 
 const r = sendMail(acc1, ["bob.test@ayeba.app", "personne@ayeba.app"], "Test réel", "Corps du message");
@@ -102,6 +111,15 @@ check("copie envoyés chez alice", listMessages(acc1.id, "sent").some((m) => m.s
 
 const ext = sendMail(acc1, ["x@gmail.com"], "Ext", "corps");
 check("externe refusé honnêtement", ext.bounced.some((b) => /externe/i.test(b.reason)) && !ext.delivered.length);
+
+console.log("\n── Connexion par téléphone ──");
+const sc = createSigninCode("+243812345678");
+check("code connexion généré", "code" in sc);
+check("numéro inconnu refusé", "error" in createSigninCode("+243000000000"));
+if ("code" in sc) {
+  const r = completeMailVerification("+243812345678", sc.code);
+  check("connexion sans recréer le compte", r.ok && !r.isNew && r.account.email === "alice.test@ayeba.app");
+}
 
 console.log("\n── Isolation ──");
 check("bob ne voit pas les mails d'alice", !listMessages(acc2.id, "sent").length);

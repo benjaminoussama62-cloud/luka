@@ -5,8 +5,9 @@ import { createVerification, normalizePhone, validateProfile } from "@/lib/mail/
 import { sendSms, smsConfigured } from "@/lib/mail/sms";
 
 export async function POST(req: Request) {
+  // Inscription autonome : la session Ayeba est facultative — si elle existe,
+  // la boîte y est liée ; sinon le compte Ayeba est créé à la vérification.
   const user = await getSessionFromCookies();
-  if (!user) return NextResponse.json({ error: "auth required" }, { status: 401 });
   if (!rateLimit(`mail-signup:${clientIp(req)}`, 10, 60_000)) return rateLimitResponse();
 
   const body = (await req.json().catch(() => null)) as
@@ -23,7 +24,7 @@ export async function POST(req: Request) {
   if (!profile.ok) return NextResponse.json({ error: profile.error }, { status: 400 });
   if (!rateLimit(`mail-otp:${phone}`, 4, 10 * 60_000)) return rateLimitResponse();
 
-  const v = createVerification(user.id, phone, address, profile.profile);
+  const v = createVerification(user?.id || "", phone, address, profile.profile);
   if ("error" in v) return NextResponse.json({ error: v.error }, { status: 409 });
 
   const text = `Ayeba Mail — votre code de vérification : ${v.code} (valide 5 min)`;
