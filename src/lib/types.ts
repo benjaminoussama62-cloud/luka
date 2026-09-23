@@ -92,7 +92,7 @@ export type ShopItem = {
 
 export type CommunityPost = {
   id: string;
-  platform: "reddit" | "discord" | "forum" | "x" | "tiktok" | "youtube";
+  platform: "reddit" | "discord" | "forum" | "x" | "tiktok" | "youtube" | "jemsa";
   title: string;
   excerpt: string;
   author: string;

@@ -221,6 +221,23 @@ CREATE TABLE IF NOT EXISTS admin_chat_messages (
 
 CREATE INDEX IF NOT EXISTS idx_chat_channel ON admin_chat_messages(channel, created_at);
 
+-- ADMIN CHAT GROUPS — named channels with explicit membership (Rocket.Chat style)
+CREATE TABLE IF NOT EXISTS admin_chat_groups (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS admin_chat_group_members (
+  group_id TEXT NOT NULL REFERENCES admin_chat_groups(id) ON DELETE CASCADE,
+  admin_id TEXT NOT NULL,
+  added_at TEXT NOT NULL,
+  PRIMARY KEY (group_id, admin_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_chat_group_members ON admin_chat_group_members(admin_id);
+
 -- ADMIN SESSIONS (dedicated back-office auth — separate from user sessions)
 CREATE TABLE IF NOT EXISTS admin_sessions (
   id TEXT PRIMARY KEY,

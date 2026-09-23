@@ -1346,18 +1346,30 @@ async function liveSearchCore(
         type: "image" as const,
       }));
 
-  const videos: MediaResult[] = nativeVideos.length
-    ? nativeVideos
-    : [
-        {
-          id: "yt-fallback",
-          title: `${q} — vidéos`,
-          url: `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`,
-          thumb: "https://www.google.com/s2/favicons?domain=youtube.com&sz=128",
-          source: "YouTube",
-          type: "video",
-        },
-      ];
+  // Écosystème d'abord quand il a du contenu : TALA (vidéo), puis web mondial.
+  const talaCard: MediaResult = {
+    id: "tala",
+    title: `${q} — sur TALA`,
+    url: `https://to-tala.com/search?q=${encodeURIComponent(q)}`,
+    thumb: "https://www.google.com/s2/favicons?domain=to-tala.com&sz=128",
+    source: "TALA",
+    type: "video",
+  };
+  const videos: MediaResult[] = [
+    talaCard,
+    ...(nativeVideos.length
+      ? nativeVideos
+      : [
+          {
+            id: "yt-fallback",
+            title: `${q} — vidéos`,
+            url: `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`,
+            thumb: "https://www.google.com/s2/favicons?domain=youtube.com&sz=128",
+            source: "YouTube",
+            type: "video" as const,
+          },
+        ]),
+  ];
 
   const maps = nativeMaps;
   const shopping = buildNativeShopping(q);
@@ -1515,6 +1527,18 @@ async function liveSearchCore(
     maps,
     shopping,
     community: [
+      {
+        id: "cm-jemsa",
+        platform: "jemsa",
+        title: `« ${q} » sur JEMSA`,
+        excerpt:
+          "Discussions, profils et savoirs de la communauté JEMSA — le réseau du savoir de l'écosystème Ayeba.",
+        author: "jemsa",
+        url: `https://jemsa.net/search?q=${encodeURIComponent(q)}`,
+        trustScore: 85,
+        engagement: 0,
+        postedAt: new Date().toISOString().slice(0, 10),
+      },
       {
         id: "cm-reddit",
         platform: "reddit",

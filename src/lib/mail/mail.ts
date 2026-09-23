@@ -46,6 +46,8 @@ export type MailAccount = {
   displayName: string;
   birthdate: string;
   recoveryEmail: string;
+  avatar: string;
+  signature: string;
   status: string;
   createdAt: string;
 };
@@ -59,6 +61,8 @@ type AccountRow = {
   display_name?: string;
   birthdate?: string;
   recovery_email?: string;
+  avatar?: string;
+  signature?: string;
   status?: string;
   created_at: string;
 };
@@ -113,6 +117,8 @@ function toAccount(r: AccountRow): MailAccount {
     displayName: r.display_name || r.address,
     birthdate: r.birthdate || "",
     recoveryEmail: r.recovery_email || "",
+    avatar: r.avatar || "",
+    signature: r.signature || "",
     status: r.status || "active",
     createdAt: r.created_at,
   };
@@ -608,6 +614,45 @@ export function sendSystemMessage(accountId: string, subject: string, body: stri
     kind: "system",
   });
   return true;
+}
+
+const AVATAR_RE = /^data:image\/(png|jpe?g|webp);base64,[A-Za-z0-9+/=]+$/;
+const AVATAR_MAX = 180_000; // ~128px jpeg/webp tient sous 130 KB
+
+export function updateAccountProfile(
+  accountId: string,
+  patch: { displayName?: string; avatar?: string | null; signature?: string },
+): { ok: true } | { error: string } {
+  const sets: string[] = [];
+  const args: unknown[] = [];
+
+  if (patch.displayName !== undefined) {
+    const name = patch.displayName.replace(/\s+/g, " ").trim();
+    if (name.length < 2 || name.length > 60 || /[<>@]/.test(name)) {
+      return { error: "Nom affiché invalide (2–60 caractères, sans @ ni < >)." };
+    }
+    sets.push("display_name = ?");
+    args.push(name);
+  }
+  if (patch.avatar !== undefined) {
+    const a = patch.avatar ?? "";
+    if (a && (!AVATAR_RE.test(a) || a.length > AVATAR_MAX)) {
+      return { error: "Image invalide — PNG/JPEG/WebP, 128 Ko max." };
+    }
+    sets.push("avatar = ?");
+    args.push(a);
+  }
+  if (patch.signature !== undefined) {
+    const sig = patch.signature.slice(0, 600);
+    sets.push("signature = ?");
+    args.push(sig);
+  }
+  if (!sets.length) return { error: "Rien à modifier." };
+
+  db()
+    .prepare(`UPDATE mail_accounts SET ${sets.join(", ")} WHERE id = ?`)
+    .run(...args, accountId);
+  return { ok: true };
 }
 
 export function setAccountStatus(accountId: string, status: "active" | "suspended") {

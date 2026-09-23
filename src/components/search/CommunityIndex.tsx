@@ -3,6 +3,7 @@
 import type { CommunityPost } from "@/lib/types";
 
 const PLATFORM_LABEL: Record<CommunityPost["platform"], string> = {
+  jemsa: "JEMSA",
   reddit: "Reddit",
   discord: "Discord",
   forum: "Forum",
@@ -12,6 +13,7 @@ const PLATFORM_LABEL: Record<CommunityPost["platform"], string> = {
 };
 
 const PLATFORM_TONE: Record<CommunityPost["platform"], string> = {
+  jemsa: "from-[#e85d04]/25 to-transparent",
   reddit: "from-orange-500/20 to-transparent",
   discord: "from-indigo-500/20 to-transparent",
   forum: "from-zinc-500/20 to-transparent",

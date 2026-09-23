@@ -77,6 +77,16 @@ export function buildNativeShopping(query: string): ShopItem[] {
 
   const catalog: ShopItem[] = [
     {
+      id: "sombateka",
+      title: `${query} — Sombateka Online`,
+      price: "boutique RDC",
+      currency: "CDF",
+      store: "Sombateka",
+      url: `https://sombatekaonline.com/search?q=${q}`,
+      thumb: thumb("sombatekaonline.com"),
+      rating: 4.6,
+    },
+    {
       id: "jumia-1",
       title: `${query} — Jumia RDC`,
       price: "à partir de",
@@ -161,7 +171,7 @@ export function buildNativeShopping(query: string): ShopItem[] {
   const indexed = searchProducts(query, 12);
   const seen = new Set<string>();
   const merged: ShopItem[] = [];
-  for (const item of [...indexed, ...catalog]) {
+  for (const item of [...catalog, ...indexed]) {
     if (seen.has(item.id)) continue;
     seen.add(item.id);
     merged.push(item);

@@ -70,6 +70,8 @@ const MIGRATIONS = [
   "ALTER TABLE mail_verifications ADD COLUMN display_name TEXT NOT NULL DEFAULT ''",
   "ALTER TABLE mail_verifications ADD COLUMN birthdate TEXT NOT NULL DEFAULT ''",
   "ALTER TABLE mail_verifications ADD COLUMN recovery_email TEXT NOT NULL DEFAULT ''",
+  "ALTER TABLE mail_accounts ADD COLUMN avatar TEXT NOT NULL DEFAULT ''",
+  "ALTER TABLE mail_accounts ADD COLUMN signature TEXT NOT NULL DEFAULT ''",
 ];
 
 export function applyMailSchema(db: AyebaDatabase) {

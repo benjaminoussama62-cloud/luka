@@ -18,7 +18,15 @@ type Msg = {
   at: string;
 };
 
-type Account = { email: string; address: string; displayName: string; status: string; createdAt: string };
+type Account = {
+  email: string;
+  address: string;
+  displayName: string;
+  avatar: string;
+  signature: string;
+  status: string;
+  createdAt: string;
+};
 
 const FOLDERS: { id: string; label: string; icon: string }[] = [
   { id: "inbox", label: "Boîte de réception", icon: "▤" },
@@ -78,6 +86,7 @@ export function MailApp() {
   const [translating, setTranslating] = useState(false);
   const [targetLang, setTargetLang] = useState("fr");
   const [profileOpen, setProfileOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(null);
 
@@ -266,22 +275,40 @@ export function MailApp() {
             aria-label={`Compte ${account.email}`}
             aria-expanded={profileOpen}
             onClick={() => setProfileOpen((v) => !v)}
-            style={{
-              background: `linear-gradient(135deg, hsl(${hueFrom(account.email)} 62% 42%), hsl(${(hueFrom(account.email) + 40) % 360} 70% 30%))`,
-            }}
+            style={
+              account.avatar
+                ? { padding: 0, overflow: "hidden" }
+                : {
+                    background: `linear-gradient(135deg, hsl(${hueFrom(account.email)} 62% 42%), hsl(${(hueFrom(account.email) + 40) % 360} 70% 30%))`,
+                  }
+            }
           >
-            {(account.displayName || account.address)[0].toUpperCase()}
+            {account.avatar ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={account.avatar} alt="" width={32} height={32} style={{ objectFit: "cover" }} />
+            ) : (
+              (account.displayName || account.address)[0].toUpperCase()
+            )}
           </button>
           {profileOpen && (
             <div className="mail-account-menu" role="menu">
               <div className="mail-account-head">
                 <div
                   className="mail-account-avatar"
-                  style={{
-                    background: `linear-gradient(135deg, hsl(${hueFrom(account.email)} 62% 42%), hsl(${(hueFrom(account.email) + 40) % 360} 70% 30%))`,
-                  }}
+                  style={
+                    account.avatar
+                      ? { padding: 0, overflow: "hidden" }
+                      : {
+                          background: `linear-gradient(135deg, hsl(${hueFrom(account.email)} 62% 42%), hsl(${(hueFrom(account.email) + 40) % 360} 70% 30%))`,
+                        }
+                  }
                 >
-                  {(account.displayName || account.address)[0].toUpperCase()}
+                  {account.avatar ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={account.avatar} alt="" width={52} height={52} style={{ objectFit: "cover" }} />
+                  ) : (
+                    (account.displayName || account.address)[0].toUpperCase()
+                  )}
                 </div>
                 <div className="mail-account-id">
                   <strong>{account.displayName || account.address}</strong>
@@ -296,6 +323,16 @@ export function MailApp() {
                 <span>Boîte chiffrée AES-256</span>
                 <span>Membre depuis {new Date(account.createdAt).toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}</span>
               </div>
+              <button
+                className="mail-account-signout"
+                style={{ marginBottom: 6 }}
+                onClick={() => {
+                  setProfileOpen(false);
+                  setSettingsOpen(true);
+                }}
+              >
+                Gérer le compte
+              </button>
               <button className="mail-account-signout" onClick={() => void signOut()}>
                 Se déconnecter
               </button>
@@ -433,6 +470,7 @@ export function MailApp() {
       {compose && (
         <ComposePanel
           self={account.email}
+          signature={account.signature}
           onClose={() => setCompose(false)}
           onSent={(delivered, bounced) => {
             setCompose(false);
@@ -445,7 +483,178 @@ export function MailApp() {
           }}
         />
       )}
+      {settingsOpen && (
+        <SettingsPanel
+          account={account}
+          onClose={() => setSettingsOpen(false)}
+          onSaved={() => void loadAccount()}
+          onToast={showToast}
+        />
+      )}
       {toast && <div className="mail-toast">{toast}</div>}
+    </div>
+  );
+}
+
+/* ── Paramètres du compte ───────────────────────────────────────────── */
+function SettingsPanel({
+  account,
+  onClose,
+  onSaved,
+  onToast,
+}: {
+  account: Account;
+  onClose: () => void;
+  onSaved: () => void;
+  onToast: (m: string) => void;
+}) {
+  const [name, setName] = useState(account.displayName);
+  const [signature, setSignature] = useState(account.signature);
+  const [avatar, setAvatar] = useState(account.avatar);
+  const [saving, setSaving] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const pickAvatar = (file: File | undefined) => {
+    if (!file) return;
+    if (!/^image\/(png|jpe?g|webp)$/.test(file.type)) {
+      onToast("Format non supporté — PNG, JPEG ou WebP.");
+      return;
+    }
+    if (file.size > 4_000_000) {
+      onToast("Image trop lourde — 4 Mo max avant compression.");
+      return;
+    }
+    const img = new Image();
+    img.onload = () => {
+      const size = 128;
+      const canvas = document.createElement("canvas");
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      const side = Math.min(img.width, img.height);
+      ctx.drawImage(
+        img,
+        (img.width - side) / 2,
+        (img.height - side) / 2,
+        side,
+        side,
+        0,
+        0,
+        size,
+        size,
+      );
+      setAvatar(canvas.toDataURL("image/jpeg", 0.82));
+      URL.revokeObjectURL(img.src);
+    };
+    img.src = URL.createObjectURL(file);
+  };
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch("/api/mail/account", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ displayName: name, signature, avatar }),
+      });
+      const data = (await res.json()) as { ok?: boolean; error?: string };
+      if (res.ok && data.ok) {
+        onSaved();
+        onToast("Compte mis à jour.");
+        onClose();
+      } else {
+        onToast(data.error || "Enregistrement impossible.");
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="mail-settings-overlay" onClick={onClose}>
+      <div className="mail-settings" onClick={(e) => e.stopPropagation()}>
+        <div className="mail-settings-head">
+          <span className="mail-kicker">PARAMÈTRES DU COMPTE</span>
+          <button className="mail-btn" onClick={onClose}>✕</button>
+        </div>
+
+        <div className="mail-settings-photo">
+          <button
+            className="mail-settings-avatar"
+            onClick={() => fileRef.current?.click()}
+            title="Changer la photo"
+            style={
+              avatar
+                ? { padding: 0, overflow: "hidden" }
+                : {
+                    background: `linear-gradient(135deg, hsl(${hueFrom(account.email)} 62% 42%), hsl(${(hueFrom(account.email) + 40) % 360} 70% 30%))`,
+                  }
+            }
+          >
+            {avatar ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={avatar} alt="" width={72} height={72} style={{ objectFit: "cover" }} />
+            ) : (
+              (name || account.address)[0].toUpperCase()
+            )}
+            <span className="mail-settings-avatar-edit">✎</span>
+          </button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            style={{ display: "none" }}
+            onChange={(e) => pickAvatar(e.target.files?.[0])}
+          />
+          <div>
+            <strong>{account.email}</strong>
+            <p style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>
+              Photo visible par vos correspondants Ayeba. Redimensionnée à 128px, stockée chiffrée avec le compte.
+            </p>
+            {avatar && (
+              <button
+                className="mail-btn"
+                style={{ marginTop: 6, fontSize: 12 }}
+                onClick={() => setAvatar("")}
+              >
+                Retirer la photo
+              </button>
+            )}
+          </div>
+        </div>
+
+        <label className="mail-settings-label">Nom affiché</label>
+        <input
+          className="mail-settings-input"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          maxLength={60}
+        />
+
+        <label className="mail-settings-label">Signature</label>
+        <textarea
+          className="mail-settings-input"
+          rows={3}
+          value={signature}
+          onChange={(e) => setSignature(e.target.value)}
+          placeholder="Ajoutée automatiquement à vos messages…"
+          maxLength={600}
+        />
+
+        <div className="mail-settings-meta">
+          <span>Compte vérifié par SMS</span>
+          <span>Chiffrement AES-256 au repos</span>
+          <span>Membre depuis {new Date(account.createdAt).toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}</span>
+        </div>
+
+        <div className="mail-settings-foot">
+          <button className="mail-btn" onClick={onClose}>Annuler</button>
+          <button className="mail-send-btn" onClick={() => void save()} disabled={saving}>
+            {saving ? "Enregistrement…" : "Enregistrer"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -453,10 +662,12 @@ export function MailApp() {
 /* ── Fenêtre de rédaction ───────────────────────────────────────────── */
 function ComposePanel({
   self,
+  signature,
   onClose,
   onSent,
 }: {
   self: string;
+  signature: string;
   onClose: () => void;
   onSent: (delivered: string[], bounced: { address: string }[]) => void;
 }) {
@@ -474,7 +685,11 @@ function ComposePanel({
       const res = await fetch("/api/mail/messages", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ to, subject, body }),
+        body: JSON.stringify({
+          to,
+          subject,
+          body: signature ? `${body}\n\n—\n${signature}` : body,
+        }),
       });
       const data = (await res.json()) as {
         ok?: boolean;

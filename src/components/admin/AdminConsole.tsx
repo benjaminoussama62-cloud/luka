@@ -39,25 +39,29 @@ type Tab =
   | "incidents"
   | "mail";
 
-const TABS: { id: Tab; label: string }[] = [
-  { id: "overview", label: "Vue d'ensemble" },
-  { id: "users", label: "Utilisateurs" },
-  { id: "moderation", label: "Modération" },
-  { id: "support", label: "Support" },
-  { id: "billing", label: "Facturation" },
-  { id: "network", label: "Réseau pubs" },
-  { id: "content", label: "Contenu & accès" },
-  { id: "search", label: "Recherche & Index" },
-  { id: "ecosystem", label: "Écosystème" },
-  { id: "mail", label: "Ayeba Mail" },
-  { id: "security", label: "Sécurité" },
-  { id: "broadcast", label: "Annonces" },
-  { id: "incidents", label: "Incidents" },
-  { id: "system", label: "Système" },
-  { id: "audit", label: "Journal & alertes" },
-  { id: "team", label: "Équipe admin" },
-  { id: "chat", label: "Chat équipe" },
+type TabDef = { id: Tab; label: string; group: string };
+
+const TABS: TabDef[] = [
+  { id: "overview", label: "Vue d'ensemble", group: "Pilotage" },
+  { id: "system", label: "Système", group: "Pilotage" },
+  { id: "security", label: "Sécurité", group: "Pilotage" },
+  { id: "audit", label: "Journal & alertes", group: "Pilotage" },
+  { id: "incidents", label: "Incidents", group: "Pilotage" },
+  { id: "users", label: "Utilisateurs", group: "Utilisateurs" },
+  { id: "moderation", label: "Modération", group: "Utilisateurs" },
+  { id: "support", label: "Support", group: "Utilisateurs" },
+  { id: "team", label: "Équipe admin", group: "Utilisateurs" },
+  { id: "content", label: "Contenu & accès", group: "Produit" },
+  { id: "search", label: "Recherche & Index", group: "Produit" },
+  { id: "ecosystem", label: "Écosystème", group: "Produit" },
+  { id: "mail", label: "Ayeba Mail", group: "Produit" },
+  { id: "billing", label: "Facturation", group: "Business" },
+  { id: "network", label: "Réseau pubs", group: "Business" },
+  { id: "chat", label: "Chat équipe", group: "Communication" },
+  { id: "broadcast", label: "Annonces", group: "Communication" },
 ];
+
+const GROUP_ORDER = ["Pilotage", "Utilisateurs", "Produit", "Business", "Communication"];
 
 /* ---------- helpers ---------- */
 
@@ -217,8 +221,12 @@ export function AdminConsole({
   const [chatChannel, setChatChannel] = useState("team");
   const [chatMessages, setChatMessages] = useState<Row[]>([]);
   const [chatMembers, setChatMembers] = useState<Row[]>([]);
+  const [chatGroups, setChatGroups] = useState<Row[]>([]);
   const [chatMe, setChatMe] = useState("");
   const [chatInput, setChatInput] = useState("");
+  const [groupForm, setGroupForm] = useState(false);
+  const [groupName, setGroupName] = useState("");
+  const [groupPicks, setGroupPicks] = useState<string[]>([]);
   const chatLastTs = useRef("");
 
   const flash = (m: string) => {
@@ -267,17 +275,31 @@ export function AdminConsole({
     if (tab !== "chat") return;
     let alive = true;
     const channelParam = (c: string) =>
-      c === "team" ? "team" : `dm:${[chatMe, c].sort().join(":")}`;
+      c === "team" || c.startsWith("grp:") ? c : `dm:${[chatMe, c].sort().join(":")}`;
     const pull = async (after?: string) => {
       const d = await api<{
-        messages: Row[]; members: Row[]; me: string;
+        messages: Row[]; members: Row[]; groups?: Row[]; me: string;
       }>(`/api/admin/chat?channel=${encodeURIComponent(channelParam(chatChannel))}${after ? `&after=${encodeURIComponent(after)}` : ""}`);
       if (!d || !alive) return;
       setChatMe(d.me);
       setChatMembers(d.members);
-      setChatMessages((prev) => (after ? [...prev, ...d.messages] : d.messages));
+      if (d.groups) setChatGroups(d.groups);
+      // Dedupe by id — a message can arrive both from the POST response and
+      // the next incremental poll.
+      setChatMessages((prev) => {
+        const merged = after ? [...prev, ...d.messages] : d.messages;
+        const seen = new Set<string>();
+        return merged.filter((m) => {
+          const id = String(m.id);
+          if (seen.has(id)) return false;
+          seen.add(id);
+          return true;
+        });
+      });
       const newest = d.messages[d.messages.length - 1];
-      if (newest) chatLastTs.current = String(newest.created_at);
+      if (newest && String(newest.created_at) > chatLastTs.current) {
+        chatLastTs.current = String(newest.created_at);
+      }
     };
     chatLastTs.current = "";
     void Promise.resolve().then(() => pull());
@@ -325,21 +347,30 @@ export function AdminConsole({
           <p className="ayeba-kicker ayeba-kicker-accent">Ayeba</p>
           <h1 className="text-lg font-semibold">Back Office</h1>
         </div>
-        <nav className="flex-1 space-y-1">
-          {visibleTabs.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => { setTab(t.id); setTicket(null); }}
-              className="w-full rounded-lg px-3 py-2 text-left text-sm transition"
-              style={
-                tab === t.id
-                  ? { background: "rgba(232,93,4,0.16)", color: "var(--ink)", borderLeft: "2px solid #e85d04" }
-                  : { color: "rgba(245,245,247,0.65)" }
-              }
-            >
-              {t.label}
-            </button>
-          ))}
+        <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto pr-1" style={{ scrollbarWidth: "thin" }}>
+          {GROUP_ORDER.map((g) => {
+            const items = visibleTabs.filter((t) => t.group === g);
+            if (!items.length) return null;
+            return (
+              <div key={g} className="pt-3 first:pt-0">
+                <p className="ayeba-kicker px-3 pb-1" style={{ fontSize: 9.5 }}>{g}</p>
+                {items.map((t) => (
+                  <button
+                    key={t.id}
+                    onClick={() => { setTab(t.id); setTicket(null); }}
+                    className="w-full rounded-lg px-3 py-1.5 text-left text-sm transition"
+                    style={
+                      tab === t.id
+                        ? { background: "rgba(232,93,4,0.16)", color: "var(--ink)", borderLeft: "2px solid #e85d04" }
+                        : { color: "rgba(245,245,247,0.65)" }
+                    }
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            );
+          })}
         </nav>
         <div className="border-t pt-3 text-xs" style={{ borderColor: "var(--line)" }}>
           <p className="font-medium">{adminName}</p>
@@ -1331,7 +1362,7 @@ export function AdminConsole({
               <h2 className="text-xl font-semibold">Chat équipe</h2>
               <p className="text-sm opacity-60">Messagerie interne des administrateurs — canal équipe et messages directs</p>
             </header>
-            <div className="grid gap-4 lg:grid-cols-[220px_1fr]">
+            <div className="grid gap-4 lg:grid-cols-[240px_1fr]">
               <div className="ayeba-panel p-3">
                 <p className="ayeba-kicker mb-2">Canaux</p>
                 <button
@@ -1341,6 +1372,72 @@ export function AdminConsole({
                 >
                   # équipe
                 </button>
+                {chatGroups.map((g) => (
+                  <button
+                    key={s(g.id)}
+                    onClick={() => setChatChannel(`grp:${s(g.id)}`)}
+                    className="mb-1 w-full rounded-lg px-3 py-2 text-left text-sm"
+                    style={chatChannel === `grp:${s(g.id)}` ? { background: "rgba(232,93,4,0.16)" } : { opacity: 0.7 }}
+                  >
+                    # {s(g.name)} <span className="text-xs opacity-50">· {num(g.members)}</span>
+                  </button>
+                ))}
+                <button
+                  onClick={() => setGroupForm((v) => !v)}
+                  className="mb-1 w-full rounded-lg px-3 py-1.5 text-left text-xs transition"
+                  style={{ border: "1px dashed var(--line-bright)", color: "var(--orange)" }}
+                >
+                  + Nouveau groupe
+                </button>
+                {groupForm && (
+                  <form
+                    className="mt-2 space-y-2 rounded-lg p-2"
+                    style={{ border: "1px solid var(--line)" }}
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      void (async () => {
+                        const res = await post("/api/admin/chat", {
+                          action: "createGroup",
+                          name: groupName,
+                          memberIds: groupPicks,
+                        }) as { group?: Row } | null;
+                        if (res?.group) {
+                          setChatGroups((prev) => [res.group as Row, ...prev]);
+                          setChatChannel(`grp:${s(res.group.id)}`);
+                          setGroupForm(false);
+                          setGroupName("");
+                          setGroupPicks([]);
+                          flash("Groupe créé");
+                        } else flash("Création échouée");
+                      })();
+                    }}
+                  >
+                    <input
+                      className="ayeba-input w-full text-xs"
+                      placeholder="Nom du groupe…"
+                      value={groupName}
+                      onChange={(e) => setGroupName(e.target.value)}
+                      maxLength={60}
+                    />
+                    <div className="max-h-28 space-y-1 overflow-y-auto">
+                      {chatMembers.filter((m) => m.id !== chatMe).map((m) => (
+                        <label key={s(m.id)} className="flex items-center gap-2 px-1 text-xs">
+                          <input
+                            type="checkbox"
+                            checked={groupPicks.includes(s(m.id))}
+                            onChange={(e) =>
+                              setGroupPicks((prev) =>
+                                e.target.checked ? [...prev, s(m.id)] : prev.filter((x) => x !== s(m.id)),
+                              )
+                            }
+                          />
+                          {s(m.name)}
+                        </label>
+                      ))}
+                    </div>
+                    <Btn onClick={() => undefined}>Créer</Btn>
+                  </form>
+                )}
                 <p className="ayeba-kicker mb-2 mt-4">Messages directs</p>
                 {chatMembers.filter((m) => m.id !== chatMe).map((m) => (
                   <button
@@ -1360,7 +1457,9 @@ export function AdminConsole({
                 <div className="mb-3 border-b pb-2 text-sm font-medium" style={{ borderColor: "var(--line)" }}>
                   {chatChannel === "team"
                     ? "# équipe"
-                    : `@ ${s(chatMembers.find((m) => m.id === chatChannel)?.name, "…")}`}
+                    : chatChannel.startsWith("grp:")
+                      ? `# ${s(chatGroups.find((g) => `grp:${s(g.id)}` === chatChannel)?.name, "groupe")}`
+                      : `@ ${s(chatMembers.find((m) => m.id === chatChannel)?.name, "…")}`}
                 </div>
                 <div className="flex-1 space-y-2 overflow-y-auto" style={{ maxHeight: 380 }}>
                   {chatMessages.length === 0 && (
@@ -1397,8 +1496,15 @@ export function AdminConsole({
                         to: chatChannel === "team" ? "team" : chatChannel,
                         message: msg,
                       }) as { message?: Row } | null;
-                      if (res?.message) setChatMessages((prev) => [...prev, res.message as Row]);
-                      else flash("Envoi échoué");
+                      if (res?.message) {
+                        const sent = res.message as Row;
+                        setChatMessages((prev) =>
+                          prev.some((m) => m.id === sent.id) ? prev : [...prev, sent],
+                        );
+                        // Keep the cursor past the sent message so the next
+                        // incremental poll never returns it again (double render).
+                        chatLastTs.current = String(sent.created_at);
+                      } else flash("Envoi échoué");
                     })();
                   }}
                 >
