@@ -410,6 +410,90 @@ async function fetchDuckDuckGoHtml(query: string): Promise<RawHit[]> {
   }
 }
 
+const BROWSER_UA =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
+
+const JUNK_TITLE_RE =
+  /^(newsletter|subscribe|sign up|sign in|log in|login|home|accueil|menu|search|recherche|cookies?|advertisement|sponsored)$/i;
+
+function isJunkHit(title: string, url: string): boolean {
+  const t = title.trim();
+  if (!t || t.length < 4) return true;
+  if (JUNK_TITLE_RE.test(t)) return true;
+  if (/\.(css|js|xml|json|ico|svg|woff2?)(\?|$)/i.test(url)) return true;
+  return false;
+}
+
+async function fetchBing(query: string): Promise<RawHit[]> {
+  try {
+    const res = await fetch(
+      `https://www.bing.com/search?q=${encodeURIComponent(query)}&count=12&setlang=fr`,
+      {
+        headers: {
+          "User-Agent": BROWSER_UA,
+          "Accept-Language": "fr-FR,fr;q=0.9,en;q=0.7",
+        },
+        signal: AbortSignal.timeout(UPSTREAM_MS),
+        next: { revalidate: 0 },
+      },
+    );
+    if (!res.ok) return [];
+    const html = await res.text();
+    const hits: RawHit[] = [];
+    const blocks = html.split(/<li class="b_algo"/i).slice(1);
+    for (const block of blocks) {
+      if (hits.length >= 10) break;
+      const link = block.match(/<h2[^>]*>\s*<a[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i);
+      if (!link) continue;
+      const url = link[1];
+      if (!/^https?:\/\//i.test(url) || /bing\.com|microsoft\.com\/(fr|en)\/search/i.test(url)) {
+        continue;
+      }
+      const title = link[2].replace(/<[^>]+>/g, "").trim();
+      const snipMatch =
+        block.match(/<p class="b_lineclamp[^"]*"[^>]*>([\s\S]*?)<\/p>/i) ??
+        block.match(/<p[^>]*>([\s\S]*?)<\/p>/i);
+      const snippet = snipMatch ? cleanSnippet(snipMatch[1].replace(/<[^>]+>/g, ""), 240) : "";
+      if (title && !isJunkHit(title, url)) hits.push({ title, url, snippet, source: "bing" });
+    }
+    return hits;
+  } catch {
+    return [];
+  }
+}
+
+async function fetchMojeek(query: string): Promise<RawHit[]> {
+  try {
+    const res = await fetch(
+      `https://www.mojeek.com/search?q=${encodeURIComponent(query)}`,
+      {
+        headers: { "User-Agent": BROWSER_UA, "Accept-Language": "fr,en;q=0.8" },
+        signal: AbortSignal.timeout(UPSTREAM_MS),
+        next: { revalidate: 0 },
+      },
+    );
+    if (!res.ok) return [];
+    const html = await res.text();
+    const hits: RawHit[] = [];
+    const listMatch = html.match(/<ul class="results-standard">([\s\S]*?)<\/ul>/i);
+    const list = listMatch ? listMatch[1] : html;
+    for (const block of list.split(/<li[ >]/i).slice(1)) {
+      if (hits.length >= 10) break;
+      const link = block.match(/<a[^>]*href="(https?:\/\/[^"]+)"[^>]*>([\s\S]*?)<\/a>/i);
+      if (!link || /mojeek\.com/.test(link[1])) continue;
+      const title = link[2].replace(/<[^>]+>/g, "").trim();
+      const snipMatch = block.match(/<p class="s"[^>]*>([\s\S]*?)<\/p>/i);
+      const snippet = snipMatch ? cleanSnippet(snipMatch[1].replace(/<[^>]+>/g, ""), 240) : "";
+      if (title && !isJunkHit(title, link[1])) {
+        hits.push({ title, url: link[1], snippet, source: "mojeek" });
+      }
+    }
+    return hits;
+  } catch {
+    return [];
+  }
+}
+
 async function fetchNewsRss(query: string): Promise<RawHit[]> {
   try {
     const res = await fetch(
@@ -991,6 +1075,8 @@ async function liveSearchCore(
     wikiEn,
     ddg,
     ddgHtml,
+    bing,
+    mojeek,
     news,
     knowledge,
     nativeImages,
@@ -1011,6 +1097,12 @@ async function liveSearchCore(
       offline || sisterFastPath || skipWebForMath || msLeft() < 900
         ? Promise.resolve([] as RawHit[])
         : settled(fetchDuckDuckGoHtml(webQ), [], upstreamMs),
+      offline || sisterFastPath || skipWebForMath
+        ? Promise.resolve([] as RawHit[])
+        : settled(fetchBing(webQ), [], upstreamMs),
+      offline || sisterFastPath || skipWebForMath || msLeft() < 700
+        ? Promise.resolve([] as RawHit[])
+        : settled(fetchMojeek(webQ), [], upstreamMs),
       offline || sisterFastPath
         ? Promise.resolve([] as RawHit[])
         : settled(fetchNewsRss(webQ), [], upstreamMs),
@@ -1102,7 +1194,9 @@ async function liveSearchCore(
   const raw = [
     ...navHit,
     ...curatedFactHits,
+    ...bing,
     ...ddgHtml,
+    ...mojeek,
     ...ddg,
     ...wikiFr,
     ...wikiEn,

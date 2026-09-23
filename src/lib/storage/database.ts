@@ -58,6 +58,16 @@ export function getDbMode(): "turso" | "vercel-tmp" | "memory" | "local" {
   return "local";
 }
 
+/**
+ * The sync libsql driver performs a BLOCKING network round trip per statement —
+ * on Turso it freezes the event loop (deadlines can't fire, requests take 40s+).
+ * Any sync DB read/write in a hot request path MUST be skipped on Turso;
+ * use the async helpers in turso-async.ts instead.
+ */
+export function canUseSyncDb(): boolean {
+  return getDbMode() !== "turso";
+}
+
 /** No-op SQL surface — enough for callers that tolerate empty results. */
 function createMemoryDb(): AyebaDatabase {
   const emptyStmt = {
@@ -693,6 +703,7 @@ function migrate(db: AyebaDatabase) {
     applyEnterpriseSchema,
     applyAdminSchema,
     applyMailSchema,
+    seedFounderAdmin,
   ]) {
     try {
       step(db);
@@ -700,6 +711,26 @@ function migrate(db: AyebaDatabase) {
       console.warn("[db] init step skipped:", (e as Error).message);
     }
   }
+}
+
+/**
+ * Founder bootstrap: when the founder account exists in `users` but has no
+ * admin_users row yet, grant it super_admin. Declarative and self-healing —
+ * the row is only inserted once (NOT EXISTS guard), never overwrites the team,
+ * and only ever applies to the account holding this exact email address.
+ */
+function seedFounderAdmin(db: AyebaDatabase) {
+  const email = (process.env.AYEBA_FOUNDER_EMAIL || "benjaminoussama@ayeba.app")
+    .trim()
+    .toLowerCase();
+  if (!email) return;
+  db.prepare(
+    `INSERT INTO admin_users (id, user_id, name, email, role, permissions, departments, created_at, status)
+     SELECT lower(hex(randomblob(16))), u.id, u.name, lower(u.email), 'super_admin', '["all"]', '["*"]', datetime('now'), 'active'
+     FROM users u
+     WHERE lower(u.email) = ?
+       AND NOT EXISTS (SELECT 1 FROM admin_users a WHERE lower(a.email) = ?)`,
+  ).run(email, email);
 }
 
 function migrateAyebiColumns(db: AyebaDatabase) {

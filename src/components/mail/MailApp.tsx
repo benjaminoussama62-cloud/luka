@@ -55,8 +55,14 @@ function fmtFull(iso: string) {
   });
 }
 
+function hueFrom(text: string) {
+  let h = 0;
+  for (const c of text) h = (h * 31 + c.charCodeAt(0)) % 360;
+  return h;
+}
+
 export function MailApp() {
-  const { user, ready, refreshSession } = useAuth();
+  const { user, ready, refreshSession, logout } = useAuth();
   const [account, setAccount] = useState<Account | null>(null);
   const [unread, setUnread] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -71,6 +77,8 @@ export function MailApp() {
   const [translation, setTranslation] = useState<string | null>(null);
   const [translating, setTranslating] = useState(false);
   const [targetLang, setTargetLang] = useState("fr");
+  const [profileOpen, setProfileOpen] = useState(false);
+  const profileRef = useRef<HTMLDivElement>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(null);
 
   const showToast = useCallback((t: string) => {
@@ -110,6 +118,32 @@ export function MailApp() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (account) void loadMessages(folder, q);
   }, [account, folder, q, loadMessages]);
+
+  useEffect(() => {
+    if (!profileOpen) return;
+    const close = (e: MouseEvent) => {
+      if (!profileRef.current?.contains(e.target as Node)) setProfileOpen(false);
+    };
+    const esc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setProfileOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", esc);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", esc);
+    };
+  }, [profileOpen]);
+
+  const signOut = async () => {
+    setProfileOpen(false);
+    await logout();
+    setAccount(null);
+    setMessages([]);
+    setOpen(null);
+    setGate("landing");
+    void refreshSession();
+  };
 
   const openMessage = async (id: string) => {
     const res = await fetch(`/api/mail/messages/${id}`);
@@ -225,8 +259,48 @@ export function MailApp() {
             placeholder="Rechercher dans les messages…"
           />
         </div>
-        <div className="mail-orb" title={account.email}>
-          {account.address[0].toUpperCase()}
+        <div className="mail-profile" ref={profileRef}>
+          <button
+            className="mail-orb"
+            title={account.email}
+            aria-label={`Compte ${account.email}`}
+            aria-expanded={profileOpen}
+            onClick={() => setProfileOpen((v) => !v)}
+            style={{
+              background: `linear-gradient(135deg, hsl(${hueFrom(account.email)} 62% 42%), hsl(${(hueFrom(account.email) + 40) % 360} 70% 30%))`,
+            }}
+          >
+            {(account.displayName || account.address)[0].toUpperCase()}
+          </button>
+          {profileOpen && (
+            <div className="mail-account-menu" role="menu">
+              <div className="mail-account-head">
+                <div
+                  className="mail-account-avatar"
+                  style={{
+                    background: `linear-gradient(135deg, hsl(${hueFrom(account.email)} 62% 42%), hsl(${(hueFrom(account.email) + 40) % 360} 70% 30%))`,
+                  }}
+                >
+                  {(account.displayName || account.address)[0].toUpperCase()}
+                </div>
+                <div className="mail-account-id">
+                  <strong>{account.displayName || account.address}</strong>
+                  <span>{account.email}</span>
+                  <em className="mail-account-badge">
+                    <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="5.4" stroke="currentColor"/><path d="M3.8 6.1l1.5 1.5 2.9-3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+                    Compte vérifié par SMS
+                  </em>
+                </div>
+              </div>
+              <div className="mail-account-meta">
+                <span>Boîte chiffrée AES-256</span>
+                <span>Membre depuis {new Date(account.createdAt).toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}</span>
+              </div>
+              <button className="mail-account-signout" onClick={() => void signOut()}>
+                Se déconnecter
+              </button>
+            </div>
+          )}
         </div>
       </header>
 

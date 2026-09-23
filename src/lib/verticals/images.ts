@@ -1,4 +1,4 @@
-import { getDb } from "../storage/database";
+import { canUseSyncDb, getDb } from "../storage/database";
 import { searchIndex } from "../search-index/fts";
 import type { MediaResult } from "../types";
 
@@ -13,6 +13,7 @@ export function indexImage(doc: {
   height?: number;
   tags?: string;
 }) {
+  if (!canUseSyncDb()) return;
   getDb()
     .prepare(
       `INSERT INTO vertical_images (id, url, thumb, title, source, domain, width, height, query_tags, indexed_at)
@@ -34,6 +35,7 @@ export function indexImage(doc: {
 }
 
 export function searchImages(query: string, limit = 24): MediaResult[] {
+  if (!canUseSyncDb()) return [];
   const q = `%${query.toLowerCase()}%`;
   const rows = getDb()
     .prepare(
@@ -105,6 +107,7 @@ export async function fetchOpenverse(query: string): Promise<MediaResult[]> {
 }
 
 export function imagesFromCrawl(query: string, limit = 12): MediaResult[] {
+  if (!canUseSyncDb()) return [];
   const hits = searchIndex(query, limit);
   return hits
     .filter((h) => /\.(jpg|jpeg|png|webp|gif)/i.test(h.url) || /image|photo|gallery/i.test(h.title))

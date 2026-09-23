@@ -55,21 +55,100 @@
 }
 .mail-search input::placeholder { color: var(--faint); }
 .mail-search:focus-within { border-color: var(--line-bright); }
+.mail-profile { position: relative; margin-left: auto; }
 .mail-orb {
   width: 32px;
   height: 32px;
   border-radius: 50%;
   background: var(--orange-soft);
   border: 1px solid var(--line-bright);
-  color: var(--orange);
+  color: #fff;
   font-family: var(--font-mono), monospace;
   font-size: 13px;
+  font-weight: 600;
   display: flex;
   align-items: center;
   justify-content: center;
-  cursor: default;
-  margin-left: auto;
+  cursor: pointer;
+  transition: box-shadow 0.2s, transform 0.15s;
 }
+.mail-orb:hover { box-shadow: 0 0 0 3px var(--orange-soft), 0 0 14px var(--orange-glow); }
+.mail-orb:active { transform: scale(0.94); }
+
+/* Menu compte — façon Google */
+.mail-account-menu {
+  position: absolute;
+  top: 42px;
+  right: 0;
+  width: 300px;
+  background: rgba(10, 10, 14, 0.96);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(24px);
+  padding: 20px 18px 14px;
+  z-index: 60;
+  animation: mail-menu-in 0.16s cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes mail-menu-in {
+  from { opacity: 0; transform: translateY(-6px) scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+.mail-account-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+.mail-account-avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 21px;
+  font-weight: 600;
+  color: #fff;
+  flex-shrink: 0;
+}
+.mail-account-id { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.mail-account-id strong { font-size: 14.5px; color: var(--ink); }
+.mail-account-id > span { font-size: 12.5px; color: var(--muted); word-break: break-all; }
+.mail-account-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 5px;
+  font-style: normal;
+  font-family: var(--font-mono), monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--good);
+}
+.mail-account-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 2px;
+  font-size: 11.5px;
+  color: var(--faint);
+}
+.mail-account-signout {
+  width: 100%;
+  margin-top: 4px;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+.mail-account-signout:hover { background: var(--orange-soft); border-color: var(--line-bright); }
 
 /* Corps : rail + liste + lecteur */
 .mail-body { flex: 1; display: flex; min-height: 0; }

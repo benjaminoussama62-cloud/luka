@@ -1,4 +1,4 @@
-import { getDb } from "../storage/database";
+import { canUseSyncDb, getDb } from "../storage/database";
 
 const memory = new Map<string, { value: string; expires: number }>();
 const MAX_MEMORY = 5000;
@@ -23,6 +23,9 @@ export async function cacheGet<T>(key: string): Promise<T | null> {
     }
   }
 
+  // Sync Turso = blocking network round trip — in-memory layer only.
+  if (!canUseSyncDb()) return null;
+
   const row = getDb()
     .prepare("SELECT value, expires_at FROM cache_store WHERE key = ?")
     .get(key) as { value: string; expires_at: string } | undefined;
@@ -46,6 +49,7 @@ export async function cacheSet(key: string, value: unknown, ttlSec = 3600) {
   const expires = new Date(Date.now() + ttlSec * 1000).toISOString();
   memory.set(key, { value: json, expires: Date.now() + ttlSec * 1000 });
   pruneMemory();
+  if (!canUseSyncDb()) return;
   getDb()
     .prepare(
       `INSERT INTO cache_store (key, value, expires_at) VALUES (?, ?, ?)

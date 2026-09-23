@@ -1,4 +1,4 @@
-import { getDb } from "../storage/database";
+import { canUseSyncDb, getDb } from "../storage/database";
 import type { ShopItem } from "../types";
 
 export function indexProduct(p: {
@@ -143,6 +143,8 @@ export function buildNativeShopping(query: string): ShopItem[] {
       rating: 4.0,
     });
   }
+
+  if (!canUseSyncDb()) return catalog;
 
   for (const item of catalog) {
     indexProduct({

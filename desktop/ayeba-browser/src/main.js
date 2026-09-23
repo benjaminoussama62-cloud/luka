@@ -1025,6 +1025,10 @@ function createBrowserWindow(isPrivate = false) {
     "rail:action": (_e, payload) => {
       // p.y = hauteur du bouton dans la vue rail → coordonnées fenêtre (+CHROME_H)
       const p = typeof payload === "object" && payload ? payload : { act: payload };
+      if (p.act === "mail") {
+        createTab("https://ayeba.app/mail", true);
+        return true;
+      }
       emitChrome("ui:open", { name: p.act, y: (typeof p.y === "number" ? p.y : 240) + CHROME_H });
       return true;
     },

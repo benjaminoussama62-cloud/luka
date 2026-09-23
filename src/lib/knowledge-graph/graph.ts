@@ -1,4 +1,4 @@
-import { getDb } from "../storage/database";
+import { canUseSyncDb, getDb } from "../storage/database";
 import { AYEBI_ARTICLES } from "../ayebi/index";
 import { navigationalSiteForQuery, relevanceScore } from "../search-relevance";
 
@@ -72,6 +72,10 @@ export function relatedEntities(id: string, limit = 6) {
 
 export function panelFromQuery(query: string) {
   if (navigationalSiteForQuery(query)) return null;
+  // Sync Turso statements block the event loop — never run the KG in-request
+  // on a remote DB (a cold kg_entities would trigger hundreds of blocking
+  // inserts per search).
+  if (!canUseSyncDb()) return null;
   try {
     const db = getDb();
     const count = db.prepare("SELECT COUNT(*) as c FROM kg_entities").get() as { c: number } | undefined;

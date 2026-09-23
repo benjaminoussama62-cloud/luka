@@ -1,4 +1,4 @@
-import { getDb } from "../storage/database";
+import { canUseSyncDb, getDb } from "../storage/database";
 
 export type IndexedDoc = {
   id: string;
@@ -83,6 +83,8 @@ export type FtsHit = {
 };
 
 export function searchIndex(query: string, limit = 40): FtsHit[] {
+  // Sync Turso = blocking network per statement — callers must use the async path.
+  if (!canUseSyncDb()) return [];
   const q = query.trim();
   if (!q) return [];
 
@@ -131,6 +133,18 @@ export function searchIndex(query: string, limit = 40): FtsHit[] {
 }
 
 export function indexStats() {
+  if (!canUseSyncDb()) {
+    return {
+      documents: 0,
+      queuePending: 0,
+      queueDone: 0,
+      images: 0,
+      videos: 0,
+      products: 0,
+      projectedIndexTotal: 50_000,
+      projectedBillionsScale: 50_000,
+    };
+  }
   const db = getDb();
   const docs = db.prepare("SELECT COUNT(*) as c FROM crawl_documents").get() as { c: number };
   const queue = db.prepare("SELECT COUNT(*) as c FROM crawl_queue WHERE status='pending'").get() as {
@@ -241,6 +255,7 @@ function bumpRadarDaily(input: {
 }
 
 export function clickBoost(query: string, url: string): number {
+  if (!canUseSyncDb()) return 0;
   const row = getDb()
     .prepare(
       `SELECT COUNT(*) as c FROM click_signals WHERE query = ? AND url = ? AND clicked_at > datetime('now', '-30 days')`,
