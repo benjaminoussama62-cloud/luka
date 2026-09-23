@@ -102,7 +102,10 @@ export function getDb(): AyebaDatabase {
       const authToken = process.env.TURSO_AUTH_TOKEN?.trim().replace(/^['"]|['"]$/g, "");
       const opts = authToken ? { authToken } : undefined;
       _db = new Libsql(url, opts as never) as unknown as AyebaDatabase;
-      migrate(_db);
+      // NEVER run the migration on the sync driver: hundreds of blocking HTTP
+      // round trips would freeze every cold-started lambda for 30s+. The same
+      // statements are replayed in the background over the async client.
+      void ensureTursoMigrate();
       return _db;
     }
 
@@ -148,6 +151,68 @@ export function applySchemaStatements(db: AyebaDatabase, schema: string) {
       console.warn("[db] schema statement skipped:", (e as Error).message);
     }
   }
+}
+
+let _tursoMigrate: Promise<void> | null = null;
+
+/**
+ * Replay the whole migrate() over the async @libsql/client — background,
+ * non-blocking, per-statement error tolerance preserved. The sync driver on
+ * Turso costs one blocking HTTP round trip per statement (~150ms each), so a
+ * synchronous migrate would freeze a cold lambda for 30s+.
+ */
+export function ensureTursoMigrate(): Promise<void> {
+  if (_tursoMigrate) return _tursoMigrate;
+  _tursoMigrate = (async () => {
+    const ops = collectMigrateOps();
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { createClient } = require("@libsql/client") as typeof import("@libsql/client");
+    const url = tursoUrl().replace(/^libsql:/, "https:");
+    const authToken = process.env.TURSO_AUTH_TOKEN?.trim().replace(/^['"]|['"]$/g, "");
+    const client = createClient({ url, authToken: authToken || undefined });
+    // Modest parallelism — statements are independent CREATE/ALTER/INSERT-OR-IGNORE.
+    for (let i = 0; i < ops.length; i += 8) {
+      await Promise.allSettled(
+        ops.slice(i, i + 8).map((op) =>
+          client.execute({
+            sql: op.sql,
+            args: op.args.map((a) =>
+              typeof a === "boolean" ? (a ? 1 : 0) : (a as never),
+            ),
+          }),
+        ),
+      );
+    }
+  })().catch((e) => {
+    console.warn("[db] turso async migrate failed:", (e as Error).message);
+  });
+  return _tursoMigrate;
+}
+
+/** Runs migrate() against a recording shim — every statement is captured. */
+function collectMigrateOps(): Array<{ sql: string; args: unknown[] }> {
+  const ops: Array<{ sql: string; args: unknown[] }> = [];
+  const fake: AyebaDatabase = {
+    exec: (sql) => {
+      ops.push({ sql, args: [] });
+      return undefined;
+    },
+    prepare: (sql) => ({
+      run: (...args: unknown[]) => {
+        ops.push({ sql, args });
+        return { changes: 0, lastInsertRowid: 0 };
+      },
+      get: () => undefined,
+      all: () => [],
+    }),
+    pragma: () => undefined,
+  };
+  try {
+    migrate(fake);
+  } catch (e) {
+    console.warn("[db] migrate collect partial:", (e as Error).message);
+  }
+  return ops;
 }
 
 function migrate(db: AyebaDatabase) {
