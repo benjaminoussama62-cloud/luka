@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#050507">
+<title>Ayeba Mail</title>
+<style>
+  html,body{margin:0;height:100%;background:#050507;color:#f4f4f5;
+    font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+    display:flex;align-items:center;justify-content:center;flex-direction:column;gap:18px}
+  .logo{width:72px;height:72px;border-radius:20px;
+    background:linear-gradient(135deg,#e85d04,#ff9e3d);
+    display:flex;align-items:center;justify-content:center}
+  .logo svg{width:38px;height:38px;stroke:#fff;fill:none;stroke-width:1.8;
+    stroke-linecap:round;stroke-linejoin:round}
+  p{color:#a1a1aa;font-size:14px;margin:0}
+</style>
+</head>
+<body>
+<div class="logo">
+  <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="m4 7 8 6 8-6"/></svg>
+</div>
+<p>Chargement d'Ayeba Mail…</p>
+<script>
+  // Fallback hors-ligne : si server.url n'a pas pris le relais.
+  setTimeout(() => { location.href = "https://ayeba.app/mail?app=1"; }, 400);
+</script>
+</body>
+</html>

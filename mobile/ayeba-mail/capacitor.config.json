@@ -1,0 +1,32 @@
+{
+  "appId": "app.ayeba.mail",
+  "appName": "Ayeba Mail",
+  "webDir": "www",
+  "server": {
+    "url": "https://ayeba.app/mail?app=1",
+    "cleartext": false,
+    "androidScheme": "https"
+  },
+  "android": {
+    "backgroundColor": "#050507",
+    "allowMixedContent": false,
+    "minWebViewVersion": 60
+  },
+  "ios": {
+    "backgroundColor": "#050507",
+    "contentInset": "automatic",
+    "scrollEnabled": true
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 1200,
+      "launchAutoHide": true,
+      "backgroundColor": "#050507",
+      "showSpinner": false
+    },
+    "StatusBar": {
+      "style": "DARK",
+      "backgroundColor": "#050507"
+    }
+  }
+}

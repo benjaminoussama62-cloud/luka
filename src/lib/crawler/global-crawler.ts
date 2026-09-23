@@ -75,15 +75,14 @@ export async function runCrawlBatch(
     )
     .all(maxPages) as { id: number; url: string }[];
 
-  for (const item of pending) {
-    if (deadline && Date.now() >= deadline) break;
-
+  const processItem = async (item: { id: number; url: string }) => {
+    if (deadline && Date.now() >= deadline) return;
     db.prepare("UPDATE crawl_queue SET status='processing' WHERE id=?").run(item.id);
     try {
       const ok = await canFetch(item.url, USER_AGENT);
       if (!ok) {
         db.prepare("UPDATE crawl_queue SET status='skipped', last_error='robots' WHERE id=?").run(item.id);
-        continue;
+        return;
       }
 
       const res = await fetch(item.url, {
@@ -118,6 +117,14 @@ export async function runCrawlBatch(
         "UPDATE crawl_queue SET status='failed', attempts=attempts+1, last_error=? WHERE id=?",
       ).run(msg.slice(0, 120), item.id);
     }
+  };
+
+  // Pool parallèle : 5 fetch simultanés — le débit réel est limité par le
+  // réseau, pas par le CPU. ~5× plus de pages par fenêtre de cron.
+  const CONCURRENCY = 5;
+  for (let i = 0; i < pending.length; i += CONCURRENCY) {
+    if (deadline && Date.now() >= deadline) break;
+    await Promise.all(pending.slice(i, i + CONCURRENCY).map(processItem));
   }
 
   const remaining = (db.prepare("SELECT COUNT(*) as c FROM crawl_queue WHERE status='pending'").get() as { c: number }).c;

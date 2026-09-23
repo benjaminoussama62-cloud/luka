@@ -426,14 +426,24 @@ export type SendResult = {
   ok: boolean;
   delivered: string[];
   bounced: { address: string; reason: string }[];
+  /** Adresses externes à remettre au relais SMTP (appelant : sendExternalBatch). */
+  externals: string[];
 };
 
 const INTERNAL_RE = new RegExp(`@(${MAIL_DOMAIN.replace(".", "\\.")})$`, "i");
 
+/** Relais SMTP sortant configuré ? (check env uniquement — pas d'import nodemailer ici) */
+export function smtpConfigured(): boolean {
+  return Boolean(
+    process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS,
+  );
+}
+
 /**
  * Envoie un mail. Destinataires internes livrés instantanément (vraie copie en
  * boîte) ; adresse @ayeba.app inexistante → bounce immédiat en boîte de
- * l'expéditeur ; adresses externes → erreur honnête (SMTP pas encore déployé).
+ * l'expéditeur ; adresses externes → renvoyées dans `externals` pour remise au
+ * relais SMTP (sendExternalBatch), ou bounce honnête si SMTP non configuré.
  */
 export function sendMail(
   sender: MailAccount,
@@ -443,6 +453,7 @@ export function sendMail(
 ): SendResult {
   const delivered: string[] = [];
   const bounced: { address: string; reason: string }[] = [];
+  const externals: string[] = [];
   const cleanTo = [...new Set(to.map((t) => t.trim().toLowerCase()).filter(Boolean))];
   const threadId = uid();
   const subj = subject.trim() || "(sans objet)";
@@ -457,10 +468,12 @@ export function sendMail(
       const acc = getAccountByEmail(addr);
       if (acc) internals.push(acc);
       else bounced.push({ address: addr, reason: "Ce compte Ayeba Mail n'existe pas" });
+    } else if (smtpConfigured()) {
+      externals.push(addr);
     } else {
       bounced.push({
         address: addr,
-        reason: "Destinataires externes bientôt disponibles (serveur SMTP en déploiement)",
+        reason: "Remise externe indisponible — relais SMTP non configuré sur le serveur",
       });
     }
   }
@@ -513,7 +526,101 @@ export function sendMail(
     });
   }
 
-  return { ok: delivered.length > 0, delivered, bounced };
+  return { ok: delivered.length > 0 || externals.length > 0, delivered, bounced, externals };
+}
+
+/**
+ * Remet les destinataires externes au relais SMTP (async). En cas d'échec,
+ * un bounce « Mail Delivery Subsystem » est déposé dans la boîte de
+ * l'expéditeur — comportement identique à Gmail.
+ */
+export async function sendExternalBatch(
+  sender: MailAccount,
+  externals: string[],
+  subject: string,
+  body: string,
+): Promise<{ delivered: string[]; bounced: { address: string; reason: string }[] }> {
+  const { sendExternalMail } = await import("@/lib/mail/smtp");
+  const delivered: string[] = [];
+  const bounced: { address: string; reason: string }[] = [];
+  const senderName = sender.displayName || sender.address;
+  const subj = subject.trim() || "(sans objet)";
+
+  for (const addr of externals) {
+    const res = await sendExternalMail({
+      from: sender.email,
+      fromName: senderName,
+      to: addr,
+      subject: subj,
+      text: body,
+      replyTo: sender.email,
+    });
+    if (res.ok) {
+      delivered.push(addr);
+    } else {
+      bounced.push({ address: addr, reason: res.error });
+      insertMessage({
+        threadId: uid(),
+        accountId: sender.id,
+        folder: "inbox",
+        from: MAILER_DAEMON,
+        fromName: "Ayeba Mail — Remise",
+        to: [sender.email],
+        subject: `Échec de remise : ${subj}`,
+        body:
+          `Votre message « ${subj} » n'a pas pu être remis au destinataire externe.\n\n` +
+          `Destinataire : ${addr}\nRaison : ${res.error}.\n\n` +
+          `Vérifiez l'adresse et réessayez.`,
+        kind: "bounce",
+      });
+    }
+  }
+  return { delivered, bounced };
+}
+
+/**
+ * Réception d'un mail externe entrant (via webhook /api/mail/inbound alimenté
+ * par Cloudflare Email Routing ou équivalent). Livre une vraie copie en boîte
+ * du compte @ayeba.app ciblé.
+ */
+export function receiveExternalMail(opts: {
+  from: string;
+  fromName?: string;
+  to: string[];
+  subject: string;
+  body: string;
+  html?: string;
+  messageId?: string;
+}): { delivered: string[]; dropped: string[] } {
+  const delivered: string[] = [];
+  const dropped: string[] = [];
+  const from = String(opts.from || "").slice(0, 200);
+  const subj = String(opts.subject || "(sans objet)").slice(0, 300);
+  const body = String(opts.body || "").slice(0, 200_000);
+  const threadId = opts.messageId ? `ext-${opts.messageId.slice(0, 80)}` : uid();
+
+  for (const raw of opts.to || []) {
+    const addr = String(raw).trim().toLowerCase();
+    if (!INTERNAL_RE.test(addr)) continue;
+    const acc = getAccountByEmail(addr);
+    if (!acc || acc.status !== "active") {
+      dropped.push(addr);
+      continue;
+    }
+    insertMessage({
+      threadId,
+      accountId: acc.id,
+      folder: "inbox",
+      from,
+      fromName: String(opts.fromName || "").slice(0, 120),
+      to: [addr],
+      subject: subj,
+      body,
+      kind: "mail",
+    });
+    delivered.push(addr);
+  }
+  return { delivered, dropped };
 }
 
 // ── Lecture ────────────────────────────────────────────────────────────────

@@ -25,10 +25,19 @@ jobs:
       - name: Build NSIS installer
         working-directory: desktop/ayeba-browser
         run: npm run dist
+        env:
+          # Signature du code : ajouter les secrets CSC_LINK (PFX base64) et
+          # CSC_KEY_PASSWORD dans GitHub → Settings → Secrets. Si absents,
+          # le build n'est pas signé (pas d'échec). Voir docs/code-signing-windows.md
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
 
       - name: Build portable ZIP
         working-directory: desktop/ayeba-browser
         run: npm run dist:portable
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
 
       - name: Upload release assets
         uses: softprops/action-gh-release@v2

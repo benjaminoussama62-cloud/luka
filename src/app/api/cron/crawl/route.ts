@@ -12,8 +12,8 @@ async function runCronCrawl() {
 
   seedQueue();
   const sitemapUrls = await seedFromSitemaps(120);
-  // Hobby functions ≈60s — time-budgeted batch keeps responses reliable.
-  const result = await runCrawlBatch(25, { timeBudgetMs: 25_000 });
+  // Pool parallèle ×5 → ~60 pages en ~40s dans la fenêtre Hobby (60s).
+  const result = await runCrawlBatch(60, { timeBudgetMs: 40_000 });
 
   getDb()
     .prepare(

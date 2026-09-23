@@ -416,7 +416,7 @@ const BROWSER_UA =
 const JUNK_TITLE_RE =
   /^(newsletter|subscribe|sign up|sign in|log in|login|home|accueil|menu|search|recherche|cookies?|advertisement|sponsored)$/i;
 
-function isJunkHit(title: string, url: string): boolean {
+export function isJunkHit(title: string, url: string): boolean {
   const t = title.trim();
   if (!t || t.length < 4) return true;
   if (JUNK_TITLE_RE.test(t)) return true;

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSessionFromCookies } from "@/lib/auth-server";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
-import { getAccountByUser, getThread, listMessages, sendMail } from "@/lib/mail/mail";
+import { getAccountByUser, getThread, listMessages, sendExternalBatch, sendMail } from "@/lib/mail/mail";
 
 export async function GET(req: Request) {
   const user = await getSessionFromCookies();
@@ -50,5 +50,11 @@ export async function POST(req: Request) {
   if (to.length > 20) return NextResponse.json({ error: "Trop de destinataires." }, { status: 400 });
 
   const result = sendMail(account, to, subject, text);
+  if (result.externals.length) {
+    const ext = await sendExternalBatch(account, result.externals, subject, text);
+    result.delivered.push(...ext.delivered);
+    result.bounced.push(...ext.bounced);
+    result.ok = result.delivered.length > 0;
+  }
   return NextResponse.json(result, { status: result.ok ? 200 : 502 });
 }

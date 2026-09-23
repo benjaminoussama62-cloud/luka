@@ -1,11 +1,11 @@
-import { radarEnterpriseV2 } from "./radar-v2";
+import { radarOverview } from "./radar";
 import { traceEnterpriseV2 } from "./trace-v2";
 import { yieldOverview } from "./yield";
 import { velocityEnterpriseV2 } from "./velocity-v2";
 import type { AetherAction, AetherOverview, StudioSite } from "./types";
 
 export function aetherOverview(site: StudioSite): AetherOverview {
-  const radar = radarEnterpriseV2.getOverview(site.id, site.domain);
+  const radar = radarOverview(site);
   const trace = traceEnterpriseV2.getRealTimeAnalytics(site.id, 30);
   const yieldData = yieldOverview(site);
   const velocity = velocityEnterpriseV2.getOverview(site.id);

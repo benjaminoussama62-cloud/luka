@@ -51,7 +51,7 @@ describe("admin section access", () => {
   });
 
   it("env-listed admin without a row acts as super_admin", () => {
-    expect(allowedSections(null, true).length).toBe(16);
+    expect(allowedSections(null, true).length).toBe(17);
     expect(canAccessSection(null, true, "team")).toBe(true);
   });
 
