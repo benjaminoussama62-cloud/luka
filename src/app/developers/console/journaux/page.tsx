@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { DevelopersShell } from "@/components/developers/DevelopersShell";
-import { DevConsoleNav } from "@/components/developers/DevConsoleNav";
+import { DevConsole } from "@/components/developers/DevShell";
 import { DevLogsClient } from "@/components/developers/DevLogsClient";
 
 export const metadata: Metadata = {
@@ -11,8 +11,9 @@ export const metadata: Metadata = {
 export default function DeveloperLogsPage() {
   return (
     <DevelopersShell activePath="/developers/console" kicker="Console" title="Journaux de requêtes" wide>
-      <DevConsoleNav active="/developers/console/journaux" />
-      <DevLogsClient />
+      <DevConsole>
+        <DevLogsClient />
+      </DevConsole>
     </DevelopersShell>
   );
 }

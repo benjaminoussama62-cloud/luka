@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { DevelopersShell } from "@/components/developers/DevelopersShell";
-import { DevConsoleNav } from "@/components/developers/DevConsoleNav";
+import { DevConsole } from "@/components/developers/DevShell";
 import { DevUsageClient } from "@/components/developers/DevUsageClient";
 
 export const metadata: Metadata = {
@@ -11,8 +11,9 @@ export const metadata: Metadata = {
 export default function DeveloperUsagePage() {
   return (
     <DevelopersShell activePath="/developers/console" kicker="Console" title="Utilisation de l'API" wide>
-      <DevConsoleNav active="/developers/console/utilisation" />
-      <DevUsageClient />
+      <DevConsole>
+        <DevUsageClient />
+      </DevConsole>
     </DevelopersShell>
   );
 }

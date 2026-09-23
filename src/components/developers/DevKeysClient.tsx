@@ -3,46 +3,48 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import type { DeveloperApiKey, DeveloperProject } from "@/lib/developers/console";
+import type { DeveloperApiKey } from "@/lib/developers/console";
+import { API_SCOPES } from "@/lib/developers/catalog";
+import { Chip, EmptyState, QuotaGauge, useProject } from "@/components/developers/DevShell";
 
 export function DevKeysClient() {
-  const [projects, setProjects] = useState<DeveloperProject[]>([]);
+  const { current, currentRole } = useProject();
   const [keys, setKeys] = useState<DeveloperApiKey[]>([]);
-  const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [newSecret, setNewSecret] = useState<string | null>(null);
   const [form, setForm] = useState({
-    projectId: "",
     name: "",
     quotaPerDay: 1000,
     referrers: "",
     ips: "",
   });
+  const [scopes, setScopes] = useState<string[]>(["search"]);
   const [msg, setMsg] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    const [p, k] = await Promise.all([
-      fetch("/api/developers/projects"),
-      fetch("/api/developers/keys"),
-    ]);
-    if (p.status === 401 || k.status === 401) return setError("login");
-    if (p.ok) setProjects(((await p.json()) as { projects: DeveloperProject[] }).projects);
-    if (k.ok) setKeys(((await k.json()) as { keys: DeveloperApiKey[] }).keys);
-  }, []);
+  const canManage = currentRole === "owner" || currentRole === "editor";
 
-  useEffect(() => { void load(); }, [load]);
+  const load = useCallback(async () => {
+    if (!current) return;
+    const res = await fetch(`/api/developers/keys?projectId=${current.id}`);
+    if (res.ok) setKeys(((await res.json()) as { keys: DeveloperApiKey[] }).keys);
+  }, [current]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
+    if (!current) return;
     setMsg(null);
     const res = await fetch("/api/developers/keys", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        projectId: form.projectId,
+        projectId: current.id,
         name: form.name,
         quotaPerDay: form.quotaPerDay,
-        scopes: ["search"],
+        scopes,
         restrictions: {
           referrers: form.referrers.split(",").map((s) => s.trim()).filter(Boolean),
           ips: form.ips.split(",").map((s) => s.trim()).filter(Boolean),
@@ -53,7 +55,8 @@ export function DevKeysClient() {
     if (!res.ok) return setMsg(data.error || "Erreur");
     setNewSecret(data.secret || null);
     setCreating(false);
-    setForm({ projectId: "", name: "", quotaPerDay: 1000, referrers: "", ips: "" });
+    setForm({ name: "", quotaPerDay: 1000, referrers: "", ips: "" });
+    setScopes(["search"]);
     void load();
   }
 
@@ -67,132 +70,205 @@ export function DevKeysClient() {
   }
 
   async function revoke(id: string, name: string) {
-    if (!confirm(`Révoquer définitivement la clé « ${name} » ? Les appels échoueront immédiatement.`)) return;
+    if (!confirm(`Révoquer définitivement « ${name} » ? Les appels échoueront immédiatement.`)) return;
     await fetch(`/api/developers/keys/${id}`, { method: "DELETE" });
     void load();
   }
 
-  if (error === "login") {
+  if (!current) {
     return (
-      <div className="dev-console-login ayeba-panel">
-        <h2>Connexion requise</h2>
-        <Link href="/?auth=login" className="ayeba-cta inline-block px-5 py-2.5 text-sm">Se connecter</Link>
-      </div>
+      <EmptyState
+        title="Sélectionnez un projet"
+        hint="Les clés API sont rattachées à un projet."
+        action={<Link href="/developers/console" className="dcw-link">Tableau de bord →</Link>}
+      />
     );
   }
 
   return (
-    <div className="space-y-6">
-      {newSecret ? (
+    <div className="dcw-stack">
+      {newSecret && (
         <div className="dev-console-secret-banner">
-          <p className="mb-1 font-semibold">Clé créée — copiez-la maintenant, elle ne sera plus jamais affichée.</p>
+          <p className="mb-1 font-semibold">
+            Clé créée — copiez-la maintenant, elle ne sera plus jamais affichée.
+          </p>
           <code className="dev-console-code break-all">{newSecret}</code>
           <div className="mt-2">
-            <button type="button" className="ayeba-ghost px-3 py-1 text-xs" onClick={() => { void navigator.clipboard.writeText(newSecret); setNewSecret(null); }}>
+            <button
+              type="button"
+              className="ayeba-ghost px-3 py-1 text-xs"
+              onClick={() => {
+                void navigator.clipboard.writeText(newSecret);
+                setNewSecret(null);
+              }}
+            >
               Copier et fermer
             </button>
           </div>
         </div>
-      ) : null}
+      )}
 
       <section className="ayeba-panel p-5">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-base font-semibold text-[var(--ink)]">Clés API</h2>
-          <button
-            type="button"
-            className="ayeba-cta px-3 py-1.5 text-xs"
-            onClick={() => setCreating((v) => !v)}
-            disabled={projects.length === 0}
-          >
-            + Créer une clé
-          </button>
+        <div className="dcw-section-head">
+          <div>
+            <h3>Clés API — {current.name}</h3>
+            <p className="dev-console-muted">
+              Authentifient les appels <code className="dev-console-code">/api/v1/*</code>. Le secret
+              n&rsquo;est stocké que sous forme de hash.
+            </p>
+          </div>
+          {canManage && (
+            <button
+              type="button"
+              className="ayeba-cta px-3 py-1.5 text-xs"
+              onClick={() => setCreating((v) => !v)}
+            >
+              + Créer une clé
+            </button>
+          )}
         </div>
 
-        {projects.length === 0 ? (
-          <p className="dev-console-muted">
-            Créez d&rsquo;abord un projet dans <Link href="/developers/console" className="underline">l&rsquo;aperçu</Link> — les clés sont rattachées à un projet.
-          </p>
-        ) : null}
-
-        {creating ? (
-          <form onSubmit={create} className="mb-5 grid gap-3 rounded-lg border border-[var(--line)] p-4 sm:grid-cols-2">
-            <label className="dev-console-field">
-              <span className="dev-console-field-head">Projet</span>
-              <select className="ayeba-input" value={form.projectId} onChange={(e) => setForm({ ...form, projectId: e.target.value })} required>
-                <option value="">— Choisir —</option>
-                {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-            </label>
-            <label className="dev-console-field">
-              <span className="dev-console-field-head">Nom de la clé</span>
-              <input className="ayeba-input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Backend production" required maxLength={60} />
-            </label>
-            <label className="dev-console-field">
-              <span className="dev-console-field-head">Quota / jour</span>
-              <input className="ayeba-input" type="number" min={1} max={1000000} value={form.quotaPerDay} onChange={(e) => setForm({ ...form, quotaPerDay: Number(e.target.value) })} />
-            </label>
-            <label className="dev-console-field">
-              <span className="dev-console-field-head">Référents autorisés (optionnel)</span>
-              <input className="ayeba-input" value={form.referrers} onChange={(e) => setForm({ ...form, referrers: e.target.value })} placeholder="jemsa.app, tala.cd" />
-            </label>
-            <label className="dev-console-field sm:col-span-2">
-              <span className="dev-console-field-head">IPs autorisées (optionnel)</span>
-              <input className="ayeba-input" value={form.ips} onChange={(e) => setForm({ ...form, ips: e.target.value })} placeholder="41.243.x.x, 102.64.x.x" />
-            </label>
-            <div className="flex items-end gap-2 sm:col-span-2">
-              <button type="submit" className="ayeba-cta px-4 py-2 text-xs">Créer la clé</button>
-              {msg ? <span className="oauth-consent-error">{msg}</span> : null}
+        {creating && (
+          <form onSubmit={create} className="dcw-form-card">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="dev-console-field">
+                <span className="dev-console-field-head">Nom</span>
+                <input
+                  className="dcw-input"
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  placeholder="Serveur de production, app mobile…"
+                  required
+                />
+              </label>
+              <label className="dev-console-field">
+                <span className="dev-console-field-head">Quota quotidien</span>
+                <input
+                  className="dcw-input"
+                  type="number"
+                  min={1}
+                  max={1000000}
+                  value={form.quotaPerDay}
+                  onChange={(e) => setForm({ ...form, quotaPerDay: Number(e.target.value) })}
+                />
+              </label>
+              <label className="dev-console-field">
+                <span className="dev-console-field-head">
+                  Référents autorisés (optionnel, séparés par virgules)
+                </span>
+                <input
+                  className="dcw-input"
+                  value={form.referrers}
+                  onChange={(e) => setForm({ ...form, referrers: e.target.value })}
+                  placeholder="monsite.cd, app.monsite.cd"
+                />
+              </label>
+              <label className="dev-console-field">
+                <span className="dev-console-field-head">
+                  IPs autorisées (optionnel, séparées par virgules)
+                </span>
+                <input
+                  className="dcw-input"
+                  value={form.ips}
+                  onChange={(e) => setForm({ ...form, ips: e.target.value })}
+                  placeholder="41.243.x.x"
+                />
+              </label>
+            </div>
+            <fieldset className="dcw-fieldset">
+              <legend>Portées</legend>
+              {API_SCOPES.map((s) => (
+                <label key={s.id} className="dcw-check">
+                  <input
+                    type="checkbox"
+                    checked={scopes.includes(s.id)}
+                    onChange={(e) =>
+                      setScopes(
+                        e.target.checked
+                          ? [...scopes, s.id]
+                          : scopes.filter((x) => x !== s.id),
+                      )
+                    }
+                  />
+                  <span>
+                    <strong>{s.label}</strong> — {s.desc}
+                  </span>
+                </label>
+              ))}
+            </fieldset>
+            <div>
+              <button type="submit" className="ayeba-cta px-4 py-2 text-sm">Créer la clé</button>
             </div>
           </form>
-        ) : null}
+        )}
+        {msg && <p className="dcw-error">{msg}</p>}
 
-        {keys.length === 0 && !creating ? (
-          <p className="dev-console-muted">Aucune clé pour l&rsquo;instant.</p>
+        {keys.length === 0 ? (
+          <EmptyState
+            title="Aucune clé"
+            hint="Créez une clé pour authentifier vos appels API."
+          />
         ) : (
-          <table className="w-full text-left text-sm">
+          <table className="dcw-table">
             <thead>
-              <tr className="dev-console-muted text-xs">
-                <th className="pb-2">Nom</th>
-                <th className="pb-2">Clé</th>
-                <th className="pb-2">Quota aujourd&rsquo;hui</th>
-                <th className="pb-2">Restrictions</th>
-                <th className="pb-2">Statut</th>
-                <th className="pb-2" />
+              <tr>
+                <th>Nom</th>
+                <th>Clé</th>
+                <th>Portées</th>
+                <th>Quota du jour</th>
+                <th>Statut</th>
+                <th>Dernier usage</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
               {keys.map((k) => (
-                <tr key={k.id} className="border-t border-[var(--line)]">
-                  <td className="py-2.5 font-medium text-[var(--ink)]">{k.name}</td>
-                  <td className="py-2.5"><code className="dev-console-code">{k.prefix}…</code></td>
-                  <td className="py-2.5">{k.usedToday} / {k.quotaPerDay}</td>
-                  <td className="py-2.5 dev-console-muted text-xs">
-                    {k.restrictions.referrers?.length ? `Réf: ${k.restrictions.referrers.join(", ")} ` : ""}
-                    {k.restrictions.ips?.length ? `IP: ${k.restrictions.ips.join(", ")}` : ""}
-                    {!k.restrictions.referrers?.length && !k.restrictions.ips?.length ? "—" : ""}
+                <tr key={k.id}>
+                  <td className="font-medium">{k.name}</td>
+                  <td><code className="dev-console-code">{k.prefix}…</code></td>
+                  <td>
+                    <div className="dcw-chips">
+                      {k.scopes.map((s) => (
+                        <Chip key={s} tone="blue">{s}</Chip>
+                      ))}
+                    </div>
                   </td>
-                  <td className="py-2.5">
-                    <span className={`dev-console-badge ${k.status === "active" ? "" : "opacity-50"}`}>{k.status}</span>
+                  <td><QuotaGauge used={k.usedToday} quota={k.quotaPerDay} /></td>
+                  <td>
+                    <Chip
+                      tone={k.status === "active" ? "green" : k.status === "disabled" ? "amber" : "red"}
+                    >
+                      {k.status === "active" ? "Active" : k.status === "disabled" ? "Désactivée" : "Révoquée"}
+                    </Chip>
                   </td>
-                  <td className="py-2.5 text-right">
-                    {k.status === "active" ? (
-                      <button type="button" className="ayeba-ghost px-2 py-1 text-xs" onClick={() => void setStatus(k.id, "disabled")}>Désactiver</button>
-                    ) : k.status === "disabled" ? (
-                      <button type="button" className="ayeba-ghost px-2 py-1 text-xs" onClick={() => void setStatus(k.id, "active")}>Réactiver</button>
-                    ) : null}
-                    <button type="button" className="ayeba-ghost ml-1 px-2 py-1 text-xs" onClick={() => void revoke(k.id, k.name)}>Révoquer</button>
+                  <td className="dev-console-muted">
+                    {k.lastUsedAt ? new Date(k.lastUsedAt).toLocaleString("fr") : "—"}
+                  </td>
+                  <td className="text-right">
+                    {canManage && k.status !== "revoked" && (
+                      <span className="dcw-row-actions">
+                        <button
+                          type="button"
+                          className="ayeba-ghost px-2 py-1 text-xs"
+                          onClick={() => setStatus(k.id, k.status === "active" ? "disabled" : "active")}
+                        >
+                          {k.status === "active" ? "Désactiver" : "Réactiver"}
+                        </button>
+                        <button
+                          type="button"
+                          className="dcw-danger px-2 py-1 text-xs"
+                          onClick={() => revoke(k.id, k.name)}
+                        >
+                          Révoquer
+                        </button>
+                      </span>
+                    )}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
-      </section>
-
-      <section className="ayeba-panel p-5">
-        <h2 className="mb-2 text-base font-semibold text-[var(--ink)]">Utiliser votre clé</h2>
-        <pre className="dev-console-pre">{`curl "https://ayeba.app/api/v1/search?q=kinshasa&limit=10" \\
-  -H "Authorization: Bearer ayb_live_VOTRE_CLE"`}</pre>
       </section>
     </div>
   );

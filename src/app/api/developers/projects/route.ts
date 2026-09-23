@@ -1,12 +1,16 @@
 import { NextResponse } from "next/server";
 import { requireDeveloperSession } from "@/lib/developers/session";
-import { createProject, listProjects } from "@/lib/developers/console";
+import { createProject, listAccessibleProjects, listProjects } from "@/lib/developers/console";
 
 export const runtime = "nodejs";
 
-export async function GET() {
+export async function GET(req: Request) {
   const auth = await requireDeveloperSession();
   if ("error" in auth) return auth.error;
+  if (new URL(req.url).searchParams.get("all")) {
+    const { owned, member } = listAccessibleProjects(auth.user.id);
+    return NextResponse.json({ projects: owned, memberProjects: member });
+  }
   return NextResponse.json({ projects: listProjects(auth.user.id) });
 }
 

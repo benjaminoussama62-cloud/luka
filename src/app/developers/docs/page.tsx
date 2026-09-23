@@ -19,17 +19,86 @@ export default function DevelopersDocsPage() {
       <div className="dev-docs-layout">
         <nav className="dev-docs-toc ayeba-panel" aria-label="Sommaire">
           <a href="#overview">Vue d’ensemble</a>
+          <a href="#api-auth">Clés API</a>
+          <a href="#api-search">Search API</a>
+          <a href="#api-suggest">Suggest API</a>
+          <a href="#api-errors">Erreurs & quotas</a>
           <a href="#discovery">Découverte OpenID</a>
           <a href="#flow">Flux authorization code</a>
           <a href="#scopes">Scopes</a>
           <a href="#pkce">Clients publics (PKCE)</a>
           <a href="#claims">Profil utilisateur</a>
           <a href="#security">Bonnes pratiques</a>
-          <Link href="/developers/console">→ Console OAuth</Link>
+          <Link href="/developers/console">→ Console</Link>
           <Link href="/developers/policy">→ Politique</Link>
         </nav>
 
         <article className="dev-docs-content">
+          <section id="api-auth" className="dev-docs-section ayeba-panel">
+            <h2>Clés API — authentification</h2>
+            <p>
+              Les APIs REST <code>/api/v1/*</code> s’authentifient par clé, créée dans la{" "}
+              <Link href="/developers/console/cles">console</Link> et rattachée à un projet.
+              Le secret complet n’est affiché qu’une fois — seul son hash est conservé côté serveur.
+            </p>
+            <pre className="dcw-pre">{`curl "https://ayeba.app/api/v1/search?q=kinshasa" \\
+  -H "Authorization: Bearer ayb_live_…"`}</pre>
+            <p className="mt-3">
+              Chaque clé peut être limitée par <strong>portées</strong> (search, suggest),{" "}
+              <strong>quota quotidien</strong>, <strong>référents</strong> et{" "}
+              <strong>adresses IP</strong> autorisés. Les appels sont journalisés et visibles dans
+              l’onglet Journaux de la console.
+            </p>
+          </section>
+
+          <section id="api-search" className="dev-docs-section ayeba-panel">
+            <h2>Ayeba Search API</h2>
+            <p>
+              <code className="dev-console-code">GET /api/v1/search?q=…&limit=10</code> —
+              recherche web sur l’index Ayeba. Réponse JSON :
+            </p>
+            <pre className="dcw-pre">{`{
+  "query": "kinshasa",
+  "total": 27,
+  "results": [
+    { "title": "…", "url": "https://…", "domain": "…", "description": "…" }
+  ],
+  "knowledge": null | { … }
+}`}</pre>
+            <p className="mt-3">
+              <code>limit</code> : 1–50 (défaut 10). Portée requise : <code>search</code>.
+            </p>
+          </section>
+
+          <section id="api-suggest" className="dev-docs-section ayeba-panel">
+            <h2>Ayeba Suggest API <span className="dcw-chip dcw-chip-blue">Bêta</span></h2>
+            <p>
+              <code className="dev-console-code">GET /api/v1/suggest?q=…&limit=8</code> —
+              suggestions de recherche en temps réel (autocomplete). Réponse :
+            </p>
+            <pre className="dcw-pre">{`{ "query": "kin", "suggestions": ["kinshasa", "…"] }`}</pre>
+            <p className="mt-3">
+              <code>limit</code> : 1–10 (défaut 8). Portée requise : <code>suggest</code>.
+            </p>
+          </section>
+
+          <section id="api-errors" className="dev-docs-section ayeba-panel">
+            <h2>Erreurs & quotas</h2>
+            <ul className="dev-docs-list">
+              <li><strong>401</strong> — clé absente ou invalide.</li>
+              <li>
+                <strong>403</strong> — clé désactivée/révoquée, portée manquante, ou restriction
+                référent/IP non satisfaite.
+              </li>
+              <li><strong>429</strong> — quota quotidien de la clé dépassé.</li>
+              <li><strong>400</strong> — paramètre <code>q</code> manquant ou invalide.</li>
+            </ul>
+            <p className="mt-3">
+              Les quotas sont par clé et par jour (minuit UTC). Augmentez-les dans la console ou
+              créez plusieurs clés par environnement (dev/prod).
+            </p>
+          </section>
+
           <section id="overview" className="dev-docs-section ayeba-panel">
             <h2>Vue d’ensemble</h2>
             <p>

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { DevelopersShell } from "@/components/developers/DevelopersShell";
-import { DevConsoleNav } from "@/components/developers/DevConsoleNav";
+import { DevConsole } from "@/components/developers/DevShell";
 import { DevKeysClient } from "@/components/developers/DevKeysClient";
 
 export const metadata: Metadata = {
@@ -11,8 +11,9 @@ export const metadata: Metadata = {
 export default function DeveloperKeysPage() {
   return (
     <DevelopersShell activePath="/developers/console" kicker="Console" title="Clés API" wide>
-      <DevConsoleNav active="/developers/console/cles" />
-      <DevKeysClient />
+      <DevConsole>
+        <DevKeysClient />
+      </DevConsole>
     </DevelopersShell>
   );
 }

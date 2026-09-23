@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import { requireDeveloperSession } from "@/lib/developers/session";
-import { createApiKey, listApiKeys, type ApiKeyRestrictions } from "@/lib/developers/console";
+import {
+  createApiKey,
+  listApiKeys,
+  listProjectApiKeys,
+  projectAccess,
+  type ApiKeyRestrictions,
+} from "@/lib/developers/console";
 
 export const runtime = "nodejs";
 
@@ -8,7 +14,13 @@ export async function GET(req: Request) {
   const auth = await requireDeveloperSession();
   if ("error" in auth) return auth.error;
   const projectId = new URL(req.url).searchParams.get("projectId") || undefined;
-  return NextResponse.json({ keys: listApiKeys(auth.user.id, projectId) });
+  if (projectId) {
+    if (!projectAccess(projectId, auth.user.id)) {
+      return NextResponse.json({ error: "Projet introuvable" }, { status: 404 });
+    }
+    return NextResponse.json({ keys: listProjectApiKeys(projectId) });
+  }
+  return NextResponse.json({ keys: listApiKeys(auth.user.id) });
 }
 
 export async function POST(req: Request) {

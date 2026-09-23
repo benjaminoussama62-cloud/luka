@@ -3,125 +3,167 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import type { DeveloperProject } from "@/lib/developers/console";
+import { Chip, DailyChart, EmptyState, useProject } from "@/components/developers/DevShell";
 
 type Usage = {
   totals: { calls: number; errors: number; avgLatencyMs: number };
   daily: { day: string; calls: number; errors: number; avg_latency: number }[];
   byEndpoint: { endpoint: string; calls: number }[];
-  byKey: { name: string; key_prefix: string; calls: number }[];
+  byKey: { name: string | null; key_prefix: string | null; calls: number }[];
+  byStatus: { code: number; calls: number }[];
 };
 
+const RANGES = [7, 30, 90];
+
 export function DevUsageClient() {
-  const [projects, setProjects] = useState<DeveloperProject[]>([]);
-  const [projectId, setProjectId] = useState("");
+  const { current } = useProject();
   const [days, setDays] = useState(30);
   const [usage, setUsage] = useState<Usage | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    void fetch("/api/developers/projects").then(async (r) => {
-      if (r.status === 401) return setError("login");
-      if (r.ok) setProjects(((await r.json()) as { projects: DeveloperProject[] }).projects);
-    });
-  }, []);
+  const [loading, setLoading] = useState(false);
 
   const load = useCallback(async () => {
-    const res = await fetch(`/api/developers/usage?days=${days}${projectId ? `&projectId=${projectId}` : ""}`);
+    if (!current) return;
+    setLoading(true);
+    const res = await fetch(`/api/developers/usage?projectId=${current.id}&days=${days}`);
     if (res.ok) setUsage((await res.json()) as Usage);
-  }, [days, projectId]);
+    setLoading(false);
+  }, [current, days]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    void load();
+  }, [load]);
 
-  if (error === "login") {
+  if (!current) {
     return (
-      <div className="dev-console-login ayeba-panel">
-        <h2>Connexion requise</h2>
-        <Link href="/?auth=login" className="ayeba-cta inline-block px-5 py-2.5 text-sm">Se connecter</Link>
-      </div>
+      <EmptyState
+        title="Sélectionnez un projet"
+        hint="L'utilisation est mesurée par projet."
+        action={<Link href="/developers/console" className="dcw-link">Tableau de bord →</Link>}
+      />
     );
   }
 
-  const maxDay = usage ? Math.max(1, ...usage.daily.map((d) => d.calls)) : 1;
+  const t = usage?.totals;
+  const successRate =
+    t && t.calls > 0 ? Math.round(((t.calls - t.errors) / t.calls) * 1000) / 10 : null;
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap gap-3">
-        <select className="ayeba-input w-auto" value={projectId} onChange={(e) => setProjectId(e.target.value)}>
-          <option value="">Tous les projets</option>
-          {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
-        <select className="ayeba-input w-auto" value={days} onChange={(e) => setDays(Number(e.target.value))}>
-          <option value={7}>7 jours</option>
-          <option value={30}>30 jours</option>
-          <option value={90}>90 jours</option>
-        </select>
+    <div className="dcw-stack">
+      <div className="dcw-head">
+        <div>
+          <h2 className="dcw-title">Utilisation — {current.name}</h2>
+          <p className="dev-console-muted">
+            Mesurée sur les appels réels <code className="dev-console-code">/api/v1/*</code> et
+            l&rsquo;explorateur.
+          </p>
+        </div>
+        <div className="dcw-seg">
+          {RANGES.map((r) => (
+            <button
+              key={r}
+              type="button"
+              className={`dcw-seg-btn ${days === r ? "active" : ""}`}
+              onClick={() => setDays(r)}
+            >
+              {r} j
+            </button>
+          ))}
+        </div>
       </div>
 
-      {!usage ? <p className="dev-console-muted">Chargement…</p> : (
-        <>
-          <section className="grid gap-4 sm:grid-cols-3">
-            <div className="ayeba-panel p-5">
-              <p className="dev-console-muted text-xs">Requêtes</p>
-              <p className="mt-1 text-2xl font-semibold text-[var(--ink)]">{usage.totals.calls.toLocaleString("fr")}</p>
-            </div>
-            <div className="ayeba-panel p-5">
-              <p className="dev-console-muted text-xs">Erreurs (4xx/5xx)</p>
-              <p className="mt-1 text-2xl font-semibold text-[var(--ink)]">{usage.totals.errors.toLocaleString("fr")}</p>
-            </div>
-            <div className="ayeba-panel p-5">
-              <p className="dev-console-muted text-xs">Latence moyenne</p>
-              <p className="mt-1 text-2xl font-semibold text-[var(--ink)]">{usage.totals.avgLatencyMs} ms</p>
-            </div>
-          </section>
+      <div className="dcw-kpis">
+        <div className="dcw-kpi">
+          <p className="dcw-kpi-label">Requêtes</p>
+          <p className="dcw-kpi-value">{loading || !t ? "…" : t.calls.toLocaleString("fr")}</p>
+        </div>
+        <div className="dcw-kpi">
+          <p className="dcw-kpi-label">Erreurs (4xx/5xx)</p>
+          <p className="dcw-kpi-value">{loading || !t ? "…" : t.errors.toLocaleString("fr")}</p>
+        </div>
+        <div className="dcw-kpi">
+          <p className="dcw-kpi-label">Taux de succès</p>
+          <p className="dcw-kpi-value">{successRate !== null ? `${successRate} %` : "—"}</p>
+        </div>
+        <div className="dcw-kpi">
+          <p className="dcw-kpi-label">Latence moyenne</p>
+          <p className="dcw-kpi-value">{loading || !t ? "…" : `${t.avgLatencyMs} ms`}</p>
+        </div>
+      </div>
 
-          <section className="ayeba-panel p-5">
-            <h2 className="mb-4 text-base font-semibold text-[var(--ink)]">Appels par jour</h2>
-            {usage.daily.length === 0 ? (
-              <p className="dev-console-muted">Aucun appel sur la période.</p>
-            ) : (
-              <div className="flex h-40 items-end gap-1">
-                {usage.daily.map((d) => (
-                  <div
-                    key={d.day}
-                    title={`${d.day} — ${d.calls} appels · ${d.errors} erreurs · ${Math.round(d.avg_latency)} ms`}
-                    className="flex-1 rounded-t bg-[var(--accent)] opacity-80"
-                    style={{ height: `${Math.max(4, (d.calls / maxDay) * 100)}%` }}
-                  />
+      <section className="ayeba-panel p-5">
+        <h3 className="mb-3">Trafic quotidien</h3>
+        {usage && usage.daily.length > 0 ? (
+          <>
+            <DailyChart data={usage.daily} />
+            <p className="dev-console-muted mt-2 text-xs">
+              Survolez une barre pour le détail. Rouge = erreurs.
+            </p>
+          </>
+        ) : (
+          <EmptyState title="Aucun trafic sur la période" hint="—" />
+        )}
+      </section>
+
+      <div className="dcw-grid-2">
+        <section className="ayeba-panel p-5">
+          <h3 className="mb-3">Par endpoint</h3>
+          {usage && usage.byEndpoint.length > 0 ? (
+            <table className="dcw-table">
+              <thead><tr><th>Endpoint</th><th className="text-right">Appels</th></tr></thead>
+              <tbody>
+                {usage.byEndpoint.map((e) => (
+                  <tr key={e.endpoint}>
+                    <td><code className="dev-console-code">{e.endpoint}</code></td>
+                    <td className="text-right">{e.calls.toLocaleString("fr")}</td>
+                  </tr>
                 ))}
-              </div>
-            )}
-          </section>
+              </tbody>
+            </table>
+          ) : (
+            <EmptyState title="—" hint="—" />
+          )}
+        </section>
 
-          <div className="grid gap-6 lg:grid-cols-2">
-            <section className="ayeba-panel p-5">
-              <h2 className="mb-3 text-base font-semibold text-[var(--ink)]">Par endpoint</h2>
-              {usage.byEndpoint.length === 0 ? <p className="dev-console-muted">—</p> : (
-                <ul className="space-y-2 text-sm">
-                  {usage.byEndpoint.map((e) => (
-                    <li key={e.endpoint} className="flex justify-between border-b border-[var(--line)] pb-2">
-                      <code className="dev-console-code">/api/v1/{e.endpoint}</code>
-                      <span>{e.calls.toLocaleString("fr")}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
-            <section className="ayeba-panel p-5">
-              <h2 className="mb-3 text-base font-semibold text-[var(--ink)]">Par clé</h2>
-              {usage.byKey.length === 0 ? <p className="dev-console-muted">—</p> : (
-                <ul className="space-y-2 text-sm">
-                  {usage.byKey.map((k) => (
-                    <li key={k.key_prefix} className="flex justify-between border-b border-[var(--line)] pb-2">
-                      <span>{k.name} <code className="dev-console-code">{k.key_prefix}…</code></span>
-                      <span>{k.calls.toLocaleString("fr")}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
+        <section className="ayeba-panel p-5">
+          <h3 className="mb-3">Par clé API</h3>
+          {usage && usage.byKey.length > 0 ? (
+            <table className="dcw-table">
+              <thead><tr><th>Clé</th><th className="text-right">Appels</th></tr></thead>
+              <tbody>
+                {usage.byKey.map((k, i) => (
+                  <tr key={i}>
+                    <td>
+                      {k.name ? (
+                        <>
+                          {k.name}{" "}
+                          <code className="dev-console-code">{k.key_prefix}…</code>
+                        </>
+                      ) : (
+                        <span className="dev-console-muted">Console (explorateur)</span>
+                      )}
+                    </td>
+                    <td className="text-right">{k.calls.toLocaleString("fr")}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <EmptyState title="—" hint="—" />
+          )}
+        </section>
+      </div>
+
+      {usage && usage.byStatus.length > 0 && (
+        <section className="ayeba-panel p-5">
+          <h3 className="mb-3">Codes de statut</h3>
+          <div className="dcw-chips">
+            {usage.byStatus.map((s) => (
+              <Chip key={s.code} tone={s.code < 300 ? "green" : s.code < 500 ? "amber" : "red"}>
+                {s.code} · {s.calls.toLocaleString("fr")}
+              </Chip>
+            ))}
           </div>
-        </>
+        </section>
       )}
     </div>
   );

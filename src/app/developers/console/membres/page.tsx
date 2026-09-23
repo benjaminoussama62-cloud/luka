@@ -1,18 +1,18 @@
 import type { Metadata } from "next";
 import { DevelopersShell } from "@/components/developers/DevelopersShell";
 import { DevConsole } from "@/components/developers/DevShell";
-import { DeveloperConsoleClient } from "@/components/developers/DeveloperConsoleClient";
+import { DevMembersClient } from "@/components/developers/DevMembersClient";
 
 export const metadata: Metadata = {
-  title: "Identifiants OAuth — Ayeba Developers",
+  title: "Membres — Ayeba Developers",
   robots: { index: false, follow: false },
 };
 
-export default function DeveloperOAuthPage() {
+export default function DeveloperMembersPage() {
   return (
-    <DevelopersShell activePath="/developers/console" kicker="Console" title="OAuth 2.0 / OpenID Connect" wide>
+    <DevelopersShell activePath="/developers/console" kicker="Console" title="Membres du projet" wide>
       <DevConsole>
-        <DeveloperConsoleClient />
+        <DevMembersClient />
       </DevConsole>
     </DevelopersShell>
   );

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { DevelopersShell } from "@/components/developers/DevelopersShell";
-import { DevConsoleNav } from "@/components/developers/DevConsoleNav";
+import { DevConsole } from "@/components/developers/DevShell";
 import { DevOverviewClient } from "@/components/developers/DevOverviewClient";
 
 export const metadata: Metadata = {
@@ -10,9 +10,10 @@ export const metadata: Metadata = {
 
 export default function DeveloperConsolePage() {
   return (
-    <DevelopersShell activePath="/developers/console" kicker="Console" title="Aperçu" wide>
-      <DevConsoleNav active="/developers/console" />
-      <DevOverviewClient />
+    <DevelopersShell activePath="/developers/console" kicker="Console" title="Tableau de bord" wide>
+      <DevConsole>
+        <DevOverviewClient />
+      </DevConsole>
     </DevelopersShell>
   );
 }

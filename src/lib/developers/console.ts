@@ -44,9 +44,8 @@ export type ApiLogEntry = {
   createdAt: string;
 };
 
-export const API_SCOPES = [
-  { id: "search", label: "Ayeba Search", desc: "Requêtes de recherche sur l'index Ayeba" },
-] as const;
+export { API_SCOPES } from "@/lib/developers/catalog";
+import { API_SCOPES } from "@/lib/developers/catalog";
 
 /* ------------------------------------------------------------------ */
 /* Projects                                                            */
@@ -98,6 +97,160 @@ export function createProject(ownerUserId: string, name: string): DeveloperProje
     "INSERT INTO developer_projects (id, owner_user_id, name, status, created_at) VALUES (?, ?, ?, 'active', ?)",
   ).run(id, ownerUserId, name.trim(), new Date().toISOString());
   return getProject(id, ownerUserId)!;
+}
+
+export function updateProjectName(
+  projectId: string,
+  ownerUserId: string,
+  name: string,
+): boolean {
+  const trimmed = name.trim();
+  if (!trimmed || trimmed.length > 80) return false;
+  const res = getDb()
+    .prepare("UPDATE developer_projects SET name = ? WHERE id = ? AND owner_user_id = ?")
+    .run(trimmed, projectId, ownerUserId) as { changes?: number };
+  return (res?.changes ?? 0) > 0;
+}
+
+/** Rôle d'un utilisateur sur un projet : owner > editor > viewer. */
+export function projectAccess(
+  projectId: string,
+  userId: string,
+): "owner" | "editor" | "viewer" | null {
+  const db = getDb();
+  const own = db
+    .prepare("SELECT 1 AS x FROM developer_projects WHERE id = ? AND owner_user_id = ?")
+    .get(projectId, userId);
+  if (own) return "owner";
+  const m = db
+    .prepare("SELECT role FROM developer_project_members WHERE project_id = ? AND user_id = ?")
+    .get(projectId, userId) as { role: string } | undefined;
+  if (m?.role === "editor") return "editor";
+  if (m) return "viewer";
+  return null;
+}
+
+/** Projets visibles : ceux possédés + ceux où l'utilisateur est membre. */
+export function listAccessibleProjects(ownerUserId: string) {
+  const db = getDb();
+  const owned = db
+    .prepare("SELECT * FROM developer_projects WHERE owner_user_id = ? ORDER BY created_at DESC")
+    .all(ownerUserId) as ProjectRow[];
+  const member = db
+    .prepare(
+      `SELECT p.*, m.role AS member_role FROM developer_projects p
+       JOIN developer_project_members m ON m.project_id = p.id
+       WHERE m.user_id = ? ORDER BY p.created_at DESC`,
+    )
+    .all(ownerUserId) as (ProjectRow & { member_role: string })[];
+  return {
+    owned: owned.map(toProject),
+    member: member.map((r) => ({ ...toProject(r), memberRole: r.member_role })),
+  };
+}
+
+export type ProjectMember = {
+  projectId: string;
+  userId: string;
+  email: string;
+  name: string;
+  role: string;
+  invitedBy: string;
+  createdAt: string;
+};
+
+export function listMembers(projectId: string): ProjectMember[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT m.project_id, m.user_id, m.role, m.invited_by, m.created_at,
+              u.email, u.name
+       FROM developer_project_members m JOIN users u ON u.id = m.user_id
+       WHERE m.project_id = ? ORDER BY m.created_at ASC`,
+    )
+    .all(projectId) as Array<{
+    project_id: string; user_id: string; role: string; invited_by: string;
+    created_at: string; email: string; name: string;
+  }>;
+  return rows.map((r) => ({
+    projectId: r.project_id,
+    userId: r.user_id,
+    email: r.email,
+    name: r.name,
+    role: r.role,
+    invitedBy: r.invited_by,
+    createdAt: r.created_at,
+  }));
+}
+
+export function addMemberByEmail(
+  projectId: string,
+  ownerUserId: string,
+  email: string,
+  role: "viewer" | "editor",
+): { ok: true; member: ProjectMember } | { error: string } {
+  const db = getDb();
+  if (projectAccess(projectId, ownerUserId) !== "owner") {
+    return { error: "Seul le propriétaire gère les membres" };
+  }
+  const target = db
+    .prepare("SELECT id, email, name FROM users WHERE lower(email) = lower(?)")
+    .get(email.trim()) as { id: string; email: string; name: string } | undefined;
+  if (!target) {
+    return { error: "Aucun compte Ayeba avec cet email — la personne doit d'abord créer un compte" };
+  }
+  if (target.id === ownerUserId) return { error: "Vous êtes déjà propriétaire" };
+  db.prepare(
+    `INSERT INTO developer_project_members (project_id, user_id, role, invited_by, created_at)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(project_id, user_id) DO UPDATE SET role = excluded.role`,
+  ).run(projectId, target.id, role, ownerUserId, new Date().toISOString());
+  return {
+    ok: true,
+    member: {
+      projectId, userId: target.id, email: target.email, name: target.name,
+      role, invitedBy: ownerUserId, createdAt: new Date().toISOString(),
+    },
+  };
+}
+
+export function removeMember(projectId: string, ownerUserId: string, userId: string): boolean {
+  const res = getDb()
+    .prepare("DELETE FROM developer_project_members WHERE project_id = ? AND user_id = ?")
+    .run(projectId, userId) as { changes?: number };
+  void ownerUserId;
+  return (res?.changes ?? 0) > 0;
+}
+
+/* ------------------------------------------------------------------ */
+/* APIs activées par projet                                            */
+/* ------------------------------------------------------------------ */
+
+export function listEnabledApis(projectId: string): string[] {
+  const rows = getDb()
+    .prepare("SELECT api_id FROM developer_project_apis WHERE project_id = ? AND status = 'enabled'")
+    .all(projectId) as { api_id: string }[];
+  return rows.map((r) => r.api_id);
+}
+
+export function setApiEnabled(
+  projectId: string,
+  apiId: string,
+  enabled: boolean,
+  byUserId = "",
+): boolean {
+  const db = getDb();
+  if (enabled) {
+    db.prepare(
+      `INSERT INTO developer_project_apis (project_id, api_id, status, enabled_by, created_at)
+       VALUES (?, ?, 'enabled', ?, ?)
+       ON CONFLICT(project_id, api_id) DO UPDATE SET status = 'enabled'`,
+    ).run(projectId, apiId, byUserId, new Date().toISOString());
+  } else {
+    db.prepare(
+      "UPDATE developer_project_apis SET status = 'disabled' WHERE project_id = ? AND api_id = ?",
+    ).run(projectId, apiId);
+  }
+  return true;
 }
 
 export function deleteProject(projectId: string, ownerUserId: string): boolean {
@@ -192,8 +345,8 @@ export function createApiKey(
   },
 ): { key: DeveloperApiKey; secret: string } | null {
   const db = getDb();
-  const project = getProject(projectId, ownerUserId);
-  if (!project) return null;
+  const role = projectAccess(projectId, ownerUserId);
+  if (role !== "owner" && role !== "editor") return null;
 
   const id = `key_${randomUUID().slice(0, 8)}`;
   const secret = `ayb_live_${randomBytes(24).toString("hex")}`;
@@ -232,9 +385,11 @@ export function updateApiKey(
 ): DeveloperApiKey | null {
   const db = getDb();
   const row = db
-    .prepare("SELECT * FROM developer_api_keys WHERE id = ? AND owner_user_id = ?")
-    .get(keyId, ownerUserId) as KeyRow | undefined;
+    .prepare("SELECT * FROM developer_api_keys WHERE id = ?")
+    .get(keyId) as KeyRow | undefined;
   if (!row || row.status === "revoked") return null;
+  const role = projectAccess(row.project_id, ownerUserId);
+  if (role !== "owner" && role !== "editor") return null;
   db.prepare(
     `UPDATE developer_api_keys SET
        name = ?, restrictions_json = ?, quota_per_day = ?, status = ?
@@ -252,11 +407,18 @@ export function updateApiKey(
 }
 
 export function revokeApiKey(keyId: string, ownerUserId: string): boolean {
-  const res = getDb()
+  const db = getDb();
+  const row = db
+    .prepare("SELECT project_id FROM developer_api_keys WHERE id = ?")
+    .get(keyId) as { project_id: string } | undefined;
+  if (!row) return false;
+  const role = projectAccess(row.project_id, ownerUserId);
+  if (role !== "owner" && role !== "editor") return false;
+  const res = db
     .prepare(
-      "UPDATE developer_api_keys SET status = 'revoked' WHERE id = ? AND owner_user_id = ? AND status != 'revoked'",
+      "UPDATE developer_api_keys SET status = 'revoked' WHERE id = ? AND status != 'revoked'",
     )
-    .run(keyId, ownerUserId) as { changes?: number } | undefined;
+    .run(keyId) as { changes?: number } | undefined;
   return (res?.changes ?? 0) > 0;
 }
 
@@ -417,6 +579,93 @@ export function getUsage(ownerUserId: string, projectId: string | null, days: nu
     byEndpoint,
     byKey,
   };
+}
+
+/** Usage d'un projet précis — accessible aux membres (pas seulement owner). */
+export function getUsageForProject(projectId: string, days: number) {
+  const db = getDb();
+  const since = new Date(Date.now() - days * 86400_000).toISOString();
+  const base = `FROM developer_api_logs l WHERE l.project_id = ? AND l.created_at >= ?`;
+
+  const daily = db
+    .prepare(
+      `SELECT substr(l.created_at, 1, 10) AS day, COUNT(*) AS calls,
+              SUM(CASE WHEN l.status_code >= 400 THEN 1 ELSE 0 END) AS errors,
+              AVG(l.latency_ms) AS avg_latency
+       ${base} GROUP BY day ORDER BY day`,
+    )
+    .all(projectId, since) as { day: string; calls: number; errors: number; avg_latency: number }[];
+
+  const byEndpoint = db
+    .prepare(`SELECT l.endpoint, COUNT(*) AS calls ${base} GROUP BY l.endpoint ORDER BY calls DESC`)
+    .all(projectId, since) as { endpoint: string; calls: number }[];
+
+  const byKey = db
+    .prepare(
+      `SELECT k.name, k.key_prefix, COUNT(*) AS calls
+       FROM developer_api_logs l LEFT JOIN developer_api_keys k ON k.id = l.key_id
+       WHERE l.project_id = ? AND l.created_at >= ?
+       GROUP BY l.key_id ORDER BY calls DESC`,
+    )
+    .all(projectId, since) as { name: string | null; key_prefix: string | null; calls: number }[];
+
+  const totals = db
+    .prepare(
+      `SELECT COUNT(*) AS calls,
+              SUM(CASE WHEN l.status_code >= 400 THEN 1 ELSE 0 END) AS errors,
+              AVG(l.latency_ms) AS avg_latency ${base}`,
+    )
+    .get(projectId, since) as { calls: number; errors: number | null; avg_latency: number | null };
+
+  const byStatus = db
+    .prepare(
+      `SELECT l.status_code AS code, COUNT(*) AS calls ${base} GROUP BY l.status_code ORDER BY calls DESC`,
+    )
+    .all(projectId, since) as { code: number; calls: number }[];
+
+  return {
+    totals: {
+      calls: totals.calls,
+      errors: totals.errors || 0,
+      avgLatencyMs: Math.round(totals.avg_latency || 0),
+    },
+    daily,
+    byEndpoint,
+    byKey,
+    byStatus,
+  };
+}
+
+export function getLogsForProject(projectId: string, limit = 100): ApiLogEntry[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT l.*, k.name AS key_name FROM developer_api_logs l
+       LEFT JOIN developer_api_keys k ON k.id = l.key_id
+       WHERE l.project_id = ? ORDER BY l.id DESC LIMIT ?`,
+    )
+    .all(projectId, limit) as (ApiLogEntry & {
+    key_name: string | null; key_id: string; status_code: number; latency_ms: number; created_at: string;
+  })[];
+  return rows.map((r) => ({
+    id: r.id,
+    keyId: r.key_id,
+    keyName: r.key_name || (r.key_id === "console" ? "Console (explorateur)" : r.key_id),
+    endpoint: r.endpoint,
+    statusCode: r.status_code,
+    latencyMs: r.latency_ms,
+    ip: r.ip,
+    createdAt: r.created_at,
+  }));
+}
+
+/** Clés d'un projet — visibles par les membres (secrets jamais exposés). */
+export function listProjectApiKeys(projectId: string): DeveloperApiKey[] {
+  const rows = getDb()
+    .prepare(
+      "SELECT * FROM developer_api_keys WHERE project_id = ? ORDER BY created_at DESC",
+    )
+    .all(projectId) as KeyRow[];
+  return rows.map(toKey);
 }
 
 export function getLogs(ownerUserId: string, projectId: string | null, limit = 100): ApiLogEntry[] {

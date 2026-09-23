@@ -751,6 +751,26 @@ function migrate(db: AyebaDatabase) {
 
     CREATE INDEX IF NOT EXISTS idx_dev_logs_project ON developer_api_logs(project_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_dev_logs_key ON developer_api_logs(key_id, created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS developer_project_apis (
+      project_id TEXT NOT NULL,
+      api_id TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'enabled',
+      enabled_by TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (project_id, api_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS developer_project_members (
+      project_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'viewer',
+      invited_by TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (project_id, user_id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_dev_members_user ON developer_project_members(user_id);
   `);
 
   migrateAyebiColumns(db);

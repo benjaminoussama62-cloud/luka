@@ -1,75 +1,112 @@
 "use client";
+/* eslint-disable react-hooks/set-state-in-effect */
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import type { ApiLogEntry, DeveloperProject } from "@/lib/developers/console";
+import type { ApiLogEntry } from "@/lib/developers/console";
+import { Chip, EmptyState, useProject } from "@/components/developers/DevShell";
 
 export function DevLogsClient() {
-  const [projects, setProjects] = useState<DeveloperProject[]>([]);
-  const [projectId, setProjectId] = useState("");
-  const [logs, setLogs] = useState<ApiLogEntry[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { current } = useProject();
+  const [logs, setLogs] = useState<ApiLogEntry[]>([]);
+  const [filter, setFilter] = useState<"all" | "errors">("all");
+  const [loading, setLoading] = useState(false);
+
+  const load = useCallback(async () => {
+    if (!current) return;
+    setLoading(true);
+    const res = await fetch(`/api/developers/logs?projectId=${current.id}&limit=300`);
+    if (res.ok) setLogs(((await res.json()) as { logs: ApiLogEntry[] }).logs);
+    setLoading(false);
+  }, [current]);
 
   useEffect(() => {
-    void fetch("/api/developers/projects").then(async (r) => {
-      if (r.status === 401) return setError("login");
-      if (r.ok) setProjects(((await r.json()) as { projects: DeveloperProject[] }).projects);
-    });
-  }, []);
+    void load();
+  }, [load]);
 
-  useEffect(() => {
-    void fetch(`/api/developers/logs?limit=200${projectId ? `&projectId=${projectId}` : ""}`)
-      .then(async (r) => { if (r.ok) setLogs(((await r.json()) as { logs: ApiLogEntry[] }).logs); });
-  }, [projectId]);
-
-  if (error === "login") {
+  if (!current) {
     return (
-      <div className="dev-console-login ayeba-panel">
-        <h2>Connexion requise</h2>
-        <Link href="/?auth=login" className="ayeba-cta inline-block px-5 py-2.5 text-sm">Se connecter</Link>
-      </div>
+      <EmptyState
+        title="Sélectionnez un projet"
+        hint="Les journaux sont propres à chaque projet."
+        action={<Link href="/developers/console" className="dcw-link">Tableau de bord →</Link>}
+      />
     );
   }
 
+  const shown = filter === "errors" ? logs.filter((l) => l.statusCode >= 400) : logs;
+
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap gap-3">
-        <select className="ayeba-input w-auto" value={projectId} onChange={(e) => setProjectId(e.target.value)}>
-          <option value="">Tous les projets</option>
-          {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
+    <div className="dcw-stack">
+      <div className="dcw-head">
+        <div>
+          <h2 className="dcw-title">Journaux — {current.name}</h2>
+          <p className="dev-console-muted">
+            {logs.length} entrée(s) — chaque appel API validé ou rejeté est enregistré.
+          </p>
+        </div>
+        <div className="dcw-seg">
+          <button
+            type="button"
+            className={`dcw-seg-btn ${filter === "all" ? "active" : ""}`}
+            onClick={() => setFilter("all")}
+          >
+            Tout
+          </button>
+          <button
+            type="button"
+            className={`dcw-seg-btn ${filter === "errors" ? "active" : ""}`}
+            onClick={() => setFilter("errors")}
+          >
+            Erreurs
+          </button>
+          <button type="button" className="dcw-seg-btn" onClick={() => void load()}>
+            ↻
+          </button>
+        </div>
       </div>
-      <section className="ayeba-panel p-5">
-        <h2 className="mb-4 text-base font-semibold text-[var(--ink)]">Requêtes API récentes</h2>
-        {!logs ? <p className="dev-console-muted">Chargement…</p> : logs.length === 0 ? (
-          <p className="dev-console-muted">Aucune requête enregistrée.</p>
+
+      <section className="ayeba-panel p-0">
+        {shown.length === 0 ? (
+          <div className="p-5">
+            <EmptyState
+              title={loading ? "Chargement…" : "Aucune entrée"}
+              hint="Les appels à l'API et à l'explorateur apparaîtront ici."
+            />
+          </div>
         ) : (
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="dev-console-muted text-xs">
-                <th className="pb-2">Date</th>
-                <th className="pb-2">Endpoint</th>
-                <th className="pb-2">Clé</th>
-                <th className="pb-2">Statut</th>
-                <th className="pb-2">Latence</th>
-                <th className="pb-2">IP</th>
-              </tr>
-            </thead>
-            <tbody>
-              {logs.map((l) => (
-                <tr key={l.id} className="border-t border-[var(--line)]">
-                  <td className="py-2 dev-console-muted text-xs">{new Date(l.createdAt).toLocaleString("fr")}</td>
-                  <td className="py-2"><code className="dev-console-code">/api/v1/{l.endpoint}</code></td>
-                  <td className="py-2 text-xs">{l.keyName}</td>
-                  <td className="py-2">
-                    <span className={`dev-console-badge ${l.statusCode >= 400 ? "opacity-60" : ""}`}>{l.statusCode}</span>
-                  </td>
-                  <td className="py-2 text-xs">{l.latencyMs} ms</td>
-                  <td className="py-2 dev-console-muted text-xs">{l.ip || "—"}</td>
+          <div className="dcw-scroll">
+            <table className="dcw-table">
+              <thead>
+                <tr>
+                  <th>Horodatage</th>
+                  <th>Endpoint</th>
+                  <th>Statut</th>
+                  <th className="text-right">Latence</th>
+                  <th>Clé</th>
+                  <th>IP</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {shown.map((l) => (
+                  <tr key={l.id}>
+                    <td className="dev-console-muted whitespace-nowrap">
+                      {new Date(l.createdAt).toLocaleString("fr")}
+                    </td>
+                    <td><code className="dev-console-code">{l.endpoint}</code></td>
+                    <td>
+                      <Chip tone={l.statusCode < 300 ? "green" : l.statusCode < 500 ? "amber" : "red"}>
+                        {l.statusCode}
+                      </Chip>
+                    </td>
+                    <td className="text-right">{l.latencyMs} ms</td>
+                    <td>{l.keyName}</td>
+                    <td className="dev-console-muted">{l.ip || "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </section>
     </div>
