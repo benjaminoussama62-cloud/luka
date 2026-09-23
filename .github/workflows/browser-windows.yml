@@ -36,6 +36,8 @@ jobs:
         with:
           files: |
             desktop/ayeba-browser/dist/AYEBA-Setup-*.exe
+            desktop/ayeba-browser/dist/AYEBA-Setup-*.exe.blockmap
             desktop/ayeba-browser/dist/AYEBA-Portable-*.zip
+            desktop/ayeba-browser/dist/latest.yml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
