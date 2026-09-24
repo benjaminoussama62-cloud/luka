@@ -5,8 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { StudioAppShell } from "@/components/studio/StudioAppShell";
-import { DataTable, ModuleNav, SectionTitle } from "@/components/studio/ui";
-import { TRACE_NAV } from "@/components/studio/trace-nav";
+import { DataTable, SectionTitle } from "@/components/studio/ui";
 import type { StudioSite } from "@/lib/studio/types";
 
 type TagRule = {
@@ -79,7 +78,6 @@ export default function TraceTagsPage() {
 
   return (
     <StudioAppShell siteId={siteId} siteDomain={site?.domain}>
-      <ModuleNav siteId={siteId} module="trace" items={TRACE_NAV} />
       <div>
         <p className="ayeba-kicker ayeba-kicker-accent">Trace · Tag Manager</p>
         <h1 className="mt-2 font-[family-name:var(--font-brand)] text-3xl font-semibold tracking-[-0.04em] text-[var(--ink)]">

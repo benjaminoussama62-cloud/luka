@@ -5,8 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { StudioAppShell } from "@/components/studio/StudioAppShell";
-import { Badge, DataTable, Metric, MetricGrid, ModuleNav, SectionTitle } from "@/components/studio/ui";
-import { YIELD_NAV } from "@/components/studio/yield-nav";
+import { Badge, DataTable, Metric, MetricGrid, SectionTitle } from "@/components/studio/ui";
 import type { StudioSite } from "@/lib/studio/types";
 
 type Billing = {
@@ -51,7 +50,7 @@ export default function YieldFacturationPage() {
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || "Paiement impossible");
-      if (d.checkoutUrl) window.location.href = d.checkoutUrl;
+      if (d.checkoutUrl) window.location.assign(d.checkoutUrl);
       else setPayMsg("Paiement initié — suivez les instructions sur votre téléphone.");
     } catch (e) {
       setPayMsg(e instanceof Error ? e.message : "Erreur");
@@ -66,7 +65,6 @@ export default function YieldFacturationPage() {
 
   return (
     <StudioAppShell siteId={siteId} siteDomain={site?.domain}>
-      <ModuleNav siteId={siteId} module="yield" items={YIELD_NAV} />
       <div>
         <p className="ayeba-kicker ayeba-kicker-accent">Yield · Facturation</p>
         <h1 className="mt-2 font-[family-name:var(--font-brand)] text-3xl font-semibold tracking-[-0.04em] text-[var(--ink)]">

@@ -118,6 +118,30 @@ export default function StudioVerifyPage() {
         </button>
         {message ? <p className="text-sm text-[var(--muted)]">{message}</p> : null}
       </div>
+
+      {/* Zone de danger — suppression de la propriété */}
+      <section className="ayeba-panel mt-12 border-[rgba(251,113,133,0.3)] p-5">
+        <h2 className="font-[family-name:var(--font-brand)] text-lg text-[var(--ink)]">
+          Zone de danger
+        </h2>
+        <p className="mt-2 text-sm text-[var(--muted)]">
+          Supprimer cette propriété retire le site de Studio — les données de mesure collectées
+          restent dans les journaux d&apos;audit. Cette action est irréversible.
+        </p>
+        <button
+          type="button"
+          className="dcw-danger mt-4 px-4 py-2 text-xs"
+          onClick={() => {
+            if (!site || !confirm(`Supprimer définitivement ${site.domain} de Studio ?`)) return;
+            void (async () => {
+              const res = await fetch(`/api/studio/sites/${siteId}`, { method: "DELETE" });
+              if (res.ok) router.push("/studio/app");
+            })();
+          }}
+        >
+          Supprimer la propriété
+        </button>
+      </section>
     </StudioAppShell>
   );
 }

@@ -5,8 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { StudioAppShell } from "@/components/studio/StudioAppShell";
-import { Badge, DataTable, ModuleNav, SectionTitle } from "@/components/studio/ui";
-import { YIELD_NAV } from "@/components/studio/yield-nav";
+import { Badge, DataTable, SectionTitle } from "@/components/studio/ui";
 import type { StudioSite } from "@/lib/studio/types";
 
 type Keyword = {
@@ -70,7 +69,6 @@ export default function YieldMotsClesPage() {
 
   return (
     <StudioAppShell siteId={siteId} siteDomain={site?.domain}>
-      <ModuleNav siteId={siteId} module="yield" items={YIELD_NAV} />
       <div>
         <p className="ayeba-kicker ayeba-kicker-accent">Yield · Mots-clés</p>
         <h1 className="mt-2 font-[family-name:var(--font-brand)] text-3xl font-semibold tracking-[-0.04em] text-[var(--ink)]">
@@ -81,7 +79,7 @@ export default function YieldMotsClesPage() {
       <section className="ayeba-panel mt-8 grid gap-3 p-5 sm:grid-cols-2 lg:grid-cols-5">
         <select className="ayeba-input" value={form.campaignId} onChange={(e) => setForm({ ...form, campaignId: e.target.value })}>
           {campaigns.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          {!campaigns.length ? <option value="">— créez une campagne d'abord —</option> : null}
+          {!campaigns.length ? <option value="">— créez une campagne d&apos;abord —</option> : null}
         </select>
         <input className="ayeba-input" placeholder="Mot-clé" value={form.keyword} onChange={(e) => setForm({ ...form, keyword: e.target.value })} />
         <select className="ayeba-input" value={form.matchType} onChange={(e) => setForm({ ...form, matchType: e.target.value })}>

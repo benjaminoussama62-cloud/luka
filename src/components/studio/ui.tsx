@@ -177,6 +177,51 @@ export function BarChart({
   );
 }
 
+/* ---------- Courbe SVG (tendance multi-séries) ---------- */
+
+export function LineChart({
+  series,
+  height = 140,
+  colors = ["var(--accent)", "#93c5fd", "#34d399", "#fbbf24"],
+}: {
+  series: Array<{ name: string; points: Array<{ x: string; y: number | null }> }>;
+  height?: number;
+  colors?: string[];
+}) {
+  const W = 720;
+  const pad = 10;
+  const all = series.flatMap((s) => s.points.map((p) => p.y).filter((v): v is number => v != null));
+  if (!all.length) return null;
+  const n = Math.max(...series.map((s) => s.points.length));
+  const max = Math.max(1, ...all);
+  const min = Math.min(0, ...all);
+  const sx = (i: number) => pad + (i / Math.max(1, n - 1)) * (W - pad * 2);
+  const sy = (v: number) => height - 8 - ((v - min) / (max - min)) * (height - 20);
+  return (
+    <svg viewBox={`0 0 ${W} ${height}`} className="w-full" role="img" aria-label="Tendance">
+      {series.map((s, si) => {
+        const path = s.points
+          .map((p, i) => (p.y == null ? null : `${i === 0 || s.points[i - 1].y == null ? "M" : "L"}${sx(i)},${sy(p.y)}`))
+          .filter(Boolean)
+          .join(" ");
+        return (
+          <g key={s.name}>
+            <path d={path} fill="none" stroke={colors[si % colors.length]} strokeWidth="2" strokeLinejoin="round" />
+            {s.points.map((p, i) =>
+              p.y == null ? null : (
+                <circle key={i} cx={sx(i)} cy={sy(p.y)} r="2.4" fill={colors[si % colors.length]}>
+                  <title>{`${s.name} — ${p.x} : ${p.y}`}</title>
+                </circle>
+              ),
+            )}
+          </g>
+        );
+      })}
+      <line x1={pad} y1={height - 8} x2={W - pad} y2={height - 8} stroke="var(--line)" />
+    </svg>
+  );
+}
+
 export function Badge({ children, tone = "neutral" }: { children: React.ReactNode; tone?: "neutral" | "good" | "warn" | "bad" }) {
   const colors = {
     neutral: "text-[var(--muted)] border-[var(--line)]",

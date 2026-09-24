@@ -348,6 +348,110 @@ export function inspectUrl(site: StudioSite, rawUrl: string): RadarInspectResult
   };
 }
 
+export type RadarLiveResult = {
+  url: string;
+  finalUrl: string;
+  redirected: boolean;
+  status: number;
+  ok: boolean;
+  latencyMs: number;
+  bytes: number;
+  contentType: string;
+  title: string | null;
+  metaDescription: string | null;
+  canonical: string | null;
+  /** true si la page déclare noindex (meta robots ou X-Robots-Tag) */
+  noindex: boolean;
+  indexable: boolean;
+  https: boolean;
+  fetchedAt: string;
+  error?: string;
+};
+
+/**
+ * Test d'URL en direct — fetch HTTP réel de la page, façon "URL Inspection
+ * live test" de Search Console. Mesure la réponse, extrait title/meta/canonical
+ * et détecte noindex. Jamais de données simulées : tout vient de la requête.
+ */
+export async function inspectUrlLive(site: StudioSite, rawUrl: string): Promise<RadarLiveResult> {
+  let url: string;
+  try {
+    url = new URL(rawUrl.includes("://") ? rawUrl : `https://${rawUrl}`).toString();
+  } catch {
+    throw Object.assign(new Error("URL invalide"), { status: 400 });
+  }
+  const host = new URL(url).hostname.replace(/^www\./, "");
+  if (host !== site.domain && !host.endsWith(`.${site.domain}`)) {
+    throw Object.assign(new Error("URL hors de ce domaine"), { status: 400 });
+  }
+
+  const started = Date.now();
+  const base = {
+    url,
+    finalUrl: url,
+    redirected: false,
+    status: 0,
+    ok: false,
+    latencyMs: 0,
+    bytes: 0,
+    contentType: "",
+    title: null,
+    metaDescription: null,
+    canonical: null,
+    noindex: false,
+    indexable: false,
+    https: url.startsWith("https:"),
+    fetchedAt: new Date().toISOString(),
+  };
+
+  try {
+    const res = await fetch(url, {
+      signal: AbortSignal.timeout(15000),
+      redirect: "follow",
+      headers: {
+        "User-Agent": "AyebaStudioBot/1.0 (+https://ayeba.app/studio; inspection en direct)",
+        Accept: "text/html,application/xhtml+xml",
+      },
+    });
+    const html = res.ok || res.status < 500 ? await res.text() : "";
+    const latencyMs = Date.now() - started;
+    const xRobots = (res.headers.get("x-robots-tag") || "").toLowerCase();
+
+    const pick = (re: RegExp) => html.match(re)?.[1]?.trim() ?? null;
+    const title = pick(/<title[^>]*>([^<]*)<\/title>/i);
+    const metaDesc = pick(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']*)["']/i)
+      ?? pick(/<meta[^>]+content=["']([^"']*)["'][^>]+name=["']description["']/i);
+    const canonical = pick(/<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']*)["']/i)
+      ?? pick(/<link[^>]+href=["']([^"']*)["'][^>]+rel=["']canonical["']/i);
+    const metaRobots = (
+      pick(/<meta[^>]+name=["']robots["'][^>]+content=["']([^"']*)["']/i) ?? ""
+    ).toLowerCase();
+    const noindex = metaRobots.includes("noindex") || xRobots.includes("noindex");
+
+    return {
+      ...base,
+      finalUrl: res.url || url,
+      redirected: Boolean(res.redirected || (res.url && res.url !== url)),
+      status: res.status,
+      ok: res.ok,
+      latencyMs,
+      bytes: new TextEncoder().encode(html).length,
+      contentType: res.headers.get("content-type") || "",
+      title,
+      metaDescription: metaDesc,
+      canonical,
+      noindex,
+      indexable: res.ok && !noindex,
+    };
+  } catch (e) {
+    return {
+      ...base,
+      latencyMs: Date.now() - started,
+      error: e instanceof Error ? e.message : "Échec réseau",
+    };
+  }
+}
+
 export function submitUrlForCrawl(site: StudioSite, rawUrl: string, priority = 80) {
   if (site.status !== "verified") {
     throw Object.assign(new Error("Vérifiez d’abord la propriété du site"), { status: 403 });

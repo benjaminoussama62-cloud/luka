@@ -5,8 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { StudioAppShell } from "@/components/studio/StudioAppShell";
-import { DataTable, ModuleNav, SectionTitle } from "@/components/studio/ui";
-import { TRACE_NAV } from "@/components/studio/trace-nav";
+import { DataTable, SectionTitle } from "@/components/studio/ui";
 import type { StudioSite } from "@/lib/studio/types";
 
 type BehaviorData = {
@@ -42,7 +41,6 @@ export default function TraceComportementPage() {
 
   return (
     <StudioAppShell siteId={siteId} siteDomain={data.site.domain}>
-      <ModuleNav siteId={siteId} module="trace" items={TRACE_NAV} />
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="ayeba-kicker ayeba-kicker-accent">Trace · Comportement</p>

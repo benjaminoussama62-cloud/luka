@@ -6,8 +6,6 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { StudioAppShell } from "@/components/studio/StudioAppShell";
-import { ModuleNav } from "@/components/studio/ui";
-import { AETHER_NAV } from "@/components/studio/aether-nav";
 import type {
   AetherOverview,
   StudioSite,
@@ -58,7 +56,6 @@ export default function StudioAetherPage() {
 
   return (
     <StudioAppShell siteId={siteId} siteDomain={site.domain}>
-      <ModuleNav siteId={siteId} module="aether" items={AETHER_NAV} />
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="ayeba-kicker ayeba-kicker-accent">Aether</p>

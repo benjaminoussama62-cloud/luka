@@ -5,8 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { StudioAppShell } from "@/components/studio/StudioAppShell";
-import { Badge, DataTable, Metric, MetricGrid, ModuleNav, SectionTitle } from "@/components/studio/ui";
-import { AETHER_NAV } from "@/components/studio/aether-nav";
+import { Badge, DataTable, Metric, MetricGrid, SectionTitle } from "@/components/studio/ui";
 import type { StudioSite } from "@/lib/studio/types";
 
 type Products = {
@@ -41,7 +40,6 @@ export default function AetherProduitsPage() {
 
   return (
     <StudioAppShell siteId={siteId} siteDomain={data.site.domain}>
-      <ModuleNav siteId={siteId} module="aether" items={AETHER_NAV} />
       <div>
         <p className="ayeba-kicker ayeba-kicker-accent">Aether · Produits</p>
         <h1 className="mt-2 font-[family-name:var(--font-brand)] text-3xl font-semibold tracking-[-0.04em] text-[var(--ink)]">

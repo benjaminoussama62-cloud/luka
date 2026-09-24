@@ -5,8 +5,8 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { StudioAppShell } from "@/components/studio/StudioAppShell";
-import { DataTable, ModuleNav, SectionTitle } from "@/components/studio/ui";
-import { RADAR_NAV } from "@/components/studio/radar-nav";
+import { Badge, DataTable, SectionTitle } from "@/components/studio/ui";
+import type { RadarLiveResult } from "@/lib/studio/radar";
 import type { RadarInspectResult, StudioSite } from "@/lib/studio/types";
 
 type InspectionRow = {
@@ -23,6 +23,8 @@ export default function RadarInspectionPage() {
   const [history, setHistory] = useState<InspectionRow[]>([]);
   const [url, setUrl] = useState("");
   const [result, setResult] = useState<RadarInspectResult | null>(null);
+  const [live, setLive] = useState<RadarLiveResult | null>(null);
+  const [liveBusy, setLiveBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -57,9 +59,25 @@ export default function RadarInspectionPage() {
     } finally { setBusy(false); }
   };
 
+  // Test en direct — fetch HTTP réel de la page depuis nos serveurs.
+  const liveTest = async () => {
+    setLiveBusy(true); setMsg("");
+    try {
+      const res = await fetch(`/api/studio/radar/${siteId}/inspect`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url, live: true }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || "Test impossible");
+      setResult(d.inspection || null);
+      setLive(d.live || null);
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Erreur");
+    } finally { setLiveBusy(false); }
+  };
+
   return (
     <StudioAppShell siteId={siteId} siteDomain={site?.domain}>
-      <ModuleNav siteId={siteId} module="radar" items={RADAR_NAV} />
       <div>
         <p className="ayeba-kicker ayeba-kicker-accent">Radar · Inspection d'URL</p>
         <h1 className="mt-2 font-[family-name:var(--font-brand)] text-3xl font-semibold tracking-[-0.04em] text-[var(--ink)]">
@@ -76,13 +94,21 @@ export default function RadarInspectionPage() {
             placeholder={`https://${site?.domain || "exemple.com"}/page`}
           />
           <div className="flex gap-2">
-            <button type="submit" className="ayeba-ghost h-11 px-4 text-xs" disabled={busy}>
+            <button type="submit" className="ayeba-ghost h-11 px-4 text-xs" disabled={busy || liveBusy}>
               Inspecter
             </button>
             <button
               type="button"
+              className="ayeba-ghost h-11 px-4 text-xs"
+              disabled={busy || liveBusy}
+              onClick={() => void liveTest()}
+            >
+              {liveBusy ? "Fetch en cours…" : "Test en direct"}
+            </button>
+            <button
+              type="button"
               className="ayeba-cta h-11 px-4 text-xs"
-              disabled={busy}
+              disabled={busy || liveBusy}
               onClick={(e) => void inspect(e as unknown as FormEvent, true)}
             >
               Inspecter + crawl
@@ -111,6 +137,51 @@ export default function RadarInspectionPage() {
           {result.snippet ? (
             <p className="mt-4 border-t border-[var(--line)] pt-4 text-sm text-[var(--muted)]">
               Extrait indexé : {result.snippet}
+            </p>
+          ) : null}
+        </section>
+      ) : null}
+
+      {/* Test en direct — réponse HTTP réelle */}
+      {live ? (
+        <section className="ayeba-panel mt-6 p-6">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="st-live-dot" />
+            <h2 className="font-[family-name:var(--font-brand)] text-xl text-[var(--ink)]">
+              Test en direct — la page répond-elle ?
+            </h2>
+            <Badge
+              tone={
+                live.indexable ? "good" : live.ok && live.noindex ? "warn" : "bad"
+              }
+            >
+              {live.error
+                ? "Inaccessible"
+                : live.indexable
+                  ? "Indexable"
+                  : live.noindex
+                    ? "noindex déclaré"
+                    : `HTTP ${live.status}`}
+            </Badge>
+          </div>
+          {live.error ? (
+            <p className="mt-4 text-sm text-[var(--bad)]">{live.error}</p>
+          ) : (
+            <dl className="mt-5 grid grid-cols-2 gap-4 text-sm sm:grid-cols-3">
+              <Pair k="Statut HTTP" v={String(live.status)} />
+              <Pair k="Latence" v={`${live.latencyMs} ms`} />
+              <Pair k="Poids HTML" v={`${Math.round(live.bytes / 1024)} Ko`} />
+              <Pair k="URL finale" v={live.finalUrl} />
+              <Pair k="Redirection" v={live.redirected ? "Oui" : "Non"} />
+              <Pair k="HTTPS" v={live.https ? "Oui" : "Non"} />
+              <Pair k="Titre (live)" v={live.title || "—"} />
+              <Pair k="Canonical" v={live.canonical || "—"} />
+              <Pair k="Meta robots" v={live.noindex ? "noindex" : "index autorisé"} />
+            </dl>
+          )}
+          {live.metaDescription ? (
+            <p className="mt-4 border-t border-[var(--line)] pt-4 text-sm text-[var(--muted)]">
+              Meta description : {live.metaDescription}
             </p>
           ) : null}
         </section>

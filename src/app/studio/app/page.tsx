@@ -82,14 +82,23 @@ export default function StudioAppHomePage() {
       </form>
       {error ? <p className="mt-2 text-sm text-red-400">{error}</p> : null}
 
-      <ul className="mt-12 space-y-0 border-t border-[var(--line)]">
+      <ul className="mt-12 grid gap-4 sm:grid-cols-2">
         {sites.map((s) => (
-          <li key={s.id} className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--line)] py-5">
-            <div>
-              <p className="font-[family-name:var(--font-brand)] text-xl text-[var(--ink)]">{s.domain}</p>
-              <p className="mt-1 text-[11px] uppercase tracking-[0.12em] text-[var(--faint)]">
-                {s.status === "verified" ? "Vérifié" : "En attente de vérification"}
-              </p>
+          <li key={s.id} className="ayeba-panel flex flex-col gap-4 p-5">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="truncate font-[family-name:var(--font-brand)] text-xl text-[var(--ink)]">
+                  {s.domain}
+                </p>
+                <p className="mt-1 text-[11px] uppercase tracking-[0.12em] text-[var(--faint)]">
+                  {s.status === "verified" ? "Propriété vérifiée" : "Vérification en attente"}
+                </p>
+              </div>
+              <span
+                className={`mt-1 inline-block h-2.5 w-2.5 shrink-0 rounded-full ${
+                  s.status === "verified" ? "bg-[var(--good)]" : "bg-[var(--warn)]"
+                }`}
+              />
             </div>
             <div className="flex gap-2">
               {s.status !== "verified" ? (
@@ -97,14 +106,16 @@ export default function StudioAppHomePage() {
                   Vérifier
                 </Link>
               ) : null}
-              <Link href={`/studio/app/${s.id}/aether`} className="ayeba-cta px-3 py-2 text-xs">
-                Ouvrir Studio
+              <Link href={`/studio/app/${s.id}`} className="ayeba-cta px-3 py-2 text-xs">
+                Ouvrir le tableau de bord
               </Link>
             </div>
           </li>
         ))}
         {!sites.length ? (
-          <li className="py-10 text-sm text-[var(--muted)]">Aucun site pour l’instant.</li>
+          <li className="ayeba-panel col-span-full py-10 text-center text-sm text-[var(--muted)]">
+            Aucun site pour l’instant — ajoutez votre premier domaine ci-dessus.
+          </li>
         ) : null}
       </ul>
     </StudioAppShell>

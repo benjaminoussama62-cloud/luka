@@ -5,8 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { StudioAppShell } from "@/components/studio/StudioAppShell";
-import { DataTable, ModuleNav, SectionTitle } from "@/components/studio/ui";
-import { YIELD_NAV } from "@/components/studio/yield-nav";
+import { DataTable, SectionTitle } from "@/components/studio/ui";
 import type { StudioSite } from "@/lib/studio/types";
 
 type Segment = {
@@ -72,7 +71,6 @@ export default function YieldAudiencesPage() {
 
   return (
     <StudioAppShell siteId={siteId} siteDomain={site?.domain}>
-      <ModuleNav siteId={siteId} module="yield" items={YIELD_NAV} />
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="ayeba-kicker ayeba-kicker-accent">Yield · Audiences</p>

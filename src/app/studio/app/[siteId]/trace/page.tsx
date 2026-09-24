@@ -5,8 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { StudioAppShell } from "@/components/studio/StudioAppShell";
-import { BarChart, DataTable, Metric, MetricGrid, ModuleNav, SectionTitle } from "@/components/studio/ui";
-import { TRACE_NAV } from "@/components/studio/trace-nav";
+import { Badge, BarChart, DataTable, Metric, MetricGrid, SectionTitle } from "@/components/studio/ui";
 import type { StudioSite } from "@/lib/studio/types";
 
 type OverviewData = {
@@ -16,9 +15,21 @@ type OverviewData = {
   };
   daily: Array<{ day: string; sessions: number; pageviews: number }>;
   realtime: {
-    activeUsers: number; pageviews: number;
-    topPages: Array<{ path: string; views: number }>;
-    topReferrers: Array<{ referrer: string; sessions: number }>;
+    activeUsers: number; pageviews: number; sessions: number;
+    avgSessionDuration: number; bounceRate: number;
+    topPages: Array<{ path: string; views: number; activeUsers?: number }>;
+    topReferrers: Array<{ referrer: string; sessions: number; views?: number; type?: string }>;
+    topCampaigns?: Array<{ campaign: string; views: number; sessions: number; ctr: number }>;
+    deviceBreakdown?: Array<{ device: string; count: number; bounceRate: number }>;
+    geoBreakdown?: Array<{ country: string; count: number; sessions: number; avgDuration: number }>;
+    conversionFunnel?: Array<{ step: string; users: number; conversionRate: number; dropoff: number }>;
+    trafficQuality?: {
+      botTraffic: number; adBlockerRate: number; jsEnabledRate: number; cookiesEnabledRate: number;
+    };
+    predictiveInsights?: {
+      trafficForecast: number; peakHours: number[];
+      anomalyDetection: Array<{ type: string; severity: string; description: string }>;
+    };
   };
   site: StudioSite;
 };
@@ -58,7 +69,6 @@ export default function StudioTracePage() {
 
   return (
     <StudioAppShell siteId={siteId} siteDomain={site.domain}>
-      <ModuleNav siteId={siteId} module="trace" items={TRACE_NAV} />
 
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
@@ -123,8 +133,12 @@ export default function StudioTracePage() {
           <SectionTitle title="Top pages (30 min)" />
           <div className="mt-4">
             <DataTable
-              columns={["Page", "Vues"]}
-              rows={(realtime.topPages || []).map((p) => [p.path, String(p.views)])}
+              columns={["Page", "Vues", "Actifs"]}
+              rows={(realtime.topPages || []).map((p) => [
+                p.path,
+                String(p.views),
+                String(p.activeUsers ?? "—"),
+              ])}
               empty="Aucune donnée temps réel"
             />
           </div>
@@ -133,12 +147,105 @@ export default function StudioTracePage() {
           <SectionTitle title="Top sources (30 min)" />
           <div className="mt-4">
             <DataTable
-              columns={["Source", "Sessions"]}
-              rows={(realtime.topReferrers || []).map((r) => [r.referrer || "direct", String(r.sessions)])}
+              columns={["Source", "Type", "Sessions"]}
+              rows={(realtime.topReferrers || []).map((r) => [
+                r.referrer || "direct",
+                r.type || "—",
+                String(r.sessions),
+              ])}
               empty="Aucune source"
             />
           </div>
         </div>
+      </section>
+
+      {/* Appareils + géographie — données réelles des sessions */}
+      <section className="mt-10 grid gap-8 lg:grid-cols-2">
+        <div>
+          <SectionTitle title="Appareils (30 min)" />
+          <div className="mt-4">
+            <DataTable
+              columns={["Appareil", "Sessions", "Rebond"]}
+              rows={(realtime.deviceBreakdown || []).map((d) => [
+                d.device || "inconnu",
+                String(d.count),
+                `${Math.round(d.bounceRate || 0)} %`,
+              ])}
+              empty="Aucune session récente"
+            />
+          </div>
+        </div>
+        <div>
+          <SectionTitle title="Pays (30 min)" />
+          <div className="mt-4">
+            <DataTable
+              columns={["Pays", "Sessions", "Durée moy."]}
+              rows={(realtime.geoBreakdown || []).map((g) => [
+                g.country || "—",
+                String(g.sessions ?? g.count),
+                fmtDur(Math.round(g.avgDuration || 0)),
+              ])}
+              empty="Aucune donnée géographique"
+            />
+          </div>
+        </div>
+      </section>
+
+      {/* Entonnoir de conversion temps réel */}
+      {(realtime.conversionFunnel || []).length > 0 && (
+        <section className="mt-10">
+          <SectionTitle title="Entonnoir de conversion (30 min)" />
+          <div className="ayeba-panel mt-4 space-y-3 p-5">
+            {(realtime.conversionFunnel || []).map((s) => (
+              <div key={s.step}>
+                <div className="flex justify-between text-xs">
+                  <span className="text-[var(--ink)]">{s.step}</span>
+                  <span className="text-[var(--muted)]">
+                    {s.users} utilisateur(s) · {Math.round(s.conversionRate)} %
+                  </span>
+                </div>
+                <div className="st-funnel-bar mt-1">
+                  <div
+                    className="st-funnel-fill"
+                    style={{ width: `${Math.min(100, Math.max(2, s.conversionRate))}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Qualité du trafic + anomalies */}
+      <section className="mt-10 grid gap-8 lg:grid-cols-2">
+        {realtime.trafficQuality && (
+          <div>
+            <SectionTitle title="Qualité du trafic" />
+            <div className="mt-4">
+              <MetricGrid>
+                <Metric label="Bots" value={`${Math.round(realtime.trafficQuality.botTraffic)} %`} />
+                <Metric label="Bloqueurs pubs" value={`${Math.round(realtime.trafficQuality.adBlockerRate)} %`} />
+                <Metric label="JS actif" value={`${Math.round(realtime.trafficQuality.jsEnabledRate)} %`} />
+                <Metric label="Cookies actifs" value={`${Math.round(realtime.trafficQuality.cookiesEnabledRate)} %`} />
+              </MetricGrid>
+            </div>
+          </div>
+        )}
+        {(realtime.predictiveInsights?.anomalyDetection || []).length > 0 && (
+          <div>
+            <SectionTitle title="Anomalies détectées" />
+            <ul className="mt-4 space-y-3">
+              {realtime.predictiveInsights!.anomalyDetection.map((a, i) => (
+                <li key={i} className="ayeba-panel p-4">
+                  <Badge tone={a.severity === "high" ? "bad" : a.severity === "medium" ? "warn" : "neutral"}>
+                    {a.type}
+                  </Badge>
+                  <p className="mt-2 text-sm text-[var(--muted)]">{a.description}</p>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </section>
     </StudioAppShell>
   );

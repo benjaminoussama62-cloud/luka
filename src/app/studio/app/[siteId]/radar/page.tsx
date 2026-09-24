@@ -6,8 +6,6 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { StudioAppShell } from "@/components/studio/StudioAppShell";
-import { ModuleNav } from "@/components/studio/ui";
-import { RADAR_NAV } from "@/components/studio/radar-nav";
 import type {
   RadarOverview,
   RadarPageRow,
@@ -65,7 +63,6 @@ export default function StudioRadarPage() {
 
   return (
     <StudioAppShell siteId={siteId} siteDomain={site.domain}>
-      <ModuleNav siteId={siteId} module="radar" items={RADAR_NAV} />
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="ayeba-kicker ayeba-kicker-accent">Radar</p>

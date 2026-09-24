@@ -28,6 +28,22 @@ export async function GET(req: Request, ctx: Ctx) {
         return NextResponse.json({ site: owned.site, days, behavior: traceBehavior(id, days) });
       case "conversions":
         return NextResponse.json({ site: owned.site, days, conversions: traceConversions(id, days) });
+      case "realtime":
+        return NextResponse.json({
+          site: owned.site,
+          realtime: traceEnterpriseV2.getRealTimeAnalytics(id, 30),
+        });
+      case "attribution":
+        return NextResponse.json({
+          site: owned.site,
+          days,
+          attribution: traceEnterpriseV2.getAttributionReport(id, days),
+        });
+      case "cohorts":
+        return NextResponse.json({
+          site: owned.site,
+          cohorts: traceEnterpriseV2.getCohortAnalysis(id),
+        });
       default:
         return NextResponse.json({
           site: owned.site,

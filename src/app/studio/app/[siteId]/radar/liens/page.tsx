@@ -5,8 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { StudioAppShell } from "@/components/studio/StudioAppShell";
-import { DataTable, Metric, MetricGrid, ModuleNav, SectionTitle } from "@/components/studio/ui";
-import { RADAR_NAV } from "@/components/studio/radar-nav";
+import { DataTable, Metric, MetricGrid, SectionTitle } from "@/components/studio/ui";
 import type { StudioSite } from "@/lib/studio/types";
 
 type Links = {
@@ -39,14 +38,13 @@ export default function RadarLiensPage() {
 
   return (
     <StudioAppShell siteId={siteId} siteDomain={site?.domain}>
-      <ModuleNav siteId={siteId} module="radar" items={RADAR_NAV} />
       <div>
         <p className="ayeba-kicker ayeba-kicker-accent">Radar · Liens</p>
         <h1 className="mt-2 font-[family-name:var(--font-brand)] text-3xl font-semibold tracking-[-0.04em] text-[var(--ink)]">
           Graphe de liens
         </h1>
         <p className="mt-2 max-w-2xl text-sm text-[var(--muted)]">
-          Liens réels découverts par le crawler Ayeba pendant l'indexation des pages.
+          Liens réels découverts par le crawler Ayeba pendant l&apos;indexation des pages.
         </p>
       </div>
 

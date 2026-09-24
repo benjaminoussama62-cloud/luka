@@ -1,11 +1,12 @@
 "use client";
+/* eslint-disable react-hooks/set-state-in-effect */
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { StudioAppShell } from "@/components/studio/StudioAppShell";
 import {
-  Badge, DataTable, EmptyState, Metric, MetricGrid, ModuleNav, ScoreGauge, SectionTitle,
+  Badge, DataTable, LineChart, Metric, MetricGrid, ScoreGauge, SectionTitle,
 } from "@/components/studio/ui";
 import type { StudioSite, VelocityOverview } from "@/lib/studio/types";
 
@@ -34,9 +35,6 @@ type PsiHistoryItem = {
   opportunities: Array<{ id: string; title: string; savingsMs: number | null; savingsBytes: number | null }> | null;
 };
 
-const NAV = [
-  { slug: "", label: "Vue d'ensemble" },
-];
 
 export default function StudioVelocityPage() {
   const { siteId } = useParams<{ siteId: string }>();
@@ -111,7 +109,6 @@ export default function StudioVelocityPage() {
 
   return (
     <StudioAppShell siteId={siteId} siteDomain={site.domain}>
-      <ModuleNav siteId={siteId} module="velocity" items={NAV} />
 
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
@@ -230,6 +227,44 @@ export default function StudioVelocityPage() {
       {/* Historique */}
       <section className="mt-10">
         <SectionTitle title="Historique des audits" />
+        {history.length > 1 && (
+          <div className="ayeba-panel mt-4 p-5">
+            <p className="mb-3 text-xs text-[var(--muted)]">
+              Évolution des scores Lighthouse — les points sont les audits réels.
+            </p>
+            <LineChart
+              height={150}
+              series={[
+                {
+                  name: "Performance",
+                  points: [...history].reverse().map((a) => ({
+                    x: a.timestamp.slice(5, 16).replace("T", " "),
+                    y: a.scores.performance,
+                  })),
+                },
+                {
+                  name: "SEO",
+                  points: [...history].reverse().map((a) => ({
+                    x: a.timestamp.slice(5, 16).replace("T", " "),
+                    y: a.scores.seo,
+                  })),
+                },
+                {
+                  name: "Accessibilité",
+                  points: [...history].reverse().map((a) => ({
+                    x: a.timestamp.slice(5, 16).replace("T", " "),
+                    y: a.scores.accessibility,
+                  })),
+                },
+              ]}
+            />
+            <div className="mt-2 flex gap-4 text-[11px] text-[var(--muted)]">
+              <span style={{ color: "var(--accent)" }}>— Performance</span>
+              <span style={{ color: "#93c5fd" }}>— SEO</span>
+              <span style={{ color: "#34d399" }}>— Accessibilité</span>
+            </div>
+          </div>
+        )}
         <div className="mt-4">
           <DataTable
             columns={["URL", "Perf.", "A11y", "BP", "SEO", "Mode", "Date"]}

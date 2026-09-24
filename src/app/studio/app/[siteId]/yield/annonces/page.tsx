@@ -5,8 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { StudioAppShell } from "@/components/studio/StudioAppShell";
-import { Badge, DataTable, ModuleNav, SectionTitle } from "@/components/studio/ui";
-import { YIELD_NAV } from "@/components/studio/yield-nav";
+import { Badge, DataTable, SectionTitle } from "@/components/studio/ui";
 import type { StudioSite } from "@/lib/studio/types";
 
 type Creative = {
@@ -76,7 +75,6 @@ export default function YieldAnnoncesPage() {
 
   return (
     <StudioAppShell siteId={siteId} siteDomain={site?.domain}>
-      <ModuleNav siteId={siteId} module="yield" items={YIELD_NAV} />
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="ayeba-kicker ayeba-kicker-accent">Yield · Annonces</p>
@@ -89,7 +87,7 @@ export default function YieldAnnoncesPage() {
         </button>
       </div>
       {!campaigns.length ? (
-        <p className="mt-4 text-sm text-[var(--muted)]">Créez d'abord une campagne dans l'onglet Campagnes.</p>
+        <p className="mt-4 text-sm text-[var(--muted)]">Créez d&apos;abord une campagne dans l&apos;onglet Campagnes.</p>
       ) : null}
 
       {showForm ? (

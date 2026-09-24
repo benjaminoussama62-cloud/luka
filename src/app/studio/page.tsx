@@ -18,23 +18,23 @@ export const metadata: Metadata = {
 const MODULES = [
   {
     name: "Radar",
-    text: "Indexation, requêtes, clics, couverture et inspection d’URL dans le moteur Ayeba.",
+    text: "Couverture d'index page par page, inspection d'URL avec test en direct (HTTP réel, noindex, canonical), sitemaps, requêtes, clics, CTR et position dans Ayeba Search.",
   },
   {
     name: "Trace",
-    text: "Audience et comportement sur votre site — sessions, pages vues, referrers et snippet de suivi.",
+    text: "Analytics complète : temps réel (utilisateurs actifs, géo, appareils), audience, acquisition, entonnoirs de conversion, attribution multi-modèles et rétention par cohortes — balise légère à installer.",
   },
   {
     name: "Yield",
-    text: "Monétisation native Ayeba — emplacements, CTR, revenus et activation par slot.",
+    text: "Monétisation native : campagnes, annonces, mots-clés, audiences, emplacements par slot, revenus en CDF et facturation.",
   },
   {
     name: "Velocity",
-    text: "Audits de vitesse TTFB, score performance et plan d’action priorisé.",
+    text: "Audits Lighthouse réels via PageSpeed Insights : jauges Core Web Vitals, opportunités chiffrées en ms/Ko, historique des scores en courbes.",
   },
   {
     name: "Aether",
-    text: "Copilote qui lit Radar, Trace, Yield et Velocity — 3 actions à fort impact.",
+    text: "Le centre de commande : lit les signaux de tous les modules, détecte les requêtes montantes et priorise les actions à fort impact.",
   },
 ];
 
