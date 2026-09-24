@@ -6,7 +6,7 @@ import type { AyebiArticle } from "./ayebi/types";
 import { searchCrawlIndex } from "./crawler";
 import { panelFromQuery } from "./knowledge-graph/graph";
 import { resolveInstantAnswers } from "./instant-answers";
-import { fetchWikiAnswer, firstSentences, wikiAnswerToInstant, wikiAnswerToPanel } from "./question-answer";
+import { answerQuestion } from "./question-answer";
 import { cacheGet, cacheSet } from "./cache/redis";
 import { searchIndex } from "./search-index/fts";
 import { rankHits } from "./search-index/ranking";
@@ -1097,7 +1097,7 @@ async function liveSearchCore(
     nativeVideos,
     nativeMaps,
     instantAnswers,
-    wikiAnswer,
+    questionAnswer,
   ] = await timed(opts.timings, "upstream", () =>
     Promise.all([
       offline || sisterFastPath || skipWebForMath
@@ -1138,12 +1138,12 @@ async function liveSearchCore(
       sisterFastPath
         ? Promise.resolve([])
         : settled(resolveInstantAnswers(q), [], offline ? 150 : upstreamMs),
-      // Réponse de question — opensearch résout le vrai titre (« putin »→« Poutine »,
-      // « bcdc »→« Banque commerciale du Congo ») puis extrait réel de l'article.
+      // Réponse de question — Knowledge Graph : entité Wikidata + revendication
+      // structurée (« président » → valeur réelle) + extrait Wikipedia en contexte.
       offline || sisterFastPath || !qIntent
         ? Promise.resolve(undefined)
         : settled(
-            fetchWikiAnswer(qIntent.wikiQuery),
+            answerQuestion(qIntent),
             undefined,
             Math.min(UPSTREAM_MS, msLeft()),
           ),
@@ -1153,8 +1153,8 @@ async function liveSearchCore(
   void nativeVideos;
 
   // Réponse directe à la question — en tête des réponses instantanées.
-  if (wikiAnswer && qIntent) {
-    instantAnswers.unshift(wikiAnswerToInstant(wikiAnswer, qIntent.qtype));
+  if (questionAnswer && qIntent) {
+    instantAnswers.unshift(questionAnswer.instant);
   }
 
   const localDocs = [
@@ -1443,10 +1443,10 @@ async function liveSearchCore(
     wikipediaKnowledge = knowledge;
   }
 
-  // Question → le panneau Wikipedia vient de la réponse résolue (titre corrigé
-  // par opensearch), même si fetchWikiSummary sur la requête brute a échoué.
-  if (wikiAnswer && !wikipediaKnowledge && !knowledgePanel) {
-    wikipediaKnowledge = wikiAnswerToPanel(wikiAnswer);
+  // Question → le panneau vient de la réponse résolue (entité Wikidata +
+  // extrait Wikipedia), même si fetchWikiSummary sur la requête brute a échoué.
+  if (questionAnswer && !wikipediaKnowledge && !knowledgePanel) {
+    wikipediaKnowledge = questionAnswer.panel;
   }
 
   const topWeb = results.find(
@@ -1458,14 +1458,7 @@ async function liveSearchCore(
   );
 
   const questionSnippet: FeaturedSnippet | undefined =
-    qIntent && wikiAnswer
-      ? {
-          title: wikiAnswer.title,
-          text: firstSentences(wikiAnswer.extract, 3, 460),
-          url: wikiAnswer.url,
-          domain: `${wikiAnswer.lang}.wikipedia.org`,
-        }
-      : undefined;
+    qIntent && questionAnswer ? questionAnswer.snippet : undefined;
 
   const featuredSnippet: FeaturedSnippet | undefined =
     questionSnippet ??

@@ -7,7 +7,14 @@ export type SearchIntent =
   | { kind: "capital"; subject: string; wikiQuery: string }
   | { kind: "city"; label: string; wikiQuery: string }
   | { kind: "geography"; subject: string; wikiQuery: string }
-  | { kind: "question"; qtype: QuestionType; subject: string; wikiQuery: string }
+  | {
+      kind: "question";
+      qtype: QuestionType;
+      subject: string;
+      wikiQuery: string;
+      /** Attribut demandé (« président », « commune », « âge »…) pour la réponse structurée. */
+      attr?: string;
+    }
   | { kind: "navigational"; site: NavigationalSite }
   | { kind: "general" };
 
@@ -179,7 +186,46 @@ function cleanSubject(raw: string): string {
     .trim();
 }
 
-const QUESTION_RULES: { qtype: QuestionType; re: RegExp }[] = [
+/** Règles à 2 groupes : [attribut, sujet] — le sujet devient l'entité cherchée. */
+const QUESTION_ATTR_RULES: { qtype: QuestionType; re: RegExp }[] = [
+  {
+    qtype: "which",
+    // « qui est le president de la rdc » — demande une valeur, pas une bio
+    re: /^qui est (?:le|la|les|l['''])\s*(.+?)\s+(?:de|du|des|d['''])\s+(.+)$/,
+  },
+  {
+    qtype: "which",
+    // « quel est le president de la rdc » / « quelle est la monnaie du japon »
+    re: /^quel(?:le)?s?\s+(?:est|sont|etait|fut)\s+(?:le\s+|la\s+|les\s+|l['''])?(.+?)\s+(?:de|du|des|d['''])\s+(.+)$/,
+  },
+  {
+    qtype: "which",
+    // « quelle est la date de naissance de poutine » (même regex que dessus)
+    re: /^qu[''']il est (?:le|la|les|l['''])\s*(.+?)\s+(?:de|du|des|d['''])\s+(.+)$/,
+  },
+  {
+    qtype: "which",
+    // « quel age a poutine » / « quelle est la taille de messi »
+    re: /^quel(?:le)?s?\s+(age|taille|poids|fortune|salaire)\s+a\s+(?:le\s+|la\s+|l['''])?(.+)$/,
+  },
+  {
+    qtype: "howmany",
+    // « combien d'habitants a/compte la rdc » → attr + sujet
+    re: /^combien\s+(?:de\s+|d['''])(\w+)\s+(?:a|en|compte|possede|y a[- ]t[''']il(?: dans)?)\s+(?:le\s+|la\s+|les\s+|l[''']|du\s+|des\s+|d['''])?(.+)$/,
+  },
+  {
+    qtype: "where",
+    // « dans quel(le) pays/ville/commune… se trouve X » → attr = nom de lieu, sujet = X
+    re: /^dans quel(?:le)?s?\s+(\S+)\s+(?:se\s+)?(?:trouve|situe|localise|est|sont)\w*\s+(.+)$/,
+  },
+  {
+    qtype: "where",
+    // « quelle commune se trouve au sud est de la rdc »
+    re: /^quel(?:le)?s?\s+(\S+)\s+(?:se\s+)?(?:trouve|situe|est|sont)\s+(.+)$/,
+  },
+];
+
+const QUESTION_RULES: { qtype: QuestionType; re: RegExp; attrFrom?: RegExp }[] = [
   { qtype: "who", re: /^qui (?:est|etait|fut|sont|etaient|reste|devient)\s+(.+)$/ },
   { qtype: "who", re: /^who (?:is|was|are|were)\s+(.+)$/ },
   {
@@ -192,48 +238,55 @@ const QUESTION_RULES: { qtype: QuestionType; re: RegExp }[] = [
     re: /^ou\s+(?:se trouve(?:nt)?|se situe(?:nt)?|se localise|est|sont|se trouve[- ]t[''']on)\s+(.+)$/,
   },
   { qtype: "where", re: /^where (?:is|are|was)\s+(.+)$/ },
-  {
-    qtype: "where",
-    // « dans quel(le) pays/ville/commune… se trouve X »
-    re: /^dans quel(?:le)?s?\s+\S+\s+(?:se\s+)?(?:trouve|situe|localise|est|sont)\w*\s+(.+)$/,
-  },
-  {
-    qtype: "which",
-    // « quel est le president de la rdc » → attribut + sujet (2 groupes)
-    re: /^quel(?:le)?s?\s+(?:est|sont|etait|fut)\s+(?:le\s+|la\s+|les\s+|l['''])?(.+?)\s+(?:de|du|des|d['''])\s+(.+)$/,
-  },
-  {
-    qtype: "which",
-    // « quelle commune se trouve au sud est de la rdc »
-    re: /^quel(?:le)?s?\s+\S+\s+(?:se\s+)?(?:trouve|situe|est|sont)\s+(.+)$/,
-  },
   { qtype: "when", re: /^quand\s+(?:est|etait|a\s+ete|fut|sont|sera)\s+(.+)$/ },
   { qtype: "when", re: /^en quelle annee\s+(.+)$/ },
   { qtype: "when", re: /^when (?:did|was|is|were)\s+(.+)$/ },
   { qtype: "howmany", re: /^combien\s+(?:de\s+|d[''']|y a[- ]t[''']il\s+)?(.+)$/ },
 ];
 
+/** Indice verbal pour les questions « quand » : naissance vs décès vs fondation. */
+function whenAttr(_subjectRaw: string, full: string): string | undefined {
+  if (/\b(mort|morte|deces|decede|decedee|died|death)\b/.test(full)) return "mort";
+  if (/\b(fondation|fonde|fondee|cree|creee|creation|founded|established)\b/.test(full)) return "fondation";
+  if (/\b(ne|nee|nes|nees|naissance|born|birth)\b/.test(full)) return "naissance";
+  void _subjectRaw;
+  return undefined;
+}
+
 function parseQuestionIntent(raw: string): SearchIntent | null {
   const nq = normalizeSmsFrench(raw);
   if (!nq || nq.split(" ").length < 3) return null;
 
+  // Formes [attribut, sujet] d'abord — plus précises que « qui est X » générique.
+  for (const rule of QUESTION_ATTR_RULES) {
+    const m = nq.match(rule.re);
+    if (!m) continue;
+    const attr = cleanSubject(m[1]);
+    const subj = cleanSubject(m[2]);
+    if (!attr || subj.length < 2) continue;
+    const canon = normalizeCountry(subj);
+    return {
+      kind: "question",
+      qtype: rule.qtype,
+      subject: canon,
+      wikiQuery: rule.qtype === "where" || rule.qtype === "howmany" ? canon : `${attr} ${canon}`,
+      attr,
+    };
+  }
+
   for (const rule of QUESTION_RULES) {
     const m = nq.match(rule.re);
     if (!m) continue;
-
-    if (rule.qtype === "which" && m[2] !== undefined) {
-      // « quel est le president de la rdc » → « president republique democratique du congo »
-      const attr = cleanSubject(m[1]);
-      const subj = normalizeCountry(cleanSubject(m[2]));
-      if (!attr || !subj) continue;
-      return { kind: "question", qtype: "which", subject: `${attr} ${subj}`, wikiQuery: `${attr} ${subj}` };
-    }
-
     const subject = cleanSubject(m[1]);
     if (subject.length < 2) continue;
-    // « dans quelle commune se trouve la bcdc » → « bcdc » ; pays/ville RDC → alias canonique
-    const wikiQuery = normalizeCountry(subject);
-    return { kind: "question", qtype: rule.qtype, subject, wikiQuery };
+    const canon = normalizeCountry(subject);
+    return {
+      kind: "question",
+      qtype: rule.qtype,
+      subject: canon,
+      wikiQuery: canon,
+      attr: rule.qtype === "when" ? whenAttr(m[1], nq) : undefined,
+    };
   }
   return null;
 }
