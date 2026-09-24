@@ -1,10 +1,13 @@
 import { navigationalSiteForQuery, type NavigationalSite } from "./search-relevance";
 
+export type QuestionType = "who" | "where" | "what" | "when" | "which" | "howmany";
+
 export type SearchIntent =
   | { kind: "math"; expr: string; display: string }
   | { kind: "capital"; subject: string; wikiQuery: string }
   | { kind: "city"; label: string; wikiQuery: string }
   | { kind: "geography"; subject: string; wikiQuery: string }
+  | { kind: "question"; qtype: QuestionType; subject: string; wikiQuery: string }
   | { kind: "navigational"; site: NavigationalSite }
   | { kind: "general" };
 
@@ -135,6 +138,106 @@ function parseGeographyIntent(query: string): { subject: string; wikiQuery: stri
   return null;
 }
 
+/**
+ * Français SMS → forme standard — pour l'analyse d'intention et l'extraction
+ * d'entité uniquement (la requête affichée reste celle de l'utilisateur).
+ * « dans kel commune c trouve la bcdc » → « dans quelle commune se trouve la bcdc ».
+ */
+export function normalizeSmsFrench(query: string): string {
+  let s = normKey(query).replace(/[?.!]+/g, " ").replace(/\s+/g, " ").trim();
+  const fixes: [RegExp, string][] = [
+    [/\bc quoi\b/g, "c'est quoi"],
+    [/\bski\b/g, "qu'est-ce qui"],
+    [/\bske\b/g, "qu'est-ce que"],
+    [/\bkels\b/g, "quels"],
+    [/\bkelles\b/g, "quelles"],
+    [/\bkelle\b/g, "quelle"],
+    [/\bkel\b/g, "quel"],
+    [/\bkelke\b|\bkelque\b/g, "quelque"],
+    [/\bkelkun\b|\bkelkin\b/g, "quelqu'un"],
+    [/\bt\b/g, "t'"],
+    // « c » isolé = « se » dans « c trouve », « c situe »… (jamais « c'est » : couvert par c quoi)
+    [/\bc\b/g, "se"],
+  ];
+  for (const [re, to] of fixes) s = s.replace(re, to);
+  return s;
+}
+
+function stripLeadingDeter(s: string): string {
+  return s
+    .replace(/^(?:au|aux|en|dans|sur|vers|de|du|des|d['']|le|la|les|l['']|un|une)\s+/i, "")
+    .trim();
+}
+
+const PARTICIPLES =
+  /\b(?:ne|nee|nes|nees|mort|morte|morts|mortes|fonde|fondee|fondes|cree|creee|crees|apparu|apparue|commence|commencee|devenu|devenue|est|etait|fut|sont)\b/g;
+
+function cleanSubject(raw: string): string {
+  return stripLeadingDeter(raw.trim().replace(/[?.!]+$/, ""))
+    .replace(PARTICIPLES, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+const QUESTION_RULES: { qtype: QuestionType; re: RegExp }[] = [
+  { qtype: "who", re: /^qui (?:est|etait|fut|sont|etaient|reste|devient)\s+(.+)$/ },
+  { qtype: "who", re: /^who (?:is|was|are|were)\s+(.+)$/ },
+  {
+    qtype: "what",
+    re: /^(?:qu['']est[- ]ce que|qu['']est[- ]ce qu[''']|quest[- ]ce que|c['']est quoi|que signifie|qu['']appelle[- ]t[''']on|definition (?:de|du|des|d[''']))\s*(.+)$/,
+  },
+  { qtype: "what", re: /^what (?:is|are|was|does|do)\s+(.+)$/ },
+  {
+    qtype: "where",
+    re: /^ou\s+(?:se trouve(?:nt)?|se situe(?:nt)?|se localise|est|sont|se trouve[- ]t[''']on)\s+(.+)$/,
+  },
+  { qtype: "where", re: /^where (?:is|are|was)\s+(.+)$/ },
+  {
+    qtype: "where",
+    // « dans quel(le) pays/ville/commune… se trouve X »
+    re: /^dans quel(?:le)?s?\s+\S+\s+(?:se\s+)?(?:trouve|situe|localise|est|sont)\w*\s+(.+)$/,
+  },
+  {
+    qtype: "which",
+    // « quel est le president de la rdc » → attribut + sujet (2 groupes)
+    re: /^quel(?:le)?s?\s+(?:est|sont|etait|fut)\s+(?:le\s+|la\s+|les\s+|l['''])?(.+?)\s+(?:de|du|des|d['''])\s+(.+)$/,
+  },
+  {
+    qtype: "which",
+    // « quelle commune se trouve au sud est de la rdc »
+    re: /^quel(?:le)?s?\s+\S+\s+(?:se\s+)?(?:trouve|situe|est|sont)\s+(.+)$/,
+  },
+  { qtype: "when", re: /^quand\s+(?:est|etait|a\s+ete|fut|sont|sera)\s+(.+)$/ },
+  { qtype: "when", re: /^en quelle annee\s+(.+)$/ },
+  { qtype: "when", re: /^when (?:did|was|is|were)\s+(.+)$/ },
+  { qtype: "howmany", re: /^combien\s+(?:de\s+|d[''']|y a[- ]t[''']il\s+)?(.+)$/ },
+];
+
+function parseQuestionIntent(raw: string): SearchIntent | null {
+  const nq = normalizeSmsFrench(raw);
+  if (!nq || nq.split(" ").length < 3) return null;
+
+  for (const rule of QUESTION_RULES) {
+    const m = nq.match(rule.re);
+    if (!m) continue;
+
+    if (rule.qtype === "which" && m[2] !== undefined) {
+      // « quel est le president de la rdc » → « president republique democratique du congo »
+      const attr = cleanSubject(m[1]);
+      const subj = normalizeCountry(cleanSubject(m[2]));
+      if (!attr || !subj) continue;
+      return { kind: "question", qtype: "which", subject: `${attr} ${subj}`, wikiQuery: `${attr} ${subj}` };
+    }
+
+    const subject = cleanSubject(m[1]);
+    if (subject.length < 2) continue;
+    // « dans quelle commune se trouve la bcdc » → « bcdc » ; pays/ville RDC → alias canonique
+    const wikiQuery = normalizeCountry(subject);
+    return { kind: "question", qtype: rule.qtype, subject, wikiQuery };
+  }
+  return null;
+}
+
 export function parseSearchIntent(query: string): SearchIntent {
   const raw = query.trim();
   if (!raw) return { kind: "general" };
@@ -160,6 +263,9 @@ export function parseSearchIntent(query: string): SearchIntent {
 
   const nav = navigationalSiteForQuery(raw);
   if (nav) return { kind: "navigational", site: nav };
+
+  const question = parseQuestionIntent(raw);
+  if (question) return question;
 
   return { kind: "general" };
 }
@@ -221,6 +327,9 @@ export function upstreamQuery(query: string, intent: SearchIntent): string {
     case "city":
       return intent.wikiQuery;
     case "geography":
+      return intent.wikiQuery;
+    case "question":
+      // « qui est vladimir putin ? » → upstream cherche « vladimir putin », pas la question.
       return intent.wikiQuery;
     default:
       return query;

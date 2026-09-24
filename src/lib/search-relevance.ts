@@ -117,6 +117,29 @@ function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+/** Levenshtein borné — renvoie true si distance ≤ max (coupe tôt pour la perf). */
+function boundedLevenshtein(a: string, b: string, max: number): boolean {
+  if (Math.abs(a.length - b.length) > max) return false;
+  let prev: number[] = [];
+  for (let j = 0; j <= b.length; j++) prev.push(j);
+  for (let i = 1; i <= a.length; i++) {
+    const cur: number[] = [i];
+    let rowMin = i;
+    for (let j = 1; j <= b.length; j++) {
+      const v = Math.min(
+        prev[j] + 1,
+        cur[j - 1] + 1,
+        prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1),
+      );
+      cur.push(v);
+      if (v < rowMin) rowMin = v;
+    }
+    if (rowMin > max) return false;
+    prev = cur;
+  }
+  return prev[b.length] <= max;
+}
+
 /** Match mot entier — évite « capital » dans « capitale », « caire » dans « centrale ». */
 export function tokenMatchesInHay(token: string, hay: string): boolean {
   if (!token) return false;
@@ -128,7 +151,19 @@ export function tokenMatchesInHay(token: string, hay: string): boolean {
     if (re.test(hay)) return true;
   }
   const words = hay.split(/[\s,.;:!?()[\]{}'"\/\\-]+/).filter(Boolean);
-  return words.some((w) => w === token);
+  if (words.some((w) => w === token)) return true;
+  // Tolérance translittération/faute : « putin » ≈ « poutine » (dist. 2), « congolais » ≈ « congolaise ».
+  // Même initiale obligatoire + distance bornée — la pertinence exige plusieurs tokens de toute façon.
+  if (token.length >= 5) {
+    const maxDist = 2;
+    for (const w of words) {
+      if (w[0] !== token[0] || Math.abs(w.length - token.length) > maxDist) continue;
+      if (w.startsWith(token) || token.startsWith(w) || boundedLevenshtein(token, w, maxDist)) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 /**
@@ -352,15 +387,12 @@ export function rdcRankingBoost(
   return boost;
 }
 
-export function estimateResultCount(input: {
-  uniqueHits: number;
-  ftsHits: number;
-  indexProjected?: number;
-}): number {
-  const base = Math.max(input.uniqueHits, input.ftsHits) * 850;
-  const indexed = input.indexProjected ?? 0;
-  if (indexed > 0) return Math.max(base, indexed);
-  return Math.max(base, input.uniqueHits * 1200, 1200);
+/**
+ * Nombre de résultats affiché — honnête : le vrai nombre de sources
+ * distinctes trouvées, jamais une projection ×N façon « 50 000 résultats ».
+ */
+export function estimateResultCount(input: { uniqueHits: number }): number {
+  return input.uniqueHits;
 }
 
 export function isAyebiResultRelevant(

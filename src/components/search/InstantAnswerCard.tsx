@@ -16,6 +16,7 @@ const KIND_LABEL: Record<string, string> = {
   administrative: "Administration",
   geography: "Géographie",
   calc: "Calcul",
+  answer: "Réponse",
 };
 
 function AnswerCard({ ia }: { ia: InstantAnswer }) {

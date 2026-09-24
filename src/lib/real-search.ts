@@ -6,8 +6,9 @@ import type { AyebiArticle } from "./ayebi/types";
 import { searchCrawlIndex } from "./crawler";
 import { panelFromQuery } from "./knowledge-graph/graph";
 import { resolveInstantAnswers } from "./instant-answers";
+import { fetchWikiAnswer, firstSentences, wikiAnswerToInstant, wikiAnswerToPanel } from "./question-answer";
 import { cacheGet, cacheSet } from "./cache/redis";
-import { indexStats, searchIndex } from "./search-index/fts";
+import { searchIndex } from "./search-index/fts";
 import { rankHits } from "./search-index/ranking";
 import { searchImagesNative } from "./verticals/images";
 import { searchMapsNative } from "./verticals/maps";
@@ -16,9 +17,9 @@ import { getDbMode } from "./storage/database";
 import { searchAyebiAsync, searchIndexAsync } from "./storage/turso-async";
 import {
   ayebiPanelMinScore,
-  estimateResultCount,
   isCongoHint,
   isRawHitRelevant,
+  normalizeQueryText,
   isResultRelevant,
   isStrongAyebiMatch,
   isStrongBrandQuery,
@@ -30,6 +31,7 @@ import {
 import {
   geoMismatchPenalty,
   knownCapitalAnswer,
+  normalizeSmsFrench,
   parseSearchIntent,
   upstreamQuery,
 } from "./query-intent";
@@ -866,7 +868,14 @@ async function settled<T>(p: Promise<T>, fallback: T, ms = UPSTREAM_MS): Promise
 export async function liveSearch(query: string, opts: FetchOpts): Promise<SearchResponse> {
   const startedAt = Date.now();
   const rawQuery = query.trim() || "actualité mondiale";
-  const suggested = didYouMean(rawQuery);
+  // Suggestion « vouliez-vous dire » : d'abord le correcteur local, sinon la forme
+  // SMS normalisée (« dans kel commune c trouve… » → « dans quelle commune se trouve… »).
+  const smsFixed = normalizeSmsFrench(rawQuery);
+  const suggested =
+    didYouMean(rawQuery) ??
+    (smsFixed && smsFixed !== normalizeQueryText(rawQuery).replace(/[?.!]+/g, " ").replace(/\s+/g, " ").trim()
+      ? smsFixed
+      : undefined);
   const q = rawQuery;
   const serpKey = `fullserp:${q.toLowerCase()}:${opts.sliders.locality}:${opts.sliders.authority}:${opts.zeroAi ? 1 : 0}`;
   const cached = serpMemory.get(serpKey);
@@ -900,12 +909,18 @@ async function liveSearchCore(
   const turso = getDbMode() === "turso";
   const intent = parseSearchIntent(rawQuery);
   const webQ = upstreamQuery(q, intent);
+  const administrativeQuestion =
+    /\b(quartier|quartiers|commune|communes|district|districts|subdivision|subdivisions)\b/i.test(q);
+  const qIntent = intent.kind === "question" ? intent : undefined;
+  // Factual = on peut produire une réponse locale fiable (capitale connue, géo/admin
+  // Kinshasa documentées, calcul). Un mot comme « commune » seul ne qualifie PAS —
+  // sinon tout résultat web serait jeté (bug « aucun résultat direct »).
   const factualIntent =
     intent.kind === "capital" ||
     intent.kind === "city" ||
     intent.kind === "geography" ||
     intent.kind === "math" ||
-    /\b(quartier|quartiers|commune|communes|district|districts|subdivision|subdivisions)\b/i.test(q);
+    (administrativeQuestion && /\bkinshasa\b/i.test(q));
   const capitalFact = knownCapitalAnswer(intent);
 
   // Apps sœurs + index maison — sync, immédiat.
@@ -925,7 +940,6 @@ async function liveSearchCore(
         },
       ]
     : [];
-  const administrativeQuestion = /\b(quartier|quartiers|commune|communes|district|districts|subdivision|subdivisions)\b/i.test(q);
   const curatedFactHits: RawHit[] =
     intent.kind === "geography"
       ? [
@@ -1083,6 +1097,7 @@ async function liveSearchCore(
     nativeVideos,
     nativeMaps,
     instantAnswers,
+    wikiAnswer,
   ] = await timed(opts.timings, "upstream", () =>
     Promise.all([
       offline || sisterFastPath || skipWebForMath
@@ -1123,20 +1138,23 @@ async function liveSearchCore(
       sisterFastPath
         ? Promise.resolve([])
         : settled(resolveInstantAnswers(q), [], offline ? 150 : upstreamMs),
+      // Réponse de question — opensearch résout le vrai titre (« putin »→« Poutine »,
+      // « bcdc »→« Banque commerciale du Congo ») puis extrait réel de l'article.
+      offline || sisterFastPath || !qIntent
+        ? Promise.resolve(undefined)
+        : settled(
+            fetchWikiAnswer(qIntent.wikiQuery),
+            undefined,
+            Math.min(UPSTREAM_MS, msLeft()),
+          ),
     ]),
   );
 
   void nativeVideos;
 
-  let projectedScale = 0;
-  if (!turso) {
-    try {
-      projectedScale = indexStats().projectedBillionsScale;
-    } catch {
-      /* optional */
-    }
-  } else {
-    projectedScale = Math.max(ftsDocs.length * 1000, 50_000);
+  // Réponse directe à la question — en tête des réponses instantanées.
+  if (wikiAnswer && qIntent) {
+    instantAnswers.unshift(wikiAnswerToInstant(wikiAnswer, qIntent.qtype));
   }
 
   const localDocs = [
@@ -1425,6 +1443,12 @@ async function liveSearchCore(
     wikipediaKnowledge = knowledge;
   }
 
+  // Question → le panneau Wikipedia vient de la réponse résolue (titre corrigé
+  // par opensearch), même si fetchWikiSummary sur la requête brute a échoué.
+  if (wikiAnswer && !wikipediaKnowledge && !knowledgePanel) {
+    wikipediaKnowledge = wikiAnswerToPanel(wikiAnswer);
+  }
+
   const topWeb = results.find(
     (r) =>
       r.domain !== "ayebi" &&
@@ -1433,7 +1457,18 @@ async function liveSearchCore(
       relevanceScore(`${r.title} ${r.snippet}`, q) >= 28,
   );
 
+  const questionSnippet: FeaturedSnippet | undefined =
+    qIntent && wikiAnswer
+      ? {
+          title: wikiAnswer.title,
+          text: firstSentences(wikiAnswer.extract, 3, 460),
+          url: wikiAnswer.url,
+          domain: `${wikiAnswer.lang}.wikipedia.org`,
+        }
+      : undefined;
+
   const featuredSnippet: FeaturedSnippet | undefined =
+    questionSnippet ??
     tryMathSnippet(q) ??
     (capitalFact
       ? {
@@ -1515,11 +1550,8 @@ async function liveSearchCore(
     query: rawQuery,
     correctedQuery:
       suggested && suggested.toLowerCase() !== rawQuery.toLowerCase() ? suggested : undefined,
-    approxResults: estimateResultCount({
-      uniqueHits: unique.length,
-      ftsHits: ftsDocs.length,
-      indexProjected: projectedScale > 0 ? projectedScale : undefined,
-    }),
+    // Compteur honnête : nombre réel de sources distinctes, pas une projection gonflée.
+    approxResults: unique.length,
     results,
     images,
     videos,

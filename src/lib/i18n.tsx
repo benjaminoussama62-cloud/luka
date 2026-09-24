@@ -24,7 +24,7 @@ const DICT: Record<LangCode, Record<string, string>> = {
     reading: "Lecture",
     context: "Contexte",
     didYouMean: "Essayez avec :",
-    results: "résultats live",
+    results: "résultats",
     continue: "Continuer",
     tagline: "Recherche mondiale. Résultats live. Priorité locale silencieuse.",
   },
@@ -80,7 +80,7 @@ const DICT: Record<LangCode, Record<string, string>> = {
     reading: "Reading",
     context: "Context",
     didYouMean: "Did you mean:",
-    results: "live results",
+    results: "results",
     continue: "Related",
     tagline:
       "Ayeba aggregates live sources — encyclopedias, press, institutions — then ranks what is worth reading. When the topic touches the DRC, local voices rise without hiding the world.",
