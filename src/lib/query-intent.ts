@@ -187,11 +187,16 @@ function cleanSubject(raw: string): string {
 }
 
 /** Règles à 2 groupes : [attribut, sujet] — le sujet devient l'entité cherchée. */
-const QUESTION_ATTR_RULES: { qtype: QuestionType; re: RegExp }[] = [
+const QUESTION_ATTR_RULES: { qtype: QuestionType; re: RegExp; attrMap?: Record<string, string> }[] = [
   {
     qtype: "which",
     // « qui est le president de la rdc » — demande une valeur, pas une bio
     re: /^qui est (?:le|la|les|l['''])\s*(.+?)\s+(?:de|du|des|d['''])\s+(.+)$/,
+  },
+  {
+    qtype: "which",
+    // « qui sont les fondateurs de google »
+    re: /^qui sont (?:les|des|le|la)\s+(.+?)\s+(?:de|du|des|d['''])\s+(.+)$/,
   },
   {
     qtype: "which",
@@ -200,7 +205,7 @@ const QUESTION_ATTR_RULES: { qtype: QuestionType; re: RegExp }[] = [
   },
   {
     qtype: "which",
-    // « quelle est la date de naissance de poutine » (même regex que dessus)
+    // « qu'il est le president de la rdc »
     re: /^qu[''']il est (?:le|la|les|l['''])\s*(.+?)\s+(?:de|du|des|d['''])\s+(.+)$/,
   },
   {
@@ -209,9 +214,52 @@ const QUESTION_ATTR_RULES: { qtype: QuestionType; re: RegExp }[] = [
     re: /^quel(?:le)?s?\s+(age|taille|poids|fortune|salaire)\s+a\s+(?:le\s+|la\s+|l['''])?(.+)$/,
   },
   {
+    qtype: "which",
+    // « de quelle nationalité/parti/religion est X »
+    re: /^de quel(?:le)?s?\s+(\S+)\s+(?:est|etait|fut|sont)\s+(.+)$/,
+  },
+  {
+    qtype: "which",
+    // « pour qui joue mbappe » / « dans quelle équipe joue X »
+    re: /^(?:pour|dans)\s+quel(?:le)?s?\s+(\S+)\s+(?:joue|evolue|travaille|milit(e|e))\w*\s+(.+)$/,
+  },
+  {
+    qtype: "which",
+    // « qui a fondé/créé/inventé/écrit X » → créateur/fondateur/auteur
+    re: /^qui a\s+(fonde|cree|invente|ecrit|compose|realise|concu|lance)\w*\s+(.+)$/,
+    attrMap: {
+      fonde: "fondateur",
+      cree: "createur",
+      invente: "inventeur",
+      ecrit: "auteur",
+      compose: "compositeur",
+      realise: "realisateur",
+      concu: "createur",
+      lance: "fondateur",
+    },
+  },
+  {
+    qtype: "which",
+    // « comment s'appelle le president de la rdc »
+    re: /^comment\s+(?:s[''']appelle|se nomme)\s+(?:le\s+|la\s+|les\s+|l['''])?(.+?)\s+(?:de|du|des|d['''])\s+(.+)$/,
+  },
+  {
     qtype: "howmany",
     // « combien d'habitants a/compte la rdc » → attr + sujet
-    re: /^combien\s+(?:de\s+|d['''])(\w+)\s+(?:a|en|compte|possede|y a[- ]t[''']il(?: dans)?)\s+(?:le\s+|la\s+|les\s+|l[''']|du\s+|des\s+|d['''])?(.+)$/,
+    re: /^combien\s+(?:de\s+|d['''])(\w+)\s+(?:a|en|compte|possede|y a[- ]t[''']il(?: dans)?|mesure|pese|fait)\s+(?:le\s+|la\s+|les\s+|l[''']|du\s+|des\s+|d['''])?(.+)$/,
+  },
+  {
+    qtype: "howmany",
+    // « combien mesure/pèse/coûte X » — attribut implicite par le verbe
+    re: /^combien\s+(mesure|pese|coute|vaut|dure|duree)\w*\s+(.+)$/,
+    attrMap: {
+      mesure: "taille",
+      pese: "poids",
+      coute: "prix",
+      vaut: "fortune",
+      dure: "duree",
+      duree: "duree",
+    },
   },
   {
     qtype: "where",
@@ -225,9 +273,15 @@ const QUESTION_ATTR_RULES: { qtype: QuestionType; re: RegExp }[] = [
   },
 ];
 
-const QUESTION_RULES: { qtype: QuestionType; re: RegExp; attrFrom?: RegExp }[] = [
+const QUESTION_RULES: { qtype: QuestionType; re: RegExp; attrFixed?: string }[] = [
   { qtype: "who", re: /^qui (?:est|etait|fut|sont|etaient|reste|devient)\s+(.+)$/ },
   { qtype: "who", re: /^who (?:is|was|are|were)\s+(.+)$/ },
+  // Formes à groupe unique — attribut fixe, le groupe entier est le sujet.
+  { qtype: "which", re: /^pour qui (?:joue|evolue|travaille|chante|milite)\w*\s+(.+)$/, attrFixed: "equipe" },
+  { qtype: "which", re: /^qui a (?:gagne|remporte|recu)\w*\s+(.+)$/, attrFixed: "prix" },
+  { qtype: "which", re: /^a qui appartient\s+(.+)$/, attrFixed: "proprietaire" },
+  { qtype: "which", re: /^dans quel pays (?:se trouve|est|vit|joue)\w*\s+(.+)$/, attrFixed: "pays" },
+  { qtype: "which", re: /^(?:quel est |quelle est )?le proprietaire (?:de|du|des|d['''])\s*(.+)$/, attrFixed: "proprietaire" },
   {
     qtype: "what",
     re: /^(?:qu['']est[- ]ce que|qu['']est[- ]ce qu[''']|quest[- ]ce que|c['']est quoi|que signifie|qu['']appelle[- ]t[''']on|definition (?:de|du|des|d[''']))\s*(.+)$/,
@@ -235,14 +289,37 @@ const QUESTION_RULES: { qtype: QuestionType; re: RegExp; attrFrom?: RegExp }[] =
   { qtype: "what", re: /^what (?:is|are|was|does|do)\s+(.+)$/ },
   {
     qtype: "where",
-    re: /^ou\s+(?:se trouve(?:nt)?|se situe(?:nt)?|se localise|est|sont|se trouve[- ]t[''']on)\s+(.+)$/,
+    // « où est mort/né/situé X » — l'attr (lieu de mort/naissance) est déduit du verbe
+    re: /^ou\s+(?:est|etait|fut|sont|se trouve(?:nt)?|se situe(?:nt)?|se localise|se trouve[- ]t[''']on)\s+(.+)$/,
   },
-  { qtype: "where", re: /^where (?:is|are|was)\s+(.+)$/ },
+  { qtype: "where", re: /^where (?:is|are|was|did)\s+(.+)$/ },
   { qtype: "when", re: /^quand\s+(?:est|etait|a\s+ete|fut|sont|sera)\s+(.+)$/ },
   { qtype: "when", re: /^en quelle annee\s+(.+)$/ },
   { qtype: "when", re: /^when (?:did|was|is|were)\s+(.+)$/ },
+  {
+    qtype: "what",
+    // « comment est mort X » / « de quoi est mort X » → cause de décès
+    re: /^(?:comment|de quoi|pourquoi)\s+(?:est|etait|fut)\s+(.+)$/,
+  },
   { qtype: "howmany", re: /^combien\s+(?:de\s+|d[''']|y a[- ]t[''']il\s+)?(.+)$/ },
 ];
+
+/** Attribut déduit du verbe dans les questions « où est mort/né X ». */
+function verbAttr(full: string): string | undefined {
+  if (/\b(mort|morte|morts|mortes|decede|decedee|tue|tuee|assassine|assassinee|died|death|killed)\b/.test(full))
+    return "lieu de mort";
+  if (/\b(ne|nee|nes|nees|born|birth)\b/.test(full)) return "lieu de naissance";
+  if (/\b(inhume|enterre|enterree|buried)\b/.test(full)) return "lieu de sepulture";
+  return undefined;
+}
+
+/** « comment/de quoi est mort X » → cause ; les autres « comment » restent génériques. */
+function whatAttr(full: string): string | undefined {
+  if (/\b(mort|morte|decede|decedee|tue|tuee|assassine|assassinee|died|death)\b/.test(full))
+    return "cause de mort";
+  if (/\b(cree|creee|invente|inventee|apparu|apparue|commence|commencee)\b/.test(full)) return "origine";
+  return undefined;
+}
 
 /** Indice verbal pour les questions « quand » : naissance vs décès vs fondation. */
 function whenAttr(_subjectRaw: string, full: string): string | undefined {
@@ -261,7 +338,10 @@ function parseQuestionIntent(raw: string): SearchIntent | null {
   for (const rule of QUESTION_ATTR_RULES) {
     const m = nq.match(rule.re);
     if (!m) continue;
-    const attr = cleanSubject(m[1]);
+    // NB : l'attr n'est PAS passé par cleanSubject — les participes (« fondé »,
+    // « mort ») SONT le sens de la question (« qui a fondé apple »).
+    const attrRaw = stripLeadingDeter(m[1].trim().replace(/[?.!]+$/, ""));
+    const attr = rule.attrMap ? rule.attrMap[attrRaw.split(" ")[0]] ?? attrRaw : attrRaw;
     const subj = cleanSubject(m[2]);
     if (!attr || subj.length < 2) continue;
     const canon = normalizeCountry(subj);
@@ -280,12 +360,21 @@ function parseQuestionIntent(raw: string): SearchIntent | null {
     const subject = cleanSubject(m[1]);
     if (subject.length < 2) continue;
     const canon = normalizeCountry(subject);
+    const attr =
+      rule.attrFixed ??
+      (rule.qtype === "when"
+        ? whenAttr(m[1], nq)
+        : rule.qtype === "where"
+          ? verbAttr(nq)
+          : rule.qtype === "what"
+            ? whatAttr(nq)
+            : undefined);
     return {
       kind: "question",
       qtype: rule.qtype,
       subject: canon,
       wikiQuery: canon,
-      attr: rule.qtype === "when" ? whenAttr(m[1], nq) : undefined,
+      attr,
     };
   }
   return null;

@@ -12,6 +12,7 @@ import { searchIndex } from "./search-index/fts";
 import { rankHits } from "./search-index/ranking";
 import { searchImagesNative } from "./verticals/images";
 import { searchMapsNative } from "./verticals/maps";
+import { searchVideosNative } from "./verticals/videos";
 import { buildNativeShopping } from "./verticals/shopping";
 import { getDbMode } from "./storage/database";
 import { searchAyebiAsync, searchIndexAsync } from "./storage/turso-async";
@@ -1126,8 +1127,10 @@ async function liveSearchCore(
         : settled(fetchWikiSummary(webQ), undefined, Math.min(UPSTREAM_FAST_MS, msLeft())),
       offline
         ? Promise.resolve([] as MediaResult[])
-        : settled(searchImagesNative(q), [], Math.min(UPSTREAM_FAST_MS, msLeft())),
-      Promise.resolve([] as MediaResult[]),
+        : settled(searchImagesNative(webQ), [], Math.min(UPSTREAM_FAST_MS, msLeft())),
+      offline
+        ? Promise.resolve([] as MediaResult[])
+        : settled(searchVideosNative(webQ), [], upstreamMs),
       offline
         ? Promise.resolve([] as MapPlace[])
         : settled(
@@ -1150,7 +1153,7 @@ async function liveSearchCore(
     ]),
   );
 
-  void nativeVideos;
+
 
   // Réponse directe à la question — en tête des réponses instantanées.
   if (questionAnswer && qIntent) {
@@ -1353,16 +1356,24 @@ async function liveSearchCore(
     opts,
   );
 
-  const images: MediaResult[] = nativeImages.length
-    ? nativeImages
-    : results.slice(0, 9).map((r, i) => ({
-        id: `img-${i}`,
-        title: r.title,
-        url: r.url,
-        thumb: r.favicon || "",
-        source: r.domain,
-        type: "image" as const,
-      }));
+  // Images réelles uniquement — jamais de favicons déguisés en images.
+  // La photo de l'entité (Wikipédia) passe en tête quand la question a une réponse.
+  const entityImage = questionAnswer?.panel.image;
+  const images: MediaResult[] = [
+    ...(entityImage
+      ? [
+          {
+            id: "entity-img",
+            title: questionAnswer!.panel.title,
+            url: questionAnswer!.snippet.url,
+            thumb: entityImage,
+            source: "Wikipédia",
+            type: "image" as const,
+          },
+        ]
+      : []),
+    ...nativeImages,
+  ];
 
   // Écosystème d'abord quand il a du contenu : TALA (vidéo), puis web mondial.
   const talaCard: MediaResult = {

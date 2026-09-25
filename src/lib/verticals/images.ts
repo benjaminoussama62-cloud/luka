@@ -121,16 +121,59 @@ export function imagesFromCrawl(query: string, limit = 12): MediaResult[] {
     }));
 }
 
+/** Wikimedia Commons — photos réelles d'entités (personnalités, lieux, drapeaux). */
+export async function fetchCommonsImages(query: string): Promise<MediaResult[]> {
+  try {
+    const res = await fetch(
+      `https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(query)}&gsrnamespace=6&gsrlimit=14&prop=imageinfo&iiprop=url|size&iiurlwidth=420&format=json&origin=*`,
+      {
+        headers: { "User-Agent": "AyebaSearch/2.0 (https://ayeba.app)" },
+        signal: AbortSignal.timeout(3200),
+        next: { revalidate: 3600 },
+      },
+    );
+    if (!res.ok) return [];
+    const data = (await res.json()) as {
+      query?: {
+        pages?: Record<
+          string,
+          {
+            title?: string;
+            imageinfo?: { thumburl?: string; url?: string; descriptionurl?: string }[];
+          }
+        >;
+      };
+    };
+    const out: MediaResult[] = [];
+    for (const page of Object.values(data.query?.pages ?? {})) {
+      const info = page.imageinfo?.[0];
+      if (!info?.thumburl || !info.url) continue;
+      out.push({
+        id: `commons-${out.length}`,
+        title: (page.title ?? query).replace(/^File:/, ""),
+        url: info.descriptionurl || info.url,
+        thumb: info.thumburl,
+        source: "Wikimedia Commons",
+        type: "image",
+      });
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
 export async function searchImagesNative(query: string): Promise<MediaResult[]> {
-  const [openverse, indexed, crawl] = await Promise.all([
+  const [openverse, commons, indexed, crawl] = await Promise.all([
     fetchOpenverse(query),
+    fetchCommonsImages(query),
     Promise.resolve(searchImages(query, 16)),
     Promise.resolve(imagesFromCrawl(query, 8)),
   ]);
 
   const seen = new Set<string>();
   const merged: MediaResult[] = [];
-  for (const item of [...openverse, ...indexed, ...crawl]) {
+  for (const item of [...openverse, ...commons, ...indexed, ...crawl]) {
     const key = item.url.split("#")[0];
     if (!key || seen.has(key) || !item.thumb.startsWith("http")) continue;
     seen.add(key);

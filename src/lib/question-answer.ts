@@ -5,6 +5,7 @@ import {
   ageValue,
   claimValue,
   claimValues,
+  entityImage,
   entityUrl,
   getClaims,
   searchEntity,
@@ -149,44 +150,82 @@ type QuestionIntentLike = {
   attr?: string;
 };
 
-/** Attribut demandé → propriété(s) Wikidata. Couverture large FR/EN. */
+/** Attribut demandé → propriété(s) Wikidata. Couverture large FR/EN.
+ *  Ordre significatif : les expressions composées (« lieu de mort ») avant les
+ *  mots simples (« mort ») qui leur sont inclus. */
 const ATTR_PROPS: { re: RegExp; props: string[]; label: string; age?: boolean }[] = [
-  { re: /president|chef d[''']?etat|chef de l[''']?etat|head of state|dirigeant/i, props: ["P35", "P6"], label: "Président" },
+  // — composés d'abord —
+  { re: /lieu de naissance|birthplace|ou est ne|born in/i, props: ["P19"], label: "Lieu de naissance" },
+  { re: /lieu de (mort|deces)|death place|ou est mort/i, props: ["P20"], label: "Lieu de décès" },
+  { re: /cause de (mort|deces)|comment est mort|de quoi est mort|cause of death/i, props: ["P509"], label: "Cause du décès" },
+  { re: /lieu de sepulture|inhume|enterre|buried|resting place|tombe/i, props: ["P119"], label: "Sépulture" },
   { re: /premier ministre|prime minister|chef du gouvernement|head of government/i, props: ["P6"], label: "Premier ministre" },
+  { re: /date de naissance|quand est ne|date of birth/i, props: ["P569"], label: "Naissance" },
+  { re: /date de (mort|deces)|quand est mort|date of death/i, props: ["P570"], label: "Décès" },
+  { re: /langue officielle|official language/i, props: ["P37"], label: "Langue officielle" },
+  { re: /langues? parlees?|parle quelle langue|languages spoken/i, props: ["P1412", "P37"], label: "Langue(s)" },
+  // — dirigeants & organisation —
+  { re: /president|chef d[''']?etat|chef de l[''']?etat|head of state|dirigeant/i, props: ["P35", "P6"], label: "Président" },
   { re: /roi|reine|monarque|king|queen/i, props: ["P35"], label: "Chef de l'État" },
-  { re: /capitale/i, props: ["P36"], label: "Capitale" },
+  { re: /maire|mayor|bourgmestre/i, props: ["P6"], label: "Maire" },
+  { re: /fondateur|fondatrice|founder|cofondateur|fonde/i, props: ["P112"], label: "Fondateur" },
+  { re: /pdg|ceo|directeur general|directrice|chief executive|patron/i, props: ["P169"], label: "Direction" },
+  { re: /siege|headquarter|siege social/i, props: ["P159"], label: "Siège" },
+  { re: /createur|creatrice|inventeur|invente|concu|creator|inventor|designed/i, props: ["P170", "P61", "P287"], label: "Créateur" },
+  { re: /auteur|ecrit|writer|author|ecrivain/i, props: ["P50"], label: "Auteur" },
+  { re: /compositeur|compose|composer/i, props: ["P86"], label: "Compositeur" },
+  { re: /realisateur|realise|director|filme/i, props: ["P57"], label: "Réalisateur" },
+  { re: /interprete|chante|chanteur|performer|sung/i, props: ["P175"], label: "Interprète" },
+  { re: /proprietaire|appartient a|owner|owned by/i, props: ["P127"], label: "Propriétaire" },
+  { re: /maison mere|filiale|parent company|subsidiary/i, props: ["P749", "P355"], label: "Groupe" },
+  // — géographie & pays —
+  { re: /capitale|capital/i, props: ["P36"], label: "Capitale" },
   { re: /monnaie|devise|currency/i, props: ["P38"], label: "Monnaie" },
   { re: /langue/i, props: ["P37"], label: "Langue officielle" },
   { re: /habitants?|population|demographie/i, props: ["P1082"], label: "Population" },
-  { re: /superficie|surface|area|km/i, props: ["P2046"], label: "Superficie" },
+  { re: /superficie|surface|area|km2|km²/i, props: ["P2046"], label: "Superficie" },
   { re: /densite/i, props: ["P2225"], label: "Densité" },
-  { re: /fondateur|fondatrice|founder|cofondateur/i, props: ["P112"], label: "Fondateur" },
-  { re: /pdg|ceo|directeur general|directrice|chief executive|patron/i, props: ["P169"], label: "Direction" },
-  { re: /siege|headquarter|siege social/i, props: ["P159"], label: "Siège" },
   { re: /pays|country|nation/i, props: ["P17"], label: "Pays" },
   { re: /continent/i, props: ["P30"], label: "Continent" },
   { re: /hymne|anthem/i, props: ["P85"], label: "Hymne" },
-  { re: /epouse|epoux|mari|femme de|conjoint|spouse|wife|husband/i, props: ["P26"], label: "Conjoint" },
-  { re: /\bmere\b|mother/i, props: ["P25"], label: "Mère" },
-  { re: /\bpere\b|father/i, props: ["P22"], label: "Père" },
-  { re: /enfants?|children|child/i, props: ["P40"], label: "Enfant(s)" },
-  { re: /naissance|date de naissance|\bne\b|birth/i, props: ["P569"], label: "Naissance" },
-  { re: /mort|deces|deces|death|died|date de deces/i, props: ["P570"], label: "Décès" },
-  { re: /lieu de naissance|birthplace|ou est ne/i, props: ["P19"], label: "Lieu de naissance" },
-  { re: /lieu de (mort|deces)|death place/i, props: ["P20"], label: "Lieu de décès" },
-  { re: /nationalite|citoyennete|citizenship|passeport/i, props: ["P27"], label: "Nationalité" },
-  { re: /taille|height|grandeur/i, props: ["P2048"], label: "Taille" },
-  { re: /religion|croyance/i, props: ["P140"], label: "Religion" },
-  { re: /age\b|quel age/i, props: ["P569"], label: "Âge", age: true },
-  { re: /occupation|metier|profession/i, props: ["P106"], label: "Occupation" },
-  { re: /site (officiel|web)|website|official site/i, props: ["P856"], label: "Site officiel" },
+  { re: /drapeau|flag/i, props: ["P41"], label: "Drapeau" },
+  { re: /altitude|hauteur|elevation/i, props: ["P2044"], label: "Altitude" },
+  { re: /fleuve|river|riviere|traverse/i, props: ["P206"], label: "Fleuve / cours d'eau" },
+  { re: /embouchure|mouth/i, props: ["P403"], label: "Embouchure" },
+  { re: /aeroport|airport|iata/i, props: ["P239", "P238"], label: "Aéroport (ICAO/IATA)" },
   { re: /indicatif|code telephonique|calling code|prefixe/i, props: ["P474"], label: "Indicatif" },
   { re: /fuseau|timezone|time zone/i, props: ["P421"], label: "Fuseau horaire" },
-  { re: /gentile|demonym|habitants appeles/i, props: ["P1549"], label: "Gentilé" },
+  { re: /gentile|demonym/i, props: ["P1549"], label: "Gentilé" },
   { re: /code iso|iso|code pays/i, props: ["P297"], label: "Code ISO" },
   { re: /tld|domaine internet|extension/i, props: ["P78"], label: "Domaine national" },
-  { re: /fleuve|river|riviere/i, props: ["P206"], label: "Fleuve / cours d'eau" },
-  { re: /aeroport|airport|iata/i, props: ["P239", "P238"], label: "Aéroport (ICAO/IATA)" },
+  { re: /code postal|postal code|zip/i, props: ["P281"], label: "Code postal" },
+  // — personnes —
+  { re: /epouse|epoux|\bmari\b|\bfemme\b|conjoint|spouse|wife|husband/i, props: ["P26"], label: "Conjoint" },
+  { re: /\bmere\b|mother/i, props: ["P25"], label: "Mère" },
+  { re: /\bpere\b|father/i, props: ["P22"], label: "Père" },
+  { re: /frere|soeur|sibling|brother|sister/i, props: ["P3373"], label: "Frère(s)/sœur(s)" },
+  { re: /enfants?|children|child|fils|fille/i, props: ["P40"], label: "Enfant(s)" },
+  { re: /nationalite|citoyennete|citizenship|passeport/i, props: ["P27"], label: "Nationalité" },
+  { re: /taille|height|grandeur|mesure/i, props: ["P2048"], label: "Taille" },
+  { re: /poids|pese|weight/i, props: ["P2067"], label: "Poids" },
+  { re: /religion|croyance/i, props: ["P140"], label: "Religion" },
+  { re: /parti|party|politique/i, props: ["P102"], label: "Parti politique" },
+  { re: /equipe|club|selection|joue|evolue|team/i, props: ["P54"], label: "Équipe" },
+  { re: /prix|award|distinction|recompense|ballon d[''']or|nobel/i, props: ["P166"], label: "Distinctions" },
+  { re: /etudes?|education|universite|diplome|scolarite/i, props: ["P69"], label: "Études" },
+  { re: /occupation|metier|profession|travail/i, props: ["P106"], label: "Occupation" },
+  { re: /fonction|poste|mandat|office|position held/i, props: ["P39"], label: "Fonction" },
+  { re: /fortune|richesse|salaire|net worth|vaut/i, props: ["P2218"], label: "Fortune estimée" },
+  { re: /oeuvre|travaux|notable work|connu pour/i, props: ["P800"], label: "Œuvre notable" },
+  { re: /age\b|quel age/i, props: ["P569"], label: "Âge", age: true },
+  // — dates & divers —
+  { re: /naissance|\bne\b|\bnee\b|birth/i, props: ["P569"], label: "Naissance" },
+  { re: /mort|deces|death|died/i, props: ["P570"], label: "Décès" },
+  { re: /fondation|cree|creation|founded|established|lancement/i, props: ["P571"], label: "Fondation" },
+  { re: /dissolution|fermeture|disparition/i, props: ["P576"], label: "Dissolution" },
+  { re: /site (officiel|web)|website|official site|url/i, props: ["P856"], label: "Site officiel" },
+  { re: /duree|dure|duration|long/i, props: ["P2047"], label: "Durée" },
+  { re: /effectif|membres|employes|employees|staff/i, props: ["P1128", "P1083"], label: "Effectif" },
   { re: /ville|commune|quartier|province|etat|region|departement|district|localite|arrondissement/i, props: ["P159", "P131", "P276", "P17"], label: "Localisation" },
 ];
 
@@ -238,9 +277,10 @@ export async function answerQuestion(intent: QuestionIntentLike): Promise<Questi
   const personHint =
     intent.qtype === "who" ||
     (intent.qtype === "when" && (intent.attr === "naissance" || intent.attr === "mort")) ||
-    (intent.qtype === "which" &&
-      intent.attr != null &&
-      /epouse|epoux|conjoint|mere|pere|enfant|age|taille|nationalite|naissance/.test(intent.attr));
+    (intent.attr != null &&
+      /epouse|epoux|conjoint|mere|pere|enfant|frere|soeur|age|taille|poids|nationalite|naissance|lieu de (mort|naissance|sepulture)|cause de mort|equipe|parti|prix|religion|fortune|etude/.test(
+        intent.attr,
+      ));
   // La résolution Wikipedia désambiguïse les sujets ambigus (« poutine » →
   // « Vladimir Poutine », pas le plat québécois) — mais pour les questions
   // attribut/sujet (« président DE la rdc »), le sujet EST l'entité (le pays) ;
@@ -258,10 +298,12 @@ export async function answerQuestion(intent: QuestionIntentLike): Promise<Questi
   let lines: { label: string; value: string }[] = [];
   let entityName = wiki?.title ?? entity?.label ?? intent.subject;
   let structuredSource: string | undefined;
+  let panelImage: string | undefined = wiki?.image;
 
   if (entity) {
     const claims = await getClaims(entity.id);
     if (claims) {
+      panelImage ??= await entityImage(claims);
       const spec = attrProps(intent.qtype, intent.attr);
       if (spec) {
         const values = spec.age
@@ -302,6 +344,36 @@ export async function answerQuestion(intent: QuestionIntentLike): Promise<Questi
           }
         }
       }
+      // Fiche d'entité générique — toute question reconnue sort des faits réels
+      // (comme le panneau Knowledge Graph de Google), même sans attr mappé.
+      if (!lines.length && intent.qtype !== "who") {
+        const FICHE: { label: string; props: string[] }[] = [
+          { label: "Naissance", props: ["P569"] },
+          { label: "Décès", props: ["P570"] },
+          { label: "Fondation", props: ["P571"] },
+          { label: "Nationalité", props: ["P27"] },
+          { label: "Occupation", props: ["P106"] },
+          { label: "Pays", props: ["P17"] },
+          { label: "Capitale", props: ["P36"] },
+          { label: "Président", props: ["P35", "P6"] },
+          { label: "Population", props: ["P1082"] },
+          { label: "Superficie", props: ["P2046"] },
+          { label: "Localisation", props: ["P131", "P276"] },
+          { label: "Siège", props: ["P159"] },
+          { label: "Fondateur", props: ["P112"] },
+          { label: "Site officiel", props: ["P856"] },
+        ];
+        const facts: { label: string; value: string }[] = [];
+        for (const f of FICHE) {
+          if (facts.length >= 4) break;
+          const v = await claimValues(claims, f.props, { max: 2 });
+          if (v?.length) facts.push({ label: f.label, value: v.join(", ") });
+        }
+        if (facts.length) {
+          lines = facts;
+          structuredSource = entityUrl(entity.id);
+        }
+      }
       if (entity.label && !wiki) entityName = entity.label;
     }
   }
@@ -336,7 +408,7 @@ export async function answerQuestion(intent: QuestionIntentLike): Promise<Questi
   };
 
   const panel: KnowledgePanel = wiki
-    ? wikiAnswerToPanel(wiki)
+    ? { ...wikiAnswerToPanel(wiki), image: wiki.image ?? panelImage }
     : {
         title: entityName,
         subtitle: entity?.description ?? "Entité Wikidata",
@@ -346,6 +418,7 @@ export async function answerQuestion(intent: QuestionIntentLike): Promise<Questi
           { label: "Lien", value: entityUrl(entity!.id) },
         ],
         sources: ["wikidata.org"],
+        image: panelImage,
       };
 
   return { instant, snippet, panel };

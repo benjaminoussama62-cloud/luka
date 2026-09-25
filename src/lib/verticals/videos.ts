@@ -1,4 +1,4 @@
-import { getDb } from "../storage/database";
+import { canUseSyncDb, getDb } from "../storage/database";
 import type { MediaResult } from "../types";
 
 export function indexVideo(v: {
@@ -11,6 +11,7 @@ export function indexVideo(v: {
   views?: number;
   tags?: string;
 }) {
+  if (!canUseSyncDb()) return;
   getDb()
     .prepare(
       `INSERT INTO vertical_videos (id, url, thumb, title, channel, duration_sec, views, query_tags, indexed_at)
@@ -38,6 +39,7 @@ function formatDuration(sec?: number): string | undefined {
 }
 
 export function searchVideosIndexed(query: string, limit = 20): MediaResult[] {
+  if (!canUseSyncDb()) return [];
   const q = `%${query.toLowerCase()}%`;
   const rows = getDb()
     .prepare(
@@ -123,15 +125,56 @@ export async function fetchPipedVideos(query: string): Promise<MediaResult[]> {
   return [];
 }
 
+/** Dailymotion — API publique réelle, sans clé. Fallback quand Piped est down. */
+export async function fetchDailymotionVideos(query: string): Promise<MediaResult[]> {
+  try {
+    const res = await fetch(
+      `https://api.dailymotion.com/videos?search=${encodeURIComponent(query)}&limit=16&fields=id,title,thumbnail_240_url,owner.screenname,duration`,
+      {
+        signal: AbortSignal.timeout(5000),
+        headers: { "User-Agent": "AyebaSearch/2.0 (https://ayeba.app)" },
+        next: { revalidate: 300 },
+      },
+    );
+    if (!res.ok) return [];
+    const data = (await res.json()) as {
+      list?: Array<{
+        id: string;
+        title?: string;
+        thumbnail_240_url?: string;
+        duration?: number;
+        "owner.screenname"?: string;
+      }>;
+    };
+    const out: MediaResult[] = [];
+    for (const v of data.list ?? []) {
+      if (!v.id || !v.title) continue;
+      out.push({
+        id: `dm-${v.id}`,
+        title: v.title,
+        url: `https://www.dailymotion.com/video/${v.id}`,
+        thumb: v.thumbnail_240_url || "",
+        source: v["owner.screenname"] || "Dailymotion",
+        type: "video",
+        duration: formatDuration(v.duration),
+      });
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
 export async function searchVideosNative(query: string): Promise<MediaResult[]> {
-  const [piped, indexed] = await Promise.all([
+  const [piped, indexed, dailymotion] = await Promise.all([
     fetchPipedVideos(query),
     Promise.resolve(searchVideosIndexed(query, 12)),
+    fetchDailymotionVideos(query),
   ]);
 
   const seen = new Set<string>();
   const merged: MediaResult[] = [];
-  for (const v of [...piped, ...indexed]) {
+  for (const v of [...piped, ...indexed, ...dailymotion]) {
     const key = v.url;
     if (seen.has(key)) continue;
     seen.add(key);

@@ -51,15 +51,15 @@ export async function searchEntity(
         const hay = normalizeQueryText(`${c.label ?? ""} ${c.description ?? ""}`);
         return tokens.length === 0 || tokens.some((t) => tokenMatchesInHay(t, hay));
       };
-      const picked =
-        (preferDesc
-          ? cands.find(
-              (c) =>
-                subjectMatch(c) && preferDesc.test(`${c.label ?? ""} ${c.description ?? ""}`),
-            )
-          : undefined) ??
-        cands.find(subjectMatch) ??
-        cands[0];
+      const eligible = cands.filter(subjectMatch);
+      const pool = eligible.length ? eligible : cands;
+      // Notoriété = nombre de sitelinks (comme le Knowledge Graph de Google :
+      // « khadafi » → Mouammar Kadhafi, pas un footballeur homonyme).
+      const hinted = preferDesc
+        ? pool.filter((c) => preferDesc.test(`${c.label ?? ""} ${c.description ?? ""}`))
+        : [];
+      const shortlist = (hinted.length ? hinted : pool).slice(0, 4);
+      const picked = shortlist.length <= 1 ? shortlist[0] : await mostNotable(shortlist);
       if (picked) {
         return { id: picked.id, label: picked.label ?? subject, description: picked.description };
       }
@@ -68,6 +68,32 @@ export async function searchEntity(
     }
   }
   return undefined;
+}
+
+/** Le candidat le plus notable = le plus de sitelinks Wikipédia. */
+async function mostNotable<T extends { id: string }>(cands: T[]): Promise<T | undefined> {
+  try {
+    const res = await fetch(
+      `https://www.wikidata.org/w/api.php?action=wbgetentities&ids=${cands.map((c) => c.id).join("|")}&props=sitelinks&format=json`,
+      { signal: AbortSignal.timeout(MS), headers: UA, next: { revalidate: 86400 } },
+    );
+    if (!res.ok) return cands[0];
+    const data = (await res.json()) as {
+      entities?: Record<string, { sitelinks?: Record<string, unknown> }>;
+    };
+    let best: T | undefined;
+    let bestCount = -1;
+    for (const c of cands) {
+      const n = Object.keys(data.entities?.[c.id]?.sitelinks ?? {}).length;
+      if (n > bestCount) {
+        best = c;
+        bestCount = n;
+      }
+    }
+    return best ?? cands[0];
+  } catch {
+    return cands[0];
+  }
 }
 
 export async function getClaims(id: string): Promise<Claims | undefined> {
@@ -199,9 +225,9 @@ export async function claimValues(
         out.push(v);
       } else if (v && typeof v === "object") {
         if ("id" in v && typeof v.id === "string") {
-          out.push(labels.get(v.id) ?? v.id);
+          out.push(labels.get(v.id) ?? (entityIds.length === 1 ? v.id : ""));
         } else if ("numericId" in v && typeof v.numericId === "number") {
-          out.push(labels.get(`Q${v.numericId}`) ?? `Q${v.numericId}`);
+          out.push(labels.get(`Q${v.numericId}`) ?? (entityIds.length === 1 ? `Q${v.numericId}` : ""));
         } else if ("time" in v && typeof v.time === "string") {
           if (opts?.age) {
             const birth = new Date(v.time.replace(/^\+/, ""));
@@ -226,7 +252,8 @@ export async function claimValues(
         }
       }
     }
-    if (out.length) return [...new Set(out)];
+    const cleaned = [...new Set(out.filter((s) => s.trim()))];
+    if (cleaned.length) return cleaned;
   }
   return undefined;
 }
@@ -244,3 +271,16 @@ export async function ageValue(claims: Claims): Promise<string | undefined> {
 }
 
 export const entityUrl = (id: string) => `https://www.wikidata.org/wiki/${id}`;
+
+/** URL directe d'un fichier Commons (P18 image, P41 drapeau…). */
+export const commonsFileUrl = (filename: string, width = 640) =>
+  `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(filename.replace(/^File:/, ""))}?width=${width}`;
+
+/** Image représentative de l'entité (P18) → URL Commons réelle. */
+export async function entityImage(claims: Claims): Promise<string | undefined> {
+  const snak = pickSnak(claims.P18);
+  const v = snak?.mainsnak?.datavalue?.value;
+  return typeof v === "string" && /\.(jpe?g|png|svg|webp|gif|tiff?)$/i.test(v)
+    ? commonsFileUrl(v, 640)
+    : undefined;
+}

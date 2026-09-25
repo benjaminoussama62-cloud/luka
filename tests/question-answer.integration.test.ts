@@ -71,4 +71,42 @@ describe("answerQuestion — Knowledge Graph structuré", () => {
     if (!a) return;
     expect(a.instant.lines[0].value).toMatch(/\d/);
   }, 30000);
+
+  it("« ou est mort khadafi » → lieu de décès réel (Syrte)", async () => {
+    const intent = parseSearchIntent("ou est mort khadafi ?");
+    console.log("KHADAFI INTENT:", JSON.stringify(intent));
+    if (intent.kind !== "question") return;
+    const a = await answerQuestion(intent);
+    console.log("KHADAFI:", JSON.stringify(a?.instant.lines));
+    if (!a) return;
+    expect(a.instant.lines[0].label.toLowerCase()).toMatch(/d.c.s|mort|localis/);
+    expect(a.instant.lines[0].value.toLowerCase()).toMatch(/syrte|libye/);
+  }, 30000);
+
+  it("« comment est mort khadafi » → cause du décès", async () => {
+    const intent = parseSearchIntent("comment est mort khadafi");
+    if (intent.kind !== "question") return;
+    const a = await answerQuestion(intent);
+    console.log("CAUSE:", JSON.stringify(a?.instant.lines));
+    if (!a) return;
+    expect(a.instant.lines[0].value.length).toBeGreaterThan(2);
+  }, 30000);
+
+  it("« qui a fonde apple » → fondateurs réels", async () => {
+    const intent = parseSearchIntent("qui a fondé apple");
+    if (intent.kind !== "question") return;
+    const a = await answerQuestion(intent);
+    console.log("APPLE:", JSON.stringify(a?.instant.lines));
+    if (!a) return;
+    expect(a.instant.lines[0].value.toLowerCase()).toMatch(/jobs|wozniak|wayne/);
+  }, 30000);
+
+  it("« quelle est la monnaie de la rdc » → franc congolais", async () => {
+    const intent = parseSearchIntent("quelle est la monnaie de la rdc");
+    if (intent.kind !== "question") return;
+    const a = await answerQuestion(intent);
+    console.log("MONNAIE:", JSON.stringify(a?.instant.lines));
+    if (!a) return;
+    expect(a.instant.lines[0].value.toLowerCase()).toContain("congolais");
+  }, 30000);
 });
