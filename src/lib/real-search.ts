@@ -7,6 +7,7 @@ import { searchCrawlIndex } from "./crawler";
 import { panelFromQuery } from "./knowledge-graph/graph";
 import { resolveInstantAnswers } from "./instant-answers";
 import { answerQuestion } from "./question-answer";
+import { understandQuery } from "./query-understanding";
 import { cacheGet, cacheSet } from "./cache/redis";
 import { searchIndex } from "./search-index/fts";
 import { rankHits } from "./search-index/ranking";
@@ -920,9 +921,12 @@ export async function liveSearch(query: string, opts: FetchOpts): Promise<Search
   // Suggestion « vouliez-vous dire » : d'abord le correcteur local, sinon la forme
   // SMS normalisée (« dans kel commune c trouve… » → « dans quelle commune se trouve… »).
   const smsFixed = normalizeSmsFrench(rawQuery);
+  // La suggestion n'est affichée que si la normalisation a réellement corrigé
+  // un MOT — pas juste reformaté la ponctuation (« chaussure c'est quoi »
+  // ne doit pas suggérer « chaussure se'est quoi »).
   const suggested =
     didYouMean(rawQuery) ??
-    (smsFixed && smsFixed !== normalizeQueryText(rawQuery).replace(/[?.!]+/g, " ").replace(/\s+/g, " ").trim()
+    (smsFixed && smsFixed !== rawQuery.toLowerCase().normalize("NFD").replace(/\p{M}/gu, "").replace(/[?.!]+/g, " ").replace(/\s+/g, " ").trim()
       ? smsFixed
       : undefined);
   const q = rawQuery;
@@ -956,15 +960,67 @@ async function liveSearchCore(
   const wall = Date.now() + (offline ? 400 : SEARCH_WALL_MS);
   const msLeft = () => Math.max(200, wall - Date.now());
   const turso = getDbMode() === "turso";
-  const intent = parseSearchIntent(rawQuery);
-  const webQ = upstreamQuery(q, intent);
+  // Compréhension sémantique AVANT tout — l'équivalent de l'étape « intent »
+  // de Google : le modèle corrige la requête, isole l'entité, classe
+  // l'attribut en clé canonique, borne le type d'entité — dans n'importe
+  // quelle langue. Les règles synchrones restent le filet quand le modèle
+  // est absent (pas de clé, timeout) — jamais l'inverse.
+  const understanding = offline ? null : await understandQuery(rawQuery);
+  const ruleIntent = parseSearchIntent(rawQuery);
+  let intent = ruleIntent;
+  if (understanding) {
+    if (understanding.intent === "calc" && understanding.expr && evalMath(understanding.expr)) {
+      intent = { kind: "math", expr: understanding.expr, display: understanding.corrected };
+    } else if (
+      (understanding.intent === "question" ||
+        understanding.intent === "definition" ||
+        understanding.intent === "location") &&
+      understanding.entity
+    ) {
+      intent = {
+        kind: "question",
+        qtype:
+          understanding.intent === "definition"
+            ? "what"
+            : understanding.intent === "location"
+              ? "where"
+              : understanding.qtype,
+        subject: understanding.entity,
+        wikiQuery: understanding.entity,
+        attr: understanding.attribute || undefined,
+        attrEn: understanding.attributeEn || undefined,
+        entityEn: understanding.entityEn || undefined,
+        attrKey: understanding.attrKey || undefined,
+        entityType: understanding.entityType || undefined,
+      };
+    } else if (ruleIntent.kind === "question" && understanding.entity) {
+      // Règles ont reconnu une question — le modèle enrichit : sujet
+      // canonique + clé d'attribut + type d'entité.
+      intent = {
+        ...ruleIntent,
+        subject: understanding.entity,
+        wikiQuery: understanding.entity,
+        attrEn: understanding.attributeEn || undefined,
+        entityEn: understanding.entityEn || undefined,
+        attrKey: understanding.attrKey || undefined,
+        entityType: understanding.entityType || undefined,
+      };
+    }
+    // Suggestion « vouliez-vous dire » : la correction du modèle prime sur
+    // Levenshtein — il comprend le sens, pas juste la distance entre mots.
+    const strip = (s: string) => s.toLowerCase().replace(/[?.!…\s]+$/g, "").trim();
+    if (understanding.corrected && strip(understanding.corrected) !== strip(rawQuery)) {
+      suggested = understanding.corrected;
+    }
+  }
+  const webQ = upstreamQuery(understanding?.corrected ?? q, intent);
   const administrativeQuestion =
     /\b(quartier|quartiers|commune|communes|district|districts|subdivision|subdivisions)\b/i.test(q);
   const qIntent = intent.kind === "question" ? intent : undefined;
   // Médias (images, vidéos, cartes) : le SUJET résolu, pas la phrase brute.
   // « messi a combien de buts » cherche des images de « messi », pas des
   // scans de manuscrits qui matchent les mots-outils de la question.
-  const mediaQ = qIntent ? qIntent.subject : webQ;
+  const mediaQ = qIntent ? qIntent.subject : understanding?.entity || webQ;
   // Factual = on peut produire une réponse locale fiable (capitale connue, géo/admin
   // Kinshasa documentées, calcul). Un mot comme « commune » seul ne qualifie PAS —
   // sinon tout résultat web serait jeté (bug « aucun résultat direct »).

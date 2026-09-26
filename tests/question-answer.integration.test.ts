@@ -192,3 +192,72 @@ describe("answerQuestion — Knowledge Graph structuré", () => {
     expect(JSON.stringify(a.instant.lines).toLowerCase()).toMatch(/jinping|xi|président|dirigeant/);
   }, 30000);
 });
+
+// Chemin canonique — intents tels que la compréhension LLM les émet
+// (attrKey + entityType), indépendants de la langue de la requête.
+describe("answerQuestion — clés canoniques (compréhension LLM)", () => {
+  it("attrKey=subdivisions_count + entityType=country → « Mali » = le PAYS, jamais le musée MALI", async () => {
+    const a = await answerQuestion({
+      qtype: "howmany",
+      subject: "Mali",
+      wikiQuery: "Mali",
+      attr: "nombre de provinces",
+      attrKey: "subdivisions_count",
+      entityType: "country",
+    });
+    console.log("MALI P150:", JSON.stringify(a?.instant.lines), "·", a?.instant.title);
+    if (!a) return;
+    // Réponse = dénombrement réel des subdivisions Wikidata (P150).
+    expect(a.instant.lines[0].value).toMatch(/\d/);
+    // Et le titre est le pays — l'homonyme « MALI » (musée de Lima) est exclu.
+    expect(a.instant.title.toLowerCase()).toContain("mali");
+    expect(a.instant.title.toLowerCase()).not.toContain("musée");
+  }, 30000);
+
+  it("attrKey=officeholder → titulaire P1308 de la fonction (MAE Russie → Lavrov)", async () => {
+    const a = await answerQuestion({
+      qtype: "who",
+      subject: "Russie",
+      wikiQuery: "Russie",
+      attr: "ministre des affaires étrangères",
+      attrEn: "minister of foreign affairs",
+      entityEn: "Russia",
+      attrKey: "officeholder",
+      entityType: "country",
+    });
+    console.log("MAE RU:", JSON.stringify(a?.instant.lines));
+    if (!a) return;
+    // Le titulaire actuel via la fonction (forme EN) — jamais l'article-thème.
+    const txt = JSON.stringify(a.instant.lines).toLowerCase();
+    expect(txt).toMatch(/lavrov|ministre|russie/);
+    expect(a.panel.title.toLowerCase()).toContain("russie");
+  }, 30000);
+
+  it("attrKey=age + entityType=person → âge calculé depuis P569", async () => {
+    const a = await answerQuestion({
+      qtype: "howmany",
+      subject: "Vladimir Poutine",
+      wikiQuery: "Vladimir Poutine",
+      attr: "âge",
+      attrKey: "age",
+      entityType: "person",
+    });
+    console.log("AGE:", JSON.stringify(a?.instant.lines));
+    if (!a) return;
+    expect(a.instant.lines[0].value).toMatch(/\d{2}/);
+  }, 30000);
+
+  it("intent=definition + entityType=concept → « chaussure » générique, pas « de sécurité »", async () => {
+    const a = await answerQuestion({
+      qtype: "what",
+      subject: "chaussure",
+      wikiQuery: "chaussure",
+      entityType: "concept",
+    });
+    console.log("CHAUSSURE:", a?.instant.title, "|", JSON.stringify(a?.instant.lines));
+    if (!a) return;
+    // Le concept générique doit gagner — jamais un sous-type remonté par hasard.
+    expect(a.instant.title.toLowerCase()).not.toContain("sécurité");
+    expect(a.instant.title.toLowerCase()).not.toContain("securite");
+  }, 30000);
+});

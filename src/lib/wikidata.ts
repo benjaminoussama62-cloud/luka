@@ -35,6 +35,10 @@ export async function searchEntity(
   subject: string,
   preferDesc?: RegExp,
   requireProp?: string,
+  /** Type d'entité ATTENDU par la question (description Wikidata) : une
+   *  question sur des provinces exige un pays/territoire — un musée ou un
+   *  sujet homonyme (« MALI » = musée de Lima) ne peut plus voler la requête. */
+  expectDesc?: RegExp,
 ): Promise<WikiEntity | undefined> {
   for (const lang of ["fr", "en"] as const) {
     try {
@@ -63,6 +67,13 @@ export async function searchEntity(
       const real = pool.filter((c) => !/homonymie|disambiguation/i.test(c.description ?? ""));
       if (!real.length) continue;
       pool = real;
+      // Type attendu : si des candidats correspondent au type demandé
+      // (pays pour « provinces », personne pour « épouse »…), écarter les
+      // autres. Sinon on garde le pool — mieux un type douteux que rien.
+      if (expectDesc) {
+        const typed = pool.filter((c) => expectDesc.test(c.description ?? ""));
+        if (typed.length) pool = typed;
+      }
       const hinted = preferDesc
         ? pool.filter((c) => preferDesc.test(`${c.label ?? ""} ${c.description ?? ""}`))
         : [];
@@ -128,6 +139,56 @@ export async function searchEntity(
 }
 
 /** Ne garde que les candidats possédant la propriété exigée (P570 pour « mort »…). */
+/**
+ * Recherche une FONCTION (« minister of sports ») liée à un contexte
+ * (« Guinea ») — puis le caller lit P1308 (titulaire actuel). La recherche
+ * porte le seul nom de la fonction : wbsearchentities exige une phrase
+ * quasi exacte (« minister of foreign affairs Russia » ne matche rien).
+ * Le contexte filtre les homonymes (« …of Sweden » vs « …of Guinea »).
+ */
+export async function searchPositionEntity(
+  position: string,
+  context?: string,
+): Promise<WikiEntity | undefined> {
+  for (const lang of ["en", "fr"] as const) {
+    try {
+      const res = await fetch(
+        `https://www.wikidata.org/w/api.php?action=wbsearchentities&search=${encodeURIComponent(position)}&language=${lang}&uselang=${lang}&format=json&limit=8&type=item`,
+        { signal: AbortSignal.timeout(MS), headers: UA, next: { revalidate: 3600 } },
+      );
+      if (!res.ok) continue;
+      const data = (await res.json()) as {
+        search?: { id: string; label?: string; description?: string; match?: { text?: string } }[];
+      };
+      let cands = (data.search ?? []).filter(
+        (c) => !/homonymie|disambiguation/i.test(c.description ?? ""),
+      );
+      if (!cands.length) continue;
+      // Le contexte (pays/org) doit apparaître dans le libellé, la
+      // description ou l'alias matché — sinon n'importe quel pays gagne.
+      if (context) {
+        const ctxTokens = meaningfulTokens(context);
+        if (ctxTokens.length) {
+          const inCtx = cands.filter((c) => {
+            const hay = normalizeQueryText(`${c.label ?? ""} ${c.description ?? ""} ${c.match?.text ?? ""}`);
+            return ctxTokens.some((t) => tokenMatchesInHay(t, hay));
+          });
+          if (inCtx.length) cands = inCtx;
+          else continue; // contexte absent → langue suivante
+        }
+      }
+      const withProp = await filterByProp(cands, "P1308");
+      const first = withProp[0];
+      if (first) {
+        return { id: first.id, label: first.label ?? first.id, description: first.description };
+      }
+    } catch {
+      /* langue suivante */
+    }
+  }
+  return undefined;
+}
+
 async function filterByProp<T extends { id: string }>(cands: T[], prop: string): Promise<T[]> {
   try {
     const res = await fetch(

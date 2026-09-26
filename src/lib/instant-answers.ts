@@ -1,6 +1,4 @@
 import { lookupDefinition } from "./definitions";
-import { FUEL_INDICATIVE_FC, FUEL_BY_CITY } from "./market";
-import { populationAnswer } from "./population-data";
 import type { InstantAnswer } from "./types";
 
 type FxRates = {
@@ -174,44 +172,6 @@ function tryFx(query: string, rates: FxRates | null): InstantAnswer | null {
   return null;
 }
 
-function tryFuel(query: string): InstantAnswer | null {
-  const q = query.toLowerCase();
-  const amount = parseAmount(query);
-
-  let city = "Kinshasa";
-  if (/\b(lubumbashi|likasi)\b/.test(q)) city = "Lubumbashi";
-  else if (/\b(goma|bukavu|kivu)\b/.test(q)) city = "Goma";
-  else if (/\b(kisangani)\b/.test(q)) city = "Kisangani";
-
-  const prices = FUEL_BY_CITY[city] ?? FUEL_INDICATIVE_FC;
-
-  type FuelDef = { re: RegExp; label: string; price: number; unit: string; id: string; type: "essence" | "gasoil" | "gaz" };
-  const fuels: FuelDef[] = [
-    { re: /\b(essence|super|sp95|carburant|pompe)\b/, label: "Essence", price: prices.essence, unit: "FC/L", id: "essence", type: "essence" },
-    { re: /\b(gasoil|diesel|gazole)\b/, label: "Gasoil", price: prices.gasoil, unit: "FC/L", id: "gasoil", type: "gasoil" },
-    { re: /\b(gaz|bouteille|lpg|butane|propane)\b/, label: "Gaz 12 kg", price: prices.gaz12kg, unit: "FC/bouteille", id: "gaz", type: "gaz" },
-  ];
-
-  for (const f of fuels) {
-    if (!f.re.test(q)) continue;
-    const qty = amount ?? (f.type === "gaz" ? 1 : 10);
-    const total = qty * f.price;
-    return {
-      kind: "fuel",
-      title: `Prix ${f.label} · ${city}`,
-      lines: [
-        { label: "Prix unitaire", value: `${fmt(f.price, 0)} ${f.unit}` },
-        { label: f.type === "gaz" ? `${fmt(qty, 0)} bouteille(s)` : `${fmt(qty, 1)} L`, value: `${fmt(total, 0)} FC` },
-        { label: "Ville", value: city },
-      ],
-      footnote: "Indicatif station · vérifiez sur place avant de sortir",
-      marketQuoteId: f.id,
-      defaultAmount: String(qty),
-    };
-  }
-  return null;
-}
-
 const CITY_ALIASES: Record<string, string> = {
   kinshasa: "Kinshasa",
   lubumbashi: "Lubumbashi",
@@ -237,13 +197,15 @@ function tryTime(query: string): InstantAnswer | null {
   const q = query.toLowerCase();
   if (!/\b(heure|time|quelle heure|timezone|fuseau)\b/.test(q)) return null;
 
-  let city = "Kinshasa";
+  // Pas de ville par défaut — imposer Kinshasa serait du biais, pas une réponse.
+  let city: string | undefined;
   for (const [alias, name] of Object.entries(CITY_ALIASES)) {
     if (q.includes(alias)) {
       city = name;
       break;
     }
   }
+  if (!city) return null;
 
   const zones: Record<string, string> = {
     Kinshasa: "Africa/Kinshasa",
@@ -282,51 +244,10 @@ function tryWeatherQuery(query: string): string | null {
   for (const [alias, name] of Object.entries(CITY_ALIASES)) {
     if (q.includes(alias)) return name;
   }
-  if (/\b(rdc|congo|kinshasa)\b/.test(q)) return "Kinshasa";
   const m = q.match(/\b(?:meteo|météo|weather)\s+(?:a|à|at|in|de|du)?\s*([a-zàâäéèêëïîôùûüç\s-]{3,})/i);
   if (m?.[1]) return m[1].trim();
-  return "Kinshasa";
-}
-
-function administrativeAnswer(query: string): InstantAnswer | null {
-  const q = query.toLowerCase().normalize("NFD").replace(/\p{M}/gu, "");
-  const asksDistricts = /\b(quartier|quartiers|commune|communes|district|districts|subdivision|subdivisions)\b/.test(q);
-  if (!asksDistricts || !/\bkinshasa\b/.test(q)) return null;
-
-  const asksQuartiers = /\b(quartier|quartiers)\b/.test(q);
-  return {
-    kind: "administrative",
-    title: "Organisation administrative · Kinshasa",
-    lines: asksQuartiers
-      ? [
-          { label: "Structure officielle", value: "4 districts et 24 communes" },
-          { label: "Quartiers", value: "Nombre global non confirmé par une source officielle unique" },
-        ]
-      : [
-          { label: "Districts", value: "4" },
-          { label: "Communes", value: "24" },
-        ],
-    footnote:
-      "Source de référence : Wikipédia, section Géographie / Subdivisions, avec renvoi à la Monographie de la ville de Kinshasa (Ministère du Plan, 2005). AYEBA n'invente pas un total de quartiers non vérifié.",
-  };
-}
-
-function geographyAnswer(query: string): InstantAnswer | null {
-  const q = query.toLowerCase().normalize("NFD").replace(/\p{M}/gu, "");
-  if (!/\b(kilometre|kilometres|km|superficie|surface|distance|largeur|longueur)\b/.test(q)) return null;
-  if (!/\bkinshasa\b/.test(q)) return null;
-
-  return {
-    kind: "geography",
-    title: "Dimensions géographiques · Kinshasa",
-    lines: [
-      { label: "Superficie de la ville-province", value: "9 965 km²" },
-      { label: "Zone urbanisée", value: "environ 860 km²" },
-      { label: "Étendue urbaine est-ouest", value: "environ 18 km le long du fleuve Congo" },
-    ],
-    footnote:
-      "Sources de référence : Wikipédia, article Kinshasa, section Géographie; données citées de la Monographie de la ville de Kinshasa et sources cartographiques. Les distances dépendent du point de départ et du point d’arrivée.",
-  };
+  // Pas de ville détectée → pas de carte : jamais de localité imposée.
+  return null;
 }
 
 function tryUnit(query: string): InstantAnswer | null {
@@ -384,30 +305,11 @@ export async function resolveInstantAnswers(query: string): Promise<InstantAnswe
     });
   }
 
-  const administrative = administrativeAnswer(q);
-  if (administrative) out.push(administrative);
-
-  const geography = geographyAnswer(q);
-  if (geography) out.push(geography);
-
-  const pop = populationAnswer(q);
-  if (pop) {
-    out.push({
-      kind: "population",
-      title: pop.title,
-      lines: [{ label: "Population", value: pop.value }],
-      footnote: pop.footnote,
-    });
-  }
-
   const time = tryTime(q);
   if (time) out.push(time);
 
   const unit = tryUnit(q);
   if (unit) out.push(unit);
-
-  const fuel = tryFuel(q);
-  if (fuel) out.push(fuel);
 
   const weatherCity = tryWeatherQuery(q);
   if (weatherCity) {
@@ -439,22 +341,6 @@ export async function resolveInstantAnswers(query: string): Promise<InstantAnswe
         defaultAmount: "100",
       });
     }
-  }
-
-  if (/\b(prix|carburant|essence|gasoil|station)\b/i.test(q) && !fuel) {
-    out.push({
-      kind: "fuel",
-      title: "Carburants · indicatifs RDC",
-      lines: [
-        { label: "Essence KIN", value: `${fmt(FUEL_INDICATIVE_FC.essence, 0)} FC/L` },
-        { label: "Gasoil KIN", value: `${fmt(FUEL_INDICATIVE_FC.gasoil, 0)} FC/L` },
-        { label: "Gaz 12 kg", value: `${fmt(FUEL_INDICATIVE_FC.gaz12kg, 0)} FC` },
-        { label: "Essence L'shi", value: `${fmt(FUEL_BY_CITY.Lubumbashi.essence, 0)} FC/L` },
-      ],
-      footnote: "Vérifiez sur place · prix varient par station",
-      marketQuoteId: "essence",
-      defaultAmount: "20",
-    });
   }
 
   return out.slice(0, 4);

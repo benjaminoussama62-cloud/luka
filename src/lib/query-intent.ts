@@ -14,6 +14,15 @@ export type SearchIntent =
       wikiQuery: string;
       /** Attribut demandé (« président », « commune », « âge »…) pour la réponse structurée. */
       attr?: string;
+      /** Clé canonique de l'attribut émise par la compréhension LLM —
+       *  indépendante de la langue (« subdivisions_count », « officeholder »). */
+      attrKey?: string;
+      /** Type d'entité attendu émis par le modèle (country/city/person/…). */
+      entityType?: string;
+      /** Traductions anglaises (modèle) — les fonctions Wikidata sont souvent
+       *  libellées en anglais (« Minister of Sports of Guinea »). */
+      attrEn?: string;
+      entityEn?: string;
       /** Question au passé (« qui fut… », « en 1980 ») — le titulaire rendu
        *  par Wikidata est l'ACTUEL ; on le labellise honnêtement. */
       past?: boolean;
@@ -426,9 +435,11 @@ export function normalizeSmsFrench(query: string): string {
     [/\bkel\b/g, "quel"],
     [/\bkelke\b|\bkelque\b/g, "quelque"],
     [/\bkelkun\b|\bkelkin\b/g, "quelqu'un"],
-    [/\bt\b/g, "t'"],
-    // « c » isolé = « se » dans « c trouve », « c situe »… (jamais « c'est » : couvert par c quoi)
-    [/\bc\b/g, "se"],
+    // « t »/« c » isolés = « t' »/« se » — JAMAIS devant une apostrophe :
+    // sans le lookahead, « c'est » devenait « se'est » (fuite jusqu'à la
+    // suggestion affichée à l'utilisateur).
+    [/\bt\b(?!['''])/g, "t'"],
+    [/\bc\b(?!['''])/g, "se"],
   ];
   for (const [re, to] of fixes) s = s.replace(re, to);
   return s;

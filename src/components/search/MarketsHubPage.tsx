@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FUEL_BY_CITY, type MarketQuote } from "@/lib/market";
+import { type MarketQuote } from "@/lib/market";
 import { useMarket } from "@/lib/market-context";
 import { AyebaWordmark } from "@/components/brand/AyebaIcon";
 import { GradientStage } from "@/components/effects/GradientStage";
@@ -30,13 +30,6 @@ function QuoteCard({ q, onOpen }: { q: MarketQuote; onOpen: (id: string) => void
 }
 
 const QUICK_AMOUNTS = ["50", "100", "500", "1000"];
-
-const CITY_FUEL_QUOTE: Record<string, string> = {
-  Kinshasa: "essence",
-  Lubumbashi: "essence-lshi",
-  Goma: "essence-goma",
-  Kisangani: "essence",
-};
 
 export function MarketsHubPage() {
   const { openQuote, payload, loading, refresh } = useMarket();
@@ -128,42 +121,6 @@ export function MarketsHubPage() {
 
           {/* Carburants par ville */}
           <section className="mt-10">
-            <h2 className="ayeba-kicker mb-4">Carburants par ville (indicatif FC)</h2>
-            <div className="ayeba-panel overflow-x-auto">
-              <table className="ayeba-market-table w-full min-w-[480px] text-sm">
-                <thead>
-                  <tr>
-                    <th>Ville</th>
-                    <th>Essence / L</th>
-                    <th>Gasoil / L</th>
-                    <th>Gaz 12 kg</th>
-                    <th />
-                  </tr>
-                </thead>
-                <tbody>
-                  {Object.entries(FUEL_BY_CITY).map(([city, prices]) => (
-                    <tr key={city}>
-                      <td className="font-medium text-white">{city}</td>
-                      <td>{prices.essence.toLocaleString("fr-FR")} FC</td>
-                      <td>{prices.gasoil.toLocaleString("fr-FR")} FC</td>
-                      <td>{prices.gaz12kg.toLocaleString("fr-FR")} FC</td>
-                      <td>
-                        <button
-                          type="button"
-                          className="ayeba-ghost px-2 py-1 text-[10px]"
-                          onClick={() => void openQuote(CITY_FUEL_QUOTE[city] ?? "essence", "10")}
-                        >
-                          10 L
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
-
-          <section className="mt-10">
             <h2 className="ayeba-kicker mb-4">Devises → CDF</h2>
             <div className="ayeba-market-grid">
               {fx.map((q) => (
@@ -172,14 +129,16 @@ export function MarketsHubPage() {
             </div>
           </section>
 
-          <section className="mt-10">
-            <h2 className="ayeba-kicker mb-4">Pompes & gaz</h2>
-            <div className="ayeba-market-grid">
-              {fuel.map((q) => (
-                <QuoteCard key={q.id} q={q} onOpen={(id) => void openQuote(id)} />
-              ))}
-            </div>
-          </section>
+          {fuel.length ? (
+            <section className="mt-10">
+              <h2 className="ayeba-kicker mb-4">Pompes & gaz</h2>
+              <div className="ayeba-market-grid">
+                {fuel.map((q) => (
+                  <QuoteCard key={q.id} q={q} onOpen={(id) => void openQuote(id)} />
+                ))}
+              </div>
+            </section>
+          ) : null}
 
           {crypto.length ? (
             <section className="mt-10">
@@ -204,8 +163,8 @@ export function MarketsHubPage() {
           ) : null}
 
           <p className="ayeba-market-disclaimer mt-12">
-            Prix carburants : indicatifs pump (varient selon station et quartier). Change : sources publiques agrégées.
-            Toujours vérifier au bureau de change ou à la pompe avant transaction.
+            Change et crypto : sources publiques agrégées en direct.
+            Toujours vérifier au bureau de change avant transaction.
           </p>
         </div>
       </div>

@@ -28,90 +28,15 @@ export type MarketPayload = {
   cdfPerUsd: number | null;
 };
 
-export type FuelPrices = {
-  essence: number;
-  gasoil: number;
-  gaz12kg: number;
-};
-
-/** Indicatifs pump (FC) — varient par ville et station */
-export const FUEL_INDICATIVE_FC: FuelPrices = {
-  essence: 3280,
-  gasoil: 3220,
-  gaz12kg: 18600,
-};
-
-export const FUEL_BY_CITY: Record<string, FuelPrices> = {
-  Kinshasa: { essence: 3280, gasoil: 3220, gaz12kg: 18600 },
-  Lubumbashi: { essence: 3310, gasoil: 3250, gaz12kg: 18800 },
-  Goma: { essence: 3350, gasoil: 3280, gaz12kg: 19000 },
-  Kisangani: { essence: 3400, gasoil: 3320, gaz12kg: 19200 },
-};
-
-/** Stable FR formatting (ASCII space) — avoids SSR/client hydration #418 from NBSP. */
-function fmtFixed(n: number): string {
-  return Math.round(n)
-    .toString()
-    .replace(/\B(?=(\d{3})+(?!\d))/g, " ");
-}
-
-/** Indicatif local — toujours utilisable même sans API live */
-const INDICATIVE_USD_CDF = 2850;
-
-/** Fixed timestamp so SSR HTML matches first client paint */
-const FALLBACK_UPDATED_AT = "2026-01-01T00:00:00.000Z";
-
+/** État initial du widget marchés — vide honnête : aucun prix n'est affiché
+ *  tant qu'aucune source réelle n'a répondu. Les prix carburant, commodités
+ *  et le taux indicatif codés en dur ont été supprimés : un chiffre tapé à
+ *  la main présenté comme donnée de marché est de la fabrication. */
 export const MARKET_FALLBACK: MarketPayload = {
-  updatedAt: FALLBACK_UPDATED_AT,
-  source: "indicatif local",
-  cdfPerUsd: INDICATIVE_USD_CDF,
-  quotes: [
-    {
-      id: "usd-cdf",
-      label: "USD/CDF",
-      value: `${fmtFixed(INDICATIVE_USD_CDF)} FC`,
-      changePct: null,
-      unit: "FC",
-      kind: "fx",
-      meta: { base: INDICATIVE_USD_CDF, from: "USD", to: "CDF" },
-    },
-    {
-      id: "eur-cdf",
-      label: "EUR/CDF",
-      value: `${fmtFixed(INDICATIVE_USD_CDF / 0.92)} FC`,
-      changePct: null,
-      unit: "FC",
-      kind: "fx",
-      meta: { base: INDICATIVE_USD_CDF / 0.92, from: "EUR", to: "CDF" },
-    },
-    {
-      id: "essence",
-      label: "Essence KIN",
-      value: `${fmtFixed(FUEL_INDICATIVE_FC.essence)} FC/L`,
-      changePct: null,
-      unit: "FC/L",
-      kind: "fuel",
-      meta: { base: FUEL_INDICATIVE_FC.essence, fuelType: "essence", unitLabel: "litre" },
-    },
-    {
-      id: "gasoil",
-      label: "Gasoil KIN",
-      value: `${fmtFixed(FUEL_INDICATIVE_FC.gasoil)} FC/L`,
-      changePct: null,
-      unit: "FC/L",
-      kind: "fuel",
-      meta: { base: FUEL_INDICATIVE_FC.gasoil, fuelType: "gasoil", unitLabel: "litre" },
-    },
-    {
-      id: "gaz",
-      label: "Gaz 12 kg",
-      value: `${fmtFixed(FUEL_INDICATIVE_FC.gaz12kg)} FC`,
-      changePct: null,
-      unit: "FC",
-      kind: "fuel",
-      meta: { base: FUEL_INDICATIVE_FC.gaz12kg, fuelType: "gaz", unitLabel: "bouteille" },
-    },
-  ],
+  updatedAt: "2026-01-01T00:00:00.000Z",
+  source: "en attente de source",
+  cdfPerUsd: null,
+  quotes: [],
 };
 
 function fmt(n: number, decimals = 2) {
@@ -282,69 +207,6 @@ export async function getMarketData(): Promise<MarketPayload> {
       });
     }
 
-    quotes.push({
-      id: "essence",
-      label: "Essence KIN",
-      value: `${fmt(FUEL_INDICATIVE_FC.essence, 0)} FC/L`,
-      changePct: null,
-      unit: "FC/L",
-      kind: "fuel",
-      meta: {
-        base: FUEL_INDICATIVE_FC.essence,
-        unitLabel: "litre",
-        fuelType: "essence",
-      },
-    });
-
-    quotes.push({
-      id: "gasoil",
-      label: "Gasoil KIN",
-      value: `${fmt(FUEL_INDICATIVE_FC.gasoil, 0)} FC/L`,
-      changePct: null,
-      unit: "FC/L",
-      kind: "fuel",
-      meta: {
-        base: FUEL_INDICATIVE_FC.gasoil,
-        unitLabel: "litre",
-        fuelType: "gasoil",
-      },
-    });
-
-    quotes.push({
-      id: "gaz",
-      label: "Gaz 12 kg",
-      value: `${fmt(FUEL_INDICATIVE_FC.gaz12kg, 0)} FC`,
-      changePct: null,
-      unit: "FC",
-      kind: "fuel",
-      meta: {
-        base: FUEL_INDICATIVE_FC.gaz12kg,
-        unitLabel: "bouteille 12 kg",
-        fuelType: "gaz",
-      },
-    });
-
-    quotes.push(
-      {
-        id: "essence-lshi",
-        label: "Essence L'shi",
-        value: `${fmt(FUEL_BY_CITY.Lubumbashi.essence, 0)} FC/L`,
-        changePct: null,
-        unit: "FC/L",
-        kind: "fuel",
-        meta: { base: FUEL_BY_CITY.Lubumbashi.essence, unitLabel: "litre", fuelType: "essence" },
-      },
-      {
-        id: "essence-goma",
-        label: "Essence Goma",
-        value: `${fmt(FUEL_BY_CITY.Goma.essence, 0)} FC/L`,
-        changePct: null,
-        unit: "FC/L",
-        kind: "fuel",
-        meta: { base: FUEL_BY_CITY.Goma.essence, unitLabel: "litre", fuelType: "essence" },
-      },
-    );
-
     const btc = crypto?.bitcoin;
     const eth = crypto?.ethereum;
     const usdt = crypto?.tether;
@@ -380,40 +242,6 @@ export async function getMarketData(): Promise<MarketPayload> {
       });
     }
 
-    quotes.push(
-      {
-        id: "gold",
-        label: "Or",
-        value: "$2 350/oz",
-        changePct: null,
-        kind: "commodity",
-        meta: { base: 2350, unitLabel: "once", from: "USD" },
-      },
-      {
-        id: "cobalt",
-        label: "Cobalt",
-        value: "$33/kg",
-        changePct: null,
-        kind: "commodity",
-        meta: { base: 33, unitLabel: "kg", from: "USD" },
-      },
-      {
-        id: "cuivre",
-        label: "Cuivre",
-        value: "$4,15/lb",
-        changePct: null,
-        kind: "commodity",
-        meta: { base: 4.15, unitLabel: "lb", from: "USD" },
-      },
-      {
-        id: "brent",
-        label: "Pétrole Brent",
-        value: "$82/bbl",
-        changePct: null,
-        kind: "commodity",
-        meta: { base: 82, unitLabel: "baril", from: "USD" },
-      },
-    );
   } catch {
     source = "offline";
     return { ...MARKET_FALLBACK, updatedAt: new Date().toISOString(), source };

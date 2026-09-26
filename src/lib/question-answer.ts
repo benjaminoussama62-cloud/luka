@@ -11,6 +11,7 @@ import {
   getClaims,
   getClaimsFor,
   searchEntity,
+  searchPositionEntity,
 } from "./wikidata";
 
 /**
@@ -149,6 +150,16 @@ type QuestionIntentLike = {
   subject: string;
   wikiQuery: string;
   attr?: string;
+  /** Clé canonique émise par la compréhension LLM — la voie principale,
+   *  indépendante de la langue. */
+  attrKey?: string;
+  /** Type d'entité attendu (country/city/person/…) — borne la
+   *  désambiguïsation Wikidata. */
+  entityType?: string;
+  /** Traductions anglaises émises par le modèle — pour chercher les fonctions
+   *  Wikidata libellées en anglais (« Minister of Foreign Affairs of Russia »). */
+  attrEn?: string;
+  entityEn?: string;
   past?: boolean;
 };
 
@@ -166,6 +177,9 @@ type AttrSpec = {
   /** Libellé par propriété — P35 = « Président » mais P6 = « Premier
    *  ministre » ; une valeur P6 ne doit pas être affichée « Président ». */
   propLabels?: Record<string, string>;
+  /** La réponse = le NOMBRE de valeurs (« combien de provinces » → P150
+   *  comptées) + échantillon de noms réels. */
+  count?: boolean;
 };
 
 const ATTR_PROPS: (AttrSpec & { re: RegExp })[] = [
@@ -253,8 +267,105 @@ const ATTR_PROPS: (AttrSpec & { re: RegExp })[] = [
   { re: /site (officiel|web)|website|official site|url/i, props: ["P856"], label: "Site officiel" },
   { re: /duree|dure|duration|long/i, props: ["P2047"], label: "Durée" },
   { re: /effectif|membres|employes|employees|staff/i, props: ["P1128", "P1083"], label: "Effectif" },
+  // « combien de provinces/régions » → P150 comptées (vrai dénombrement
+  // Wikidata, pas une liste déguisée en chiffre).
+  {
+    re: /provinces?|régions?|regions?|états? fédérés?|etats? federes?|subdivisions?|circonscriptions?|comtés?|comtes?|préfectures?|prefectures?|oblasts?|wilayas?|cantons?|départements?|departements?|districts?|chefs-lieux/i,
+    props: ["P150"],
+    label: "Subdivisions",
+    count: true,
+  },
   { re: /ville|commune|quartier|province|etat|region|departement|district|localite|arrondissement/i, props: ["P159", "P131", "P276", "P17"], label: "Localisation" },
 ];
+
+/** Lookup par CLÉ CANONIQUE — émise par la compréhension LLM, identique dans
+ *  toutes les langues. La table regex ATTR_PROPS n'est plus que le filet de
+ *  secours quand le modèle est absent (pas de clé / timeout). */
+const PROP_BY_KEY: Record<string, AttrSpec> = {
+  // — territoire —
+  capital: { props: ["P36"], label: "Capitale" },
+  currency: { props: ["P38"], label: "Monnaie" },
+  official_language: { props: ["P37"], label: "Langue officielle" },
+  spoken_language: { props: ["P1412", "P37"], label: "Langue(s)" },
+  population: { props: ["P1082"], label: "Population" },
+  area: { props: ["P2046"], label: "Superficie" },
+  density: { props: ["P2225"], label: "Densité" },
+  country: { props: ["P17"], label: "Pays" },
+  continent: { props: ["P30"], label: "Continent" },
+  anthem: { props: ["P85"], label: "Hymne" },
+  flag: { props: ["P41"], label: "Drapeau" },
+  elevation: { props: ["P2044"], label: "Altitude" },
+  river: { props: ["P206"], label: "Fleuve / cours d'eau" },
+  river_mouth: { props: ["P403"], label: "Embouchure" },
+  airport: { props: ["P239", "P238"], label: "Aéroport (ICAO/IATA)" },
+  calling_code: { props: ["P474"], label: "Indicatif" },
+  timezone: { props: ["P421"], label: "Fuseau horaire" },
+  demonym: { props: ["P1549"], label: "Gentilé" },
+  iso_code: { props: ["P297"], label: "Code ISO" },
+  tld: { props: ["P78"], label: "Domaine national" },
+  postal_code: { props: ["P281"], label: "Code postal" },
+  subdivisions_count: { props: ["P150"], label: "Subdivisions", count: true },
+  location: { props: ["P159", "P131", "P276", "P17"], label: "Localisation" },
+  // — gouvernance —
+  head_of_state: {
+    props: ["P35", "P6"],
+    label: "Président",
+    propLabels: { P35: "Président", P6: "Premier ministre" },
+  },
+  head_of_government: { props: ["P6"], label: "Premier ministre" },
+  monarch: { props: ["P35"], label: "Chef de l'État" },
+  first_lady: {
+    props: ["P35"],
+    label: "Première dame",
+    hop: { props: ["P26"], label: "Première dame" },
+  },
+  mayor: { props: ["P6"], label: "Maire" },
+  governor: { props: ["P6"], label: "Gouverneur" },
+  /** « ministre de X » : pas de propriété directe sur le pays — la fonction
+   *  est une entité, le titulaire est sa revendication P1308 (saut dédié). */
+  officeholder: { props: [], label: "Titulaire" },
+  // — organisation / œuvre —
+  founder: { props: ["P112"], label: "Fondateur" },
+  ceo: { props: ["P169"], label: "Direction" },
+  headquarters: { props: ["P159"], label: "Siège" },
+  creator: { props: ["P170", "P61", "P287"], label: "Créateur" },
+  author: { props: ["P50"], label: "Auteur" },
+  composer: { props: ["P86"], label: "Compositeur" },
+  director: { props: ["P57"], label: "Réalisateur" },
+  performer: { props: ["P175"], label: "Interprète" },
+  owner: { props: ["P127"], label: "Propriétaire" },
+  parent_org: { props: ["P749", "P355"], label: "Groupe" },
+  employees: { props: ["P1128", "P1083"], label: "Effectif" },
+  website: { props: ["P856"], label: "Site officiel" },
+  inception: {
+    props: ["P571"],
+    fallback: { props: ["P1249"], label: "Première mention" },
+    label: "Fondation",
+  },
+  dissolution: { props: ["P576"], label: "Dissolution" },
+  duration: { props: ["P2047"], label: "Durée" },
+  // — personne —
+  birth_date: { props: ["P569"], label: "Naissance" },
+  death_date: { props: ["P570"], label: "Décès" },
+  age: { props: ["P569"], label: "Âge", age: true },
+  spouse: { props: ["P26"], label: "Conjoint" },
+  mother: { props: ["P25"], label: "Mère" },
+  father: { props: ["P22"], label: "Père" },
+  siblings: { props: ["P3373"], label: "Frère(s)/sœur(s)" },
+  children: { props: ["P40"], label: "Enfant(s)" },
+  nationality: { props: ["P27"], label: "Nationalité" },
+  height: { props: ["P2048"], label: "Taille" },
+  weight: { props: ["P2067"], label: "Poids" },
+  religion: { props: ["P140"], label: "Religion" },
+  party: { props: ["P102"], label: "Parti politique" },
+  team: { props: ["P54"], label: "Équipe" },
+  awards: { props: ["P166"], label: "Distinctions" },
+  education: { props: ["P69"], label: "Études" },
+  occupation: { props: ["P106"], label: "Occupation" },
+  position_held: { props: ["P39"], label: "Fonction" },
+  net_worth: { props: ["P2218"], label: "Fortune estimée" },
+  notable_work: { props: ["P800"], label: "Œuvre notable" },
+};
 
 /** Fiche courte pour les questions sans attribut mappé. */
 const FICHE: { label: string; props: string[] }[] = [
@@ -320,9 +431,16 @@ const WHEN_ATTR_PROPS: Record<string, { props: string[]; label: string; fallback
   naissance: { props: ["P569"], label: "Naissance" },
 };
 
-function attrProps(qtype: QuestionType, attr?: string): AttrSpec | null {
+function attrProps(qtype: QuestionType, attr?: string, attrKey?: string): AttrSpec | null {
+  // Clé canonique du modèle — la voie principale, toutes langues confondues.
+  if (attrKey && PROP_BY_KEY[attrKey]) {
+    const s = PROP_BY_KEY[attrKey];
+    return s.props.length ? s : null; // officeholder : résolu par le saut P1308
+  }
   if (attr) {
-    const hit = ATTR_PROPS.find((a) => a.re.test(attr));
+    // Filet règles (modèle absent) : « count » n'est recevable que pour
+    // « combien » — « dans quelle province » cherche une localisation.
+    const hit = ATTR_PROPS.find((a) => a.re.test(attr) && (!a.count || qtype === "howmany"));
     if (hit) return hit;
     if (qtype === "when" && WHEN_ATTR_PROPS[attr]) return WHEN_ATTR_PROPS[attr];
     // Attribut demandé mais non mappé → pas de défaut trompeur
@@ -349,6 +467,20 @@ export type QuestionAnswerBundle = {
 const PERSON_DESC =
   /homme|femme|personnalit|politicien|homme d[''']etat|femme d[''']etat|acteur|actrice|chanteur|chanteuse|joueur|joueuse|ecrivain|ecrivaine|scientifique|philosophe|artiste|musicien|militaire|footballeur|athlete|journaliste|realisateur|entrepreneur|politician|actor|singer|writer|player|scientist|president|minister|statesman|stateswoman|monarch|king|queen|sovereign|businessperson|model|comedian|boxer|wrestler|racer|driver|pilot|chef|cook|composer|painter|sculptor|architect|engineer|inventor|explorer|activist|lawyer|judge|historian|economist|mathematician|physicist|chemist|biologist|physician|doctor|professor|teacher|poet|novelist|essayist|screenwriter|director|producer|presenter|host|comedian|humorist|cartoonist|photographer|designer|fashion/i;
 
+/** Description Wikidata d'une entité GÉO/politique — le type attendu quand
+ *  l'attribut vise un territoire (« provinces », « capitale », « monnaie »).
+ *  Sans ce garde-fou, « MALI » (musée de Lima) gagnait contre le pays. */
+const GEO_DESC =
+  /pays|état|state|country|nation|république|territoire|province|région|region|commune|ville|city|district|département|departement|souverain|empire|royaume|continent|île|island|fleuve|river|lac|lake|montagne|mountain|forêt|forest|océan|ocean|mer\b|sea\b/i;
+
+/** L'attribut exige une entité territoriale (« provinces du Mali »). */
+function expectsGeoEntity(attr?: string): boolean {
+  return !!attr &&
+    /capitale|monnaie|devise|langue|habitant|population|province|région|region|département|departement|subdivision|superficie|drapeau|hymne|indicatif|fuseau|gentile|iso|domaine|tld|continent|président|president|premier|dirigeant|roi|reine|monarque|empereur|ministre|gouverneur|maire|parlement|sénat|senat|drapeau/i.test(
+      attr,
+    );
+}
+
 export async function answerQuestion(intent: QuestionIntentLike): Promise<QuestionAnswerBundle | undefined> {
   // Questions sur des personnes → préférer l'entité « personne » en cas d'homonymie
   // (« poutine » → Vladimir Poutine, pas le plat québécois).
@@ -365,12 +497,27 @@ export async function answerQuestion(intent: QuestionIntentLike): Promise<Questi
   // le titre Wikipedia résoudrait « Président de la RDC » (la fonction).
   // Wiki et entité en parallèle — chaque appel coûte ~1s, en série la réponse
   // dépasserait le budget temps de la SERP.
-  const preferDesc = personHint ? PERSON_DESC : undefined;
+  const preferDesc = personHint || intent.entityType === "person" ? PERSON_DESC : undefined;
   // Attribut mappé → la propriété exigée élimine les homonymes qui ne
   // peuvent pas répondre (« Chine » civilisation n'a pas de P35 →
   // « dirigeant chinois » choisit la RPC). Désambiguïsation par le SENS,
   // comme le Knowledge Graph.
-  const earlySpec = intent.attr != null ? attrProps(intent.qtype, intent.attr) : null;
+  const earlySpec =
+    intent.attr != null || intent.attrKey
+      ? attrProps(intent.qtype, intent.attr, intent.attrKey)
+      : null;
+  // Type d'entité attendu : le modèle le déclare (toutes langues) — sinon
+  // l'attribut le suggère (filet règles). « provinces du Mali » exige un
+  // territoire : le musée « MALI » ne peut pas gagner.
+  const expectDesc =
+    intent.entityType === "country" ||
+    intent.entityType === "city" ||
+    intent.entityType === "region" ||
+    intent.entityType === "place"
+      ? GEO_DESC
+      : expectsGeoEntity(intent.attr) || intent.attrKey === "officeholder"
+        ? GEO_DESC
+        : undefined;
   const requireProp =
     intent.attr && /mort|deces|sepulture|died|death/.test(intent.attr) && !/naissance|ne\b/.test(intent.attr)
       ? "P570"
@@ -381,12 +528,14 @@ export async function answerQuestion(intent: QuestionIntentLike): Promise<Questi
     intent.qtype === "which" || intent.qtype === "where" || intent.qtype === "howmany";
   const [wiki, directEntity] = await Promise.all([
     fetchWikiAnswer(intent.wikiQuery),
-    attrIntent ? searchEntity(intent.subject, preferDesc, requireProp) : Promise.resolve(undefined),
+    attrIntent
+      ? searchEntity(intent.subject, preferDesc, requireProp, expectDesc)
+      : Promise.resolve(undefined),
   ]);
   const entity =
     directEntity ??
-    (wiki ? await searchEntity(wiki.title, preferDesc, requireProp) : undefined) ??
-    (await searchEntity(intent.subject, preferDesc, requireProp));
+    (wiki ? await searchEntity(wiki.title, preferDesc, requireProp, expectDesc) : undefined) ??
+    (await searchEntity(intent.subject, preferDesc, requireProp, expectDesc));
 
   let lines: { label: string; value: string }[] = [];
   // Le libellé d'entité prime (« République démocratique du Congo ») — le titre
@@ -395,6 +544,17 @@ export async function answerQuestion(intent: QuestionIntentLike): Promise<Questi
   let structuredSource: string | undefined;
   let panelImage: string | undefined = wiki?.image;
   let panelFacts: { label: string; value: string }[] = [];
+
+  // « ministre des sports de X » — question de FONCTION : le titulaire est la
+  // revendication P1308 d'une entité-position (« Minister of Sports of
+  // Guinea »). Déclenché par la clé canonique (toutes langues) ou par le
+  // filet règles sur le libellé. Hors du bloc claims : le dump d'un pays
+  // (~10 Mo) peut échouer alors que la fonction, elle, répond.
+  const officeholderAsked =
+    intent.attrKey === "officeholder" ||
+    (intent.attr != null &&
+      /ministre|gouverneur|ambassadeur|secrétaire|secretaire|préfet|prefet|recteur/i.test(intent.attr) &&
+      !/premier/i.test(intent.attr));
 
   // Extraction depuis l'extrait réel — pour les attrs sans propriété Wikidata
   // (« fondé en 1982 par Étienne Tshisekedi », « anciennement Léopoldville »).
@@ -431,7 +591,7 @@ export async function answerQuestion(intent: QuestionIntentLike): Promise<Questi
   };
 
   if (entity) {
-    const spec = attrProps(intent.qtype, intent.attr);
+    const spec = attrProps(intent.qtype, intent.attr, intent.attrKey);
     // Uniquement les propriétés nécessaires : le dump complet d'une entité
     // pays pèse ~10 Mo et expire sous la latence réseau (réponses absentes ou
     // aléatoires en prod). wbgetclaims renvoie de petites réponses en parallèle.
@@ -454,6 +614,19 @@ export async function answerQuestion(intent: QuestionIntentLike): Promise<Questi
               lines = [{ label: spec.hop.label, value: hv.join(" · ") }];
               structuredSource = entityUrl(entity.id);
             }
+          }
+        }
+        if (!lines.length && spec.count) {
+          // « combien de provinces » → dénombrement réel des P150 + exemples
+          // de noms résolus. Jamais un chiffre inventé.
+          const ids = claimEntityIds(claims, spec.props);
+          if (ids.length) {
+            const sample = (await claimValues(claims, spec.props, { max: 4 })) ?? [];
+            const value = sample.length
+              ? `${ids.length} — ${sample.join(", ")}…`
+              : String(ids.length);
+            lines = [{ label: spec.label, value }];
+            structuredSource = entityUrl(entity.id);
           }
         }
         if (!lines.length) {
@@ -495,7 +668,7 @@ export async function answerQuestion(intent: QuestionIntentLike): Promise<Questi
         }
       }
       // « qui est X » — fiche enrichie : naissance, nationalité, occupation réelles.
-      if (intent.qtype === "who" && !lines.length) {
+      if (intent.qtype === "who" && !lines.length && !officeholderAsked) {
         const m = await batchClaimValues(claims, [
           { key: "Naissance", props: ["P569"], max: 1 },
           { key: "Décès", props: ["P570"], max: 1 },
@@ -526,10 +699,10 @@ export async function answerQuestion(intent: QuestionIntentLike): Promise<Questi
       // Extraction réelle avant la fiche (« ancien nom », « fondé par »…).
       if (!lines.length) lines = wikiExtraction();
       // Attribut RECONNU mais sans revendication (« maire de Kinshasa » sans
-      // P6) → pas de fiche générique : afficher « Fondation : 1881 » à une
-      // question « maire » est trompeur. La fiche reste le plan B des attrs
-      // non mappés — comme la carte Knowledge Panel de Google.
-      const attrMiss = spec != null && !lines.length;
+      // P6, « ministre des sports » sans P1308) → pas de fiche générique :
+      // afficher « Fondation : 1881 » ou la fiche d'identité du pays à une
+      // question de fonction est trompeur.
+      const attrMiss = (spec != null || officeholderAsked) && !lines.length;
       if (!lines.length && intent.qtype !== "who" && !attrMiss) {
         const m = await batchClaimValues(
           claims,
@@ -552,6 +725,25 @@ export async function answerQuestion(intent: QuestionIntentLike): Promise<Questi
     }
   }
 
+  // Le saut fonction→titulaire ne dépend pas des claims du pays — il tourne
+  // même si le dump Wikidata de l'entité a échoué ou si l'entité manque.
+  if (!lines.length && officeholderAsked && (intent.attr || intent.attrEn)) {
+    const ctx = intent.entityEn || entityName;
+    const posQueries = [intent.attrEn, intent.attr].filter((x): x is string => Boolean(x));
+    for (const pq of posQueries) {
+      const pos = await searchPositionEntity(pq, ctx);
+      if (!pos) continue;
+      const pc = await getClaimsFor(pos.id, ["P1308"]);
+      const hv = pc ? await claimValues(pc, ["P1308"], { max: 2 }) : undefined;
+      if (hv?.length) {
+        const lbl = intent.attr || intent.attrEn || "Titulaire";
+        lines = [{ label: lbl[0].toUpperCase() + lbl.slice(1), value: hv.join(" · ") }];
+        structuredSource = entityUrl(pos.id);
+        break;
+      }
+    }
+  }
+
   // Même extraction quand l'entité ou les claims manquent (wiki seul).
   if (!lines.length) lines = wikiExtraction();
   if (!lines.length && wiki) {
@@ -564,7 +756,7 @@ export async function answerQuestion(intent: QuestionIntentLike): Promise<Questi
 
   const headline = lines[0];
   const sources = [
-    structuredSource ? `Wikidata (${entity!.id})` : null,
+    structuredSource ? `Wikidata${entity ? ` (${entity.id})` : ""}` : null,
     wiki ? `Wikipédia ${wiki.lang.toUpperCase()}` : null,
   ]
     .filter(Boolean)
