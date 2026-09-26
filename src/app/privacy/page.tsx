@@ -12,7 +12,7 @@ export default function PrivacyPage() {
   return (
     <LegalDocumentShell
       title="Politique de confidentialité"
-      subtitle="La présente politique explique quelles catégories de données Ayeba traite, pour quelles finalités, pendant combien de temps, avec qui elles peuvent être partagées, et quels droits vous pouvez exercer. Elle s’applique au site ayeba.app et aux services associés (recherche, compte, Ayebi, Studio, identité pour applications autorisées)."
+      subtitle="La présente politique explique quelles catégories de données Ayeba traite, pour quelles finalités, pendant combien de temps, avec qui elles peuvent être partagées, et quels droits vous pouvez exercer. Elle s’applique au site ayeba.app et aux services associés (recherche, compte, Ayeba Mail, Ayebi, Studio, identité pour applications autorisées)."
       updated="Dernière mise à jour · 29 août 2026"
     >
       <LegalSection title="1. Responsable du traitement">
@@ -96,7 +96,26 @@ export default function PrivacyPage() {
         </p>
       </LegalSection>
 
-      <LegalSection title="5. « Se connecter avec Ayeba »">
+      <LegalSection title="5. Ayeba Mail">
+        <p>
+          Le service Ayeba Mail traite les données nécessaires à la fourniture d’une boîte de
+          réception : adresse attribuée, messages envoyés et reçus (expéditeurs, destinataires,
+          objets, contenus et pièces jointes), dossiers et préférences de messagerie. Ces données
+          sont stockées pour délivrer, afficher et conserver vos messages jusqu’à leur suppression
+          par vos soins ou la fermeture du compte.
+        </p>
+        <p>
+          Le contenu des messages n’est pas lu à des fins publicitaires et ne sert pas à établir un
+          profil commercial. Des traitements automatisés limités peuvent s’appliquer pour la
+          sécurité du service (anti-abus, anti-spam, intégrité technique).
+        </p>
+        <p>
+          La suppression d’un message ou du compte entraîne la suppression des données associées
+          selon les délais techniques d’exploitation, sauf obligation légale ou litige en cours.
+        </p>
+      </LegalSection>
+
+      <LegalSection title="6. « Se connecter avec Ayeba »">
         <p>
           Si vous autorisez une application à utiliser votre compte Ayeba, celle-ci reçoit
           uniquement les informations correspondant aux permissions que vous avez acceptées sur
@@ -117,7 +136,7 @@ export default function PrivacyPage() {
         </p>
       </LegalSection>
 
-      <LegalSection title="6. Indexation web et contenus publics">
+      <LegalSection title="7. Indexation web et contenus publics">
         <p>
           Ayeba explore et indexe des pages publiquement accessibles, dans le respect des
           directives robots et des bonnes pratiques d’exploration. Les extraits affichés dans les
@@ -131,7 +150,7 @@ export default function PrivacyPage() {
         </p>
       </LegalSection>
 
-      <LegalSection title="7. Cookies et stockage local">
+      <LegalSection title="8. Cookies et stockage local">
         <p>
           Outre le cookie de session, Ayeba peut mémoriser localement des préférences (langue,
           marché, options d’interface) afin d’éviter de vous les redemander à chaque visite. Vous
@@ -144,7 +163,7 @@ export default function PrivacyPage() {
         </p>
       </LegalSection>
 
-      <LegalSection title="8. Destinataires et sous-traitants">
+      <LegalSection title="9. Destinataires et sous-traitants">
         <p>
           Les données peuvent être traitées par des prestataires techniques nécessaires à
           l’hébergement, au stockage, à l’envoi d’e-mails de service ou à la sécurité. Ces
@@ -158,7 +177,7 @@ export default function PrivacyPage() {
         </p>
       </LegalSection>
 
-      <LegalSection title="9. Transferts et localisation">
+      <LegalSection title="10. Transferts et localisation">
         <p>
           Selon l’architecture d’hébergement, certaines données peuvent être traitées dans des
           infrastructures situées hors de votre pays de résidence. Dans ce cas, Ayeba s’attache à
@@ -171,7 +190,7 @@ export default function PrivacyPage() {
         </p>
       </LegalSection>
 
-      <LegalSection title="10. Vos droits">
+      <LegalSection title="11. Vos droits">
         <p>
           Vous disposez notamment des droits d’accès, de rectification, d’effacement, de
           limitation, d’opposition et de portabilité, dans les conditions prévues par la
@@ -192,7 +211,7 @@ export default function PrivacyPage() {
         </p>
       </LegalSection>
 
-      <LegalSection title="11. Sécurité">
+      <LegalSection title="12. Sécurité">
         <p>
           Ayeba met en œuvre des mesures techniques et organisationnelles destinées à protéger les
           comptes et les données contre l’accès non autorisé, la perte accidentelle ou
@@ -214,7 +233,7 @@ export default function PrivacyPage() {
         </p>
       </LegalSection>
 
-      <LegalSection title="12. Conservation">
+      <LegalSection title="13. Conservation">
         <p>
           Les données de compte sont conservées tant que le compte est actif, puis pendant une
           durée limitée après clôture si une obligation ou un intérêt légitime de conservation
