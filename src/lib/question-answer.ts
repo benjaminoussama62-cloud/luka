@@ -3,11 +3,13 @@ import type { FeaturedSnippet, InstantAnswer, KnowledgePanel } from "./types";
 import type { QuestionType } from "./query-intent";
 import {
   batchClaimValues,
+  claimEntityIds,
   claimValue,
   claimValues,
   entityImage,
   entityUrl,
   getClaims,
+  getClaimsFor,
   searchEntity,
 } from "./wikidata";
 
@@ -147,12 +149,24 @@ type QuestionIntentLike = {
   subject: string;
   wikiQuery: string;
   attr?: string;
+  past?: boolean;
 };
 
 /** Attribut demandé → propriété(s) Wikidata. Couverture large FR/EN.
  *  Ordre significatif : les expressions composées (« lieu de mort ») avant les
  *  mots simples (« mort ») qui leur sont inclus. */
-type AttrSpec = { props: string[]; label: string; age?: boolean; fallback?: { props: string[]; label: string } };
+type AttrSpec = {
+  props: string[];
+  label: string;
+  age?: boolean;
+  fallback?: { props: string[]; label: string };
+  /** Deuxième saut dans le graphe : « première dame » = conjoint (P26)
+   *  du titulaire de la fonction (P35 du pays). */
+  hop?: { props: string[]; label: string };
+  /** Libellé par propriété — P35 = « Président » mais P6 = « Premier
+   *  ministre » ; une valeur P6 ne doit pas être affichée « Président ». */
+  propLabels?: Record<string, string>;
+};
 
 const ATTR_PROPS: (AttrSpec & { re: RegExp })[] = [
   // — composés d'abord —
@@ -160,14 +174,26 @@ const ATTR_PROPS: (AttrSpec & { re: RegExp })[] = [
   { re: /lieu de (mort|deces)|death place|ou est mort/i, props: ["P20"], label: "Lieu de décès" },
   { re: /cause de (mort|deces)|comment est mort|de quoi est mort|cause of death/i, props: ["P509"], label: "Cause du décès" },
   { re: /lieu de sepulture|inhume|enterre|buried|resting place|tombe/i, props: ["P119"], label: "Sépulture" },
-  { re: /premier ministre|prime minister|chef du gouvernement|head of government/i, props: ["P6"], label: "Premier ministre" },
+  { re: /premiers?[- ]?ministres?|prime ministers?|chefs? du gouvernement|heads? of government/i, props: ["P6"], label: "Premier ministre" },
   { re: /date de naissance|quand est ne|date of birth/i, props: ["P569"], label: "Naissance" },
   { re: /date de (mort|deces)|quand est mort|date of death/i, props: ["P570"], label: "Décès" },
   { re: /langue officielle|official language/i, props: ["P37"], label: "Langue officielle" },
   { re: /langues? parlees?|parle quelle langue|languages spoken/i, props: ["P1412", "P37"], label: "Langue(s)" },
   // — dirigeants & organisation —
-  { re: /president|chef d[''']?etat|chef de l[''']?etat|head of state|dirigeant/i, props: ["P35", "P6"], label: "Président" },
-  { re: /roi|reine|monarque|king|queen/i, props: ["P35"], label: "Chef de l'État" },
+  {
+    re: /president|chef d[''']?etat|chef de l[''']?etat|head of state|dirigeant|dirigeante|leader/i,
+    props: ["P35", "P6"],
+    label: "Président",
+    propLabels: { P35: "Président", P6: "Premier ministre" },
+  },
+  { re: /roi|reine|monarque|king|queen|empereur|imperatrice|souverain|souveraine|tsar|sultan|chah|emir|khan|pape|pontife|pope/i, props: ["P35"], label: "Chef de l'État" },
+  {
+    // « première dame de X » = conjoint(e) du chef d'État — 2 sauts.
+    re: /premieres? dames?|first lad(?:y|ies)|epouse du president|epoux de la presidente/i,
+    props: ["P35"],
+    label: "Première dame",
+    hop: { props: ["P26"], label: "Première dame" },
+  },
   { re: /maire|mayor|bourgmestre/i, props: ["P6"], label: "Maire" },
   { re: /fondateur|fondatrice|founder|cofondateur|fonde/i, props: ["P112"], label: "Fondateur" },
   { re: /pdg|ceo|directeur general|directrice|chief executive|patron/i, props: ["P169"], label: "Direction" },
@@ -321,7 +347,7 @@ export type QuestionAnswerBundle = {
  * La carte affiche la VALEUR (« Félix Tshisekedi »), pas juste un paragraphe.
  */
 const PERSON_DESC =
-  /homme|femme|personnalit|politicien|homme d[''']etat|femme d[''']etat|acteur|actrice|chanteur|chanteuse|joueur|joueuse|ecrivain|ecrivaine|scientifique|philosophe|artiste|musicien|militaire|footballeur|athlete|journaliste|realisateur|entrepreneur|politician|actor|singer|writer|player|scientist/i;
+  /homme|femme|personnalit|politicien|homme d[''']etat|femme d[''']etat|acteur|actrice|chanteur|chanteuse|joueur|joueuse|ecrivain|ecrivaine|scientifique|philosophe|artiste|musicien|militaire|footballeur|athlete|journaliste|realisateur|entrepreneur|politician|actor|singer|writer|player|scientist|president|minister|statesman|stateswoman|monarch|king|queen|sovereign|businessperson|model|comedian|boxer|wrestler|racer|driver|pilot|chef|cook|composer|painter|sculptor|architect|engineer|inventor|explorer|activist|lawyer|judge|historian|economist|mathematician|physicist|chemist|biologist|physician|doctor|professor|teacher|poet|novelist|essayist|screenwriter|director|producer|presenter|host|comedian|humorist|cartoonist|photographer|designer|fashion/i;
 
 export async function answerQuestion(intent: QuestionIntentLike): Promise<QuestionAnswerBundle | undefined> {
   // Questions sur des personnes → préférer l'entité « personne » en cas d'homonymie
@@ -330,7 +356,7 @@ export async function answerQuestion(intent: QuestionIntentLike): Promise<Questi
     intent.qtype === "who" ||
     (intent.qtype === "when" && (intent.attr === "naissance" || intent.attr === "mort")) ||
     (intent.attr != null &&
-      /epouse|epoux|conjoint|mere|pere|enfant|frere|soeur|age|taille|poids|nationalite|naissance|lieu de (mort|naissance|sepulture)|cause de mort|equipe|parti|prix|religion|fortune|etude/.test(
+      /epouse|epoux|\bfemme\b|\bmari\b|conjoint|mere|pere|fils|fille|enfant|frere|soeur|age|taille|poids|nationalite|naissance|lieu de (mort|naissance|sepulture)|cause de mort|equipe|parti|prix|religion|fortune|etude/.test(
         intent.attr,
       ));
   // La résolution Wikipedia désambiguïse les sujets ambigus (« poutine » →
@@ -340,15 +366,17 @@ export async function answerQuestion(intent: QuestionIntentLike): Promise<Questi
   // Wiki et entité en parallèle — chaque appel coûte ~1s, en série la réponse
   // dépasserait le budget temps de la SERP.
   const preferDesc = personHint ? PERSON_DESC : undefined;
-  // Contrainte sémantique de désambiguïsation : une question « mort » exige une
-  // entité morte (P570), « naissance » une entité née (P569) — un footballeur
-  // homonyme vivant ne peut pas répondre « où est mort khadafi ».
+  // Attribut mappé → la propriété exigée élimine les homonymes qui ne
+  // peuvent pas répondre (« Chine » civilisation n'a pas de P35 →
+  // « dirigeant chinois » choisit la RPC). Désambiguïsation par le SENS,
+  // comme le Knowledge Graph.
+  const earlySpec = intent.attr != null ? attrProps(intent.qtype, intent.attr) : null;
   const requireProp =
     intent.attr && /mort|deces|sepulture|died|death/.test(intent.attr) && !/naissance|ne\b/.test(intent.attr)
       ? "P570"
       : intent.attr && /naissance|\bnee?\b|birth|age/.test(intent.attr)
         ? "P569"
-        : undefined;
+        : earlySpec?.props[0];
   const attrIntent =
     intent.qtype === "which" || intent.qtype === "where" || intent.qtype === "howmany";
   const [wiki, directEntity] = await Promise.all([
@@ -403,24 +431,66 @@ export async function answerQuestion(intent: QuestionIntentLike): Promise<Questi
   };
 
   if (entity) {
+    const spec = attrProps(intent.qtype, intent.attr);
+    // Uniquement les propriétés nécessaires : le dump complet d'une entité
+    // pays pèse ~10 Mo et expire sous la latence réseau (réponses absentes ou
+    // aléatoires en prod). wbgetclaims renvoie de petites réponses en parallèle.
+    // Un seul appel pour toutes les revendications : ~35 petites requêtes
+    // par question faisaient throttler l'IP chez Wikidata (falaise de
+    // réponses après quelques questions). Un appel unique, même lourd, est
+    // plus fiable et caché côté Vercel (revalidate).
     const claims = await getClaims(entity.id);
     if (claims) {
       panelImage ??= await entityImage(claims);
-      const spec = attrProps(intent.qtype, intent.attr);
       if (spec) {
-        const values = spec.age
-          ? await claimValues(claims, spec.props, { age: true, max: 1 })
-          : await claimValues(claims, spec.props, { max: 3 });
-        if (values?.length) {
-          lines = [{ label: spec.label, value: values.join(" · ") }];
-          structuredSource = entityUrl(entity.id);
-        } else if (spec.fallback) {
-          // « fondation » d'une ville sans P571 → première mention écrite (P1249),
-          // labellisée honnêtement (« Minsk : Première mention 1067 »).
-          const fv = await claimValues(claims, spec.fallback.props, { max: 3 });
-          if (fv?.length) {
-            lines = [{ label: spec.fallback.label, value: fv.join(" · ") }];
+        if (spec.hop) {
+          // Deuxième saut (« première dame » → conjoint du titulaire P35) :
+          // on lit l'id d'entité du poste puis sa revendication P26.
+          const holderId = claimEntityIds(claims, spec.props)[0];
+          if (holderId) {
+            const hc = await getClaimsFor(holderId, spec.hop.props);
+            const hv = hc ? await claimValues(hc, spec.hop.props, { max: 2 }) : undefined;
+            if (hv?.length) {
+              lines = [{ label: spec.hop.label, value: hv.join(" · ") }];
+              structuredSource = entityUrl(entity.id);
+            }
+          }
+        }
+        if (!lines.length) {
+          // Itère les propriétés dans l'ordre — la valeur P6 affiche
+          // « Premier ministre », pas « Président ».
+          let propLabel = spec.label;
+          let values: string[] | undefined;
+          for (const p of spec.props) {
+            values = spec.age
+              ? await claimValues(claims, [p], { age: true, max: 1 })
+              : await claimValues(claims, [p], { max: 3 });
+            if (values?.length) {
+              propLabel = spec.propLabels?.[p] ?? spec.label;
+              break;
+            }
+          }
+          if (values?.length) {
+            // « qui fut/était… » → Wikidata rend le titulaire ACTUEL ; on le
+            // dit honnêtement (« Président (actuel) ») plutôt que de prétendre
+            // répondre à une question historique.
+            const label =
+              intent.past &&
+              /president|premier ministre|chef de l|maire|dirigeant|pape|premiere dame/i.test(
+                propLabel,
+              )
+                ? `${propLabel} (actuel)`
+                : propLabel;
+            lines = [{ label, value: values.join(" · ") }];
             structuredSource = entityUrl(entity.id);
+          } else if (spec.fallback) {
+            // « fondation » d'une ville sans P571 → première mention écrite (P1249),
+            // labellisée honnêtement (« Minsk : Première mention 1067 »).
+            const fv = await claimValues(claims, spec.fallback.props, { max: 3 });
+            if (fv?.length) {
+              lines = [{ label: spec.fallback.label, value: fv.join(" · ") }];
+              structuredSource = entityUrl(entity.id);
+            }
           }
         }
       }
@@ -455,9 +525,12 @@ export async function answerQuestion(intent: QuestionIntentLike): Promise<Questi
       }
       // Extraction réelle avant la fiche (« ancien nom », « fondé par »…).
       if (!lines.length) lines = wikiExtraction();
-      // Fiche d'entité générique — toute question reconnue sort des faits réels
-      // (comme le panneau Knowledge Graph de Google), même sans attr mappé.
-      if (!lines.length && intent.qtype !== "who") {
+      // Attribut RECONNU mais sans revendication (« maire de Kinshasa » sans
+      // P6) → pas de fiche générique : afficher « Fondation : 1881 » à une
+      // question « maire » est trompeur. La fiche reste le plan B des attrs
+      // non mappés — comme la carte Knowledge Panel de Google.
+      const attrMiss = spec != null && !lines.length;
+      if (!lines.length && intent.qtype !== "who" && !attrMiss) {
         const m = await batchClaimValues(
           claims,
           FICHE.map((f) => ({ key: f.label, props: f.props, max: 2 })),

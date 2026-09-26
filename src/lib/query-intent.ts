@@ -14,6 +14,9 @@ export type SearchIntent =
       wikiQuery: string;
       /** Attribut demandé (« président », « commune », « âge »…) pour la réponse structurée. */
       attr?: string;
+      /** Question au passé (« qui fut… », « en 1980 ») — le titulaire rendu
+       *  par Wikidata est l'ACTUEL ; on le labellise honnêtement. */
+      past?: boolean;
     }
   | { kind: "navigational"; site: NavigationalSite }
   | { kind: "general" };
@@ -102,7 +105,268 @@ function normKey(s: string): string {
 
 function normalizeCountry(raw: string): string {
   const k = normKey(raw).replace(/\?+$/, "");
-  return COUNTRY_ALIASES[k] ?? raw.trim().replace(/\?+$/, "");
+  return COUNTRY_ALIASES[k] ?? DEMONYMS[k] ?? COUNTRY_BY_NAME[k] ?? raw.trim().replace(/\?+$/, "");
+}
+
+/** Démonymes → pays (formes de base ; féminins et pluriels générés). */
+const DEMONYM_BASE: Record<string, string> = {
+  congolais: "République démocratique du Congo",
+  chinois: "Chine",
+  japonais: "Japon",
+  francais: "France",
+  belge: "Belgique",
+  americain: "États-Unis",
+  egyptien: "Égypte",
+  allemand: "Allemagne",
+  italien: "Italie",
+  espagnol: "Espagne",
+  anglais: "Royaume-Uni",
+  bresilien: "Brésil",
+  malien: "Mali",
+  ougandais: "Ouganda",
+  kenyan: "Kenya",
+  rwandais: "Rwanda",
+  tanzanien: "Tanzanie",
+  burundais: "Burundi",
+  zambien: "Zambie",
+  zimbabween: "Zimbabwe",
+  angolais: "Angola",
+  mozambicain: "Mozambique",
+  malgache: "Madagascar",
+  senegalais: "Sénégal",
+  ivoirien: "Côte d'Ivoire",
+  burkinabe: "Burkina Faso",
+  nigerien: "Niger",
+  guineen: "Guinée",
+  camerounais: "Cameroun",
+  gabonais: "Gabon",
+  tchadien: "Tchad",
+  centrafricain: "République centrafricaine",
+  somalien: "Somalie",
+  ethiopien: "Éthiopie",
+  soudanais: "Soudan",
+  libyen: "Libye",
+  tunisien: "Tunisie",
+  algerien: "Algérie",
+  marocain: "Maroc",
+  mauritanien: "Mauritanie",
+  togolais: "Togo",
+  beninois: "Bénin",
+  ghaneen: "Ghana",
+  nigerian: "Nigeria",
+  "sud africain": "Afrique du Sud",
+  "sud-africain": "Afrique du Sud",
+  botswanais: "Botswana",
+  namibien: "Namibie",
+  malawite: "Malawi",
+  liberien: "Liberia",
+  gambien: "Gambie",
+  mauricien: "Maurice",
+  comorien: "Comores",
+  djiboutien: "Djibouti",
+  erythreeen: "Érythrée",
+  lesothan: "Lesotho",
+  swazi: "Eswatini",
+  suisse: "Suisse",
+  autrichien: "Autriche",
+  polonais: "Pologne",
+  tcheque: "Tchéquie",
+  roumain: "Roumanie",
+  hongrois: "Hongrie",
+  bulgare: "Bulgarie",
+  grec: "Grèce",
+  suedois: "Suède",
+  norvegien: "Norvège",
+  danois: "Danemark",
+  finlandais: "Finlande",
+  neerlandais: "Pays-Bas",
+  hollandais: "Pays-Bas",
+  irlandais: "Irlande",
+  islandais: "Islande",
+  portugais: "Portugal",
+  ukrainien: "Ukraine",
+  russe: "Russie",
+  bielorusse: "Biélorussie",
+  serbe: "Serbie",
+  croate: "Croatie",
+  slovene: "Slovénie",
+  albanais: "Albanie",
+  bosniaque: "Bosnie-Herzégovine",
+  macedonien: "Macédoine du Nord",
+  montenegrin: "Monténégro",
+  kosovar: "Kosovo",
+  moldave: "Moldavie",
+  lituanien: "Lituanie",
+  letton: "Lettonie",
+  estonien: "Estonie",
+  luxembourgeois: "Luxembourg",
+  monegasque: "Monaco",
+  britannique: "Royaume-Uni",
+  ecossais: "Écosse",
+  gallois: "Pays de Galles",
+  canadien: "Canada",
+  quebecois: "Québec",
+  mexicain: "Mexique",
+  cubain: "Cuba",
+  haitien: "Haïti",
+  dominicain: "République dominicaine",
+  jamaicain: "Jamaïque",
+  argentin: "Argentine",
+  chilien: "Chili",
+  colombien: "Colombie",
+  venezuelien: "Venezuela",
+  peruvien: "Pérou",
+  bolivien: "Bolivie",
+  equatorien: "Équateur",
+  paraguayen: "Paraguay",
+  uruguayen: "Uruguay",
+  panameen: "Panama",
+  costaricain: "Costa Rica",
+  nicaraguayen: "Nicaragua",
+  guatemalteque: "Guatemala",
+  hondurien: "Honduras",
+  salvadorien: "Salvador",
+  portoricain: "Porto Rico",
+  indien: "Inde",
+  pakistanais: "Pakistan",
+  bangladais: "Bangladesh",
+  srilankais: "Sri Lanka",
+  nepalais: "Népal",
+  afghan: "Afghanistan",
+  iranien: "Iran",
+  irakien: "Irak",
+  syrien: "Syrie",
+  libanais: "Liban",
+  israelien: "Israël",
+  palestinien: "Palestine",
+  jordanien: "Jordanie",
+  saoudien: "Arabie saoudite",
+  emirien: "Émirats arabes unis",
+  qatari: "Qatar",
+  koweitien: "Koweït",
+  yemenite: "Yémen",
+  omanais: "Oman",
+  bahreini: "Bahreïn",
+  turc: "Turquie",
+  azeri: "Azerbaïdjan",
+  armenien: "Arménie",
+  georgien: "Géorgie",
+  kazakh: "Kazakhstan",
+  ouzbek: "Ouzbékistan",
+  kirghiz: "Kirghizistan",
+  tadjik: "Tadjikistan",
+  turkmene: "Turkménistan",
+  mongol: "Mongolie",
+  coreen: "Corée du Sud",
+  "sud coreen": "Corée du Sud",
+  "sud-coreen": "Corée du Sud",
+  "nord coreen": "Corée du Nord",
+  "nord-coreen": "Corée du Nord",
+  vietnamien: "Vietnam",
+  thailandais: "Thaïlande",
+  indonesien: "Indonésie",
+  malaisien: "Malaisie",
+  philippin: "Philippines",
+  singapourien: "Singapour",
+  birman: "Birmanie",
+  cambodgien: "Cambodge",
+  laotien: "Laos",
+  australien: "Australie",
+  neozelandais: "Nouvelle-Zélande",
+  fidjien: "Fidji",
+};
+
+const DEMONYMS: Record<string, string> = (() => {
+  const femOf = (m: string): string =>
+    /een$/.test(m)
+      ? m.replace(/een$/, "eenne")
+      : /ien$/.test(m)
+        ? m.replace(/ien$/, "ienne")
+        : /yen$/.test(m)
+          ? m.replace(/yen$/, "yenne")
+          : /ain$/.test(m)
+            ? m.replace(/ain$/, "aine")
+            : /ais$/.test(m)
+              ? m.replace(/ais$/, "aise")
+              : /ois$/.test(m)
+                ? m.replace(/ois$/, "oise")
+                : /an$/.test(m)
+                  ? m.replace(/an$/, "ane")
+                  : /c$/.test(m)
+                    ? `${m}que`
+                    : m.endsWith("e")
+                      ? m
+                      : `${m}e`;
+  const out: Record<string, string> = {};
+  for (const [m, c] of Object.entries(DEMONYM_BASE)) {
+    const f = femOf(m);
+    out[m] = c;
+    out[`${m}s`] = c;
+    out[f] = c;
+    out[`${f}s`] = c;
+  }
+  return out;
+})();
+
+/**
+ * Noms de pays tels quels (« ouganda », « kenya »…) — générés depuis les
+ * valeurs canoniques des démonymes pour que « premier ministre de l'ouganda »
+ * résolve le même Q1036 que « premier ministre ougandais ».
+ */
+const COUNTRY_BY_NAME: Record<string, string> = (() => {
+  const out: Record<string, string> = {};
+  for (const c of Object.values(DEMONYM_BASE)) out[normKey(c)] = c;
+  return out;
+})();
+
+/**
+ * Mots « rôle » qui peuvent précéder une entité dans un sujet composé :
+ * « premier ministre ougandais », « roi de Belgique », « fils de Kadhafi ».
+ */
+const ROLE_WORDS = new Set([
+  "premier", "premiere", "ministre", "president", "presidente", "vice",
+  "roi", "reine", "maire", "bourgmestre", "gouverneur", "chef", "dirigeant",
+  "dirigeante", "pdg", "ceo", "pape", "sultan", "empereur", "imperatrice",
+  "prince", "princesse", "fondateur", "fondatrice", "createur", "creatrice",
+  "inventeur", "auteur", "autrice", "compositeur", "realisateur", "pere",
+  "mere", "fils", "fille", "conjoint", "conjointe", "epoux", "epouse",
+  "femme", "mari", "frere", "soeur", "enfant", "successeur", "predecesseur",
+  "ambassadeur", "champion", "capitaine", "joueur", "joueuse", "chanteur",
+  "chanteuse", "porte-parole", "dame", "leader", "commandant", "adjoint",
+  "secretaire", "capitale", "monnaie", "langue", "hymne", "drapeau",
+  "devise", "gentile", "symbole", "emblème", "embleme", "religion", "parti",
+  "equipe", "selection",
+]);
+
+/**
+ * Sujet composé « rôle + entité » : « premier ministre ougandais » →
+ * { attr: "premier ministre", entity: "Ouganda" } ; « roi de belgique » →
+ * { attr: "roi", entity: "Belgique" } ; « fils de putin » → personne.
+ * Null si le préfixe n'est pas un rôle — sinon on casserait des entités
+ * légitimes (« parc national congolais » ≠ Congo).
+ */
+function splitRoleEntity(subject: string): { attr: string; entity: string } | null {
+  const n = normKey(subject);
+  const tokens = n.split(/\s+/).filter(Boolean);
+  if (tokens.length < 2) return null;
+
+  // « <rôle> <démonyme> » — le démonyme en fin de sujet.
+  for (const len of [3, 2, 1]) {
+    if (tokens.length <= len) continue;
+    const tail = tokens.slice(-len).join(" ");
+    const country = DEMONYMS[tail] ?? DEMONYMS[tail.replace(/ /g, "-")];
+    if (!country) continue;
+    const attr = tokens.slice(0, -len).join(" ");
+    if (attr.length < 3 || !ROLE_WORDS.has(attr.split(" ")[0])) return null;
+    return { attr, entity: country };
+  }
+
+  // « <rôle> de/du/des/d' <entité> ».
+  const m = n.match(/^(\S+(?:\s\S+)?)\s+(?:de|du|des|d')\s*(.+)$/);
+  if (m && ROLE_WORDS.has(m[1].split(" ")[0]) && m[2].trim().length >= 2) {
+    return { attr: m[1], entity: normalizeCountry(stripLeadingDeter(m[2].trim())) };
+  }
+  return null;
 }
 
 function parseCapitalIntent(query: string): { subject: string; wikiQuery: string } | null {
@@ -172,6 +436,7 @@ export function normalizeSmsFrench(query: string): string {
 
 function stripLeadingDeter(s: string): string {
   return s
+    .replace(/^(?:d[''']|l['''])/i, "")
     .replace(/^(?:au|aux|en|dans|sur|vers|de|du|des|d['']|le|la|les|l['']|un|une)\s+/i, "")
     .trim();
 }
@@ -181,9 +446,22 @@ const PARTICIPLES =
 
 function cleanSubject(raw: string): string {
   return stripLeadingDeter(raw.trim().replace(/[?.!]+$/, ""))
+    // Clause temporelle (« en 1980 ») et adjectifs de fonction (« actuel »,
+    // « en fonction ») ne font pas partie de l'entité.
+    .replace(/\ben\s+(?:l[''']an\s+)?\d{4}\b.*$/i, "")
+    .replace(
+      /\b(?:actuel|actuelle|actuels|actuelles|courant|courante|present|presente|en fonction|nouveau|nouvelle)\b/g,
+      " ",
+    )
     .replace(PARTICIPLES, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+/** Marqueur temporel passé — « qui fut », « était », « ancien », « en 1980 ». */
+function isPastQuery(nq: string): boolean {
+  return /\b(fut|etaient?|a\s+ete|ont\s+ete|ancienn?e?s?|jadis|ex)\b/.test(nq) ||
+    /\ben\s+(?:l[''']an\s+)?\d{4}\b/.test(nq);
 }
 
 /** Règles à 2 groupes : [attribut, sujet] — le sujet devient l'entité cherchée. */
@@ -281,6 +559,12 @@ const QUESTION_ATTR_RULES: { qtype: QuestionType; re: RegExp; attrMap?: Record<s
 const QUESTION_RULES: { qtype: QuestionType; re: RegExp; attrFixed?: string }[] = [
   { qtype: "who", re: /^qui (?:est|etait|fut|sont|etaient|reste|devient)\s+(.+)$/ },
   { qtype: "who", re: /^who (?:is|was|are|were)\s+(.+)$/ },
+  // « quelle est la capitale ougandaise », « quel est le roi belge » — sujet
+  // composé résolu par splitRoleEntity (rôle + démonyme) plus bas.
+  {
+    qtype: "which",
+    re: /^quel(?:le)?s?\s+(?:est|sont|etait|fut|a ete|reste|devient)\s+(?:le\s+|la\s+|les\s+|l[''']|du\s+|des\s+|d['''])?(.+)$/,
+  },
   // Formes à groupe unique — attribut fixe, le groupe entier est le sujet.
   { qtype: "which", re: /^pour qui (?:joue|evolue|travaille|chante|milite)\w*\s+(.+)$/, attrFixed: "equipe" },
   { qtype: "which", re: /^qui a (?:gagne|remporte|recu)\w*\s+(.+)$/, attrFixed: "prix" },
@@ -368,11 +652,12 @@ function parseQuestionIntent(raw: string): SearchIntent | null {
       kind: "question",
       qtype: rule.qtype,
       subject: canon,
-      wikiQuery:
-        rule.qtype === "where" || rule.qtype === "howmany" || /ancien|appellation/.test(attr)
-          ? canon
-          : `${attr} ${canon}`,
+      // Le wikiQuery cible le SUJET — l'attribut ne doit pas polluer la
+      // résolution d'article (« femme poutine » résolvait une chanson
+      // satirique au lieu de Vladimir Poutine).
+      wikiQuery: canon,
       attr,
+      past: isPastQuery(nq) || undefined,
     };
   }
 
@@ -391,12 +676,31 @@ function parseQuestionIntent(raw: string): SearchIntent | null {
           : rule.qtype === "what"
             ? whatAttr(nq)
             : undefined);
+    // Sujet composé « rôle + entité » (« qui fut le premier ministre
+    // ougandais ») : le sujet entier n'est PAS une entité — on extrait
+    // l'attribut et l'entité. Uniquement quand la question n'a pas déjà
+    // un attribut verbal (« où est né le président ougandais » vise la
+    // personne, pas le pays).
+    if (!attr && (rule.qtype === "who" || rule.qtype === "which" || rule.qtype === "what")) {
+      const split = splitRoleEntity(subject);
+      if (split) {
+        return {
+          kind: "question",
+          qtype: "which",
+          subject: split.entity,
+          wikiQuery: `${split.attr} ${split.entity}`,
+          attr: split.attr,
+          past: isPastQuery(nq) || undefined,
+        };
+      }
+    }
     return {
       kind: "question",
       qtype: rule.qtype,
       subject: canon,
       wikiQuery: canon,
       attr,
+      past: isPastQuery(nq) || undefined,
     };
   }
   return null;
@@ -417,7 +721,12 @@ export function parseSearchIntent(query: string): SearchIntent {
   }
 
   const capital = parseCapitalIntent(raw);
-  if (capital) return { kind: "capital", ...capital };
+  // Capitale « connue » → réponse instantanée hors-ligne. Sinon on laisse
+  // le pipeline de questions résoudre via Wikidata (P36) — sinon des pays
+  // absents de la table (« capitale ougandaise ») échouaient silencieusement.
+  if (capital && KNOWN_CAPITALS[normKey(capital.subject)]) {
+    return { kind: "capital", ...capital };
+  }
 
   const geography = parseGeographyIntent(raw);
   if (geography) return { kind: "geography", ...geography };

@@ -48,7 +48,7 @@ export async function searchEntity(
           id: string;
           label?: string;
           description?: string;
-          match?: { text?: string };
+          match?: { text?: string; type?: string };
         }[];
       };
       const cands = data.search ?? [];
@@ -66,19 +66,47 @@ export async function searchEntity(
       const hinted = preferDesc
         ? pool.filter((c) => preferDesc.test(`${c.label ?? ""} ${c.description ?? ""}`))
         : [];
+      // Aucun candidat « personne » dans cette langue → essayer la suivante :
+      // « poutine » en FR ne retourne que le plat, EN rend Vladimir Putin.
+      if (preferDesc && !hinted.length) continue;
       let shortlist = (hinted.length ? hinted : pool).slice(0, 6);
       // Contrainte sémantique : « où est mort X » exige une entité avec P570
       // (un vivant — footballeur homonyme — n'a pas de lieu de décès).
+      // MAIS si le seul vrai match du sujet (libellé/alias) n'a pas la
+      // propriété, mieux vaut l'entité exacte sans valeur qu'une entité
+      // voisine qui dérive (« maire de kinshasa » → la RDC a un P6, pas la ville).
       if (requireProp && shortlist.length > 1) {
+        // Match fort = TOUS les tokens du sujet sont dans le libellé ou dans
+        // l'alias correspondant. « Kinshasan Kongo » (alias de la RDC) n'est
+        // pas « Kinshasa » — sinon « maire de kinshasa » dérive vers la RDC
+        // qui possède un P6 contrairement à la ville.
+        const strongMatch = (c: { label?: string; match?: { text?: string; type?: string } }) => {
+          const labT = normalizeQueryText(c.label ?? "").split(/\s+/).filter(Boolean);
+          const aliasT = normalizeQueryText(c.match?.text ?? "").split(/\s+/).filter(Boolean);
+          return (
+            (tokens.length > 0 && tokens.every((t) => labT.includes(t))) ||
+            (c.match?.type === "alias" && tokens.length > 0 && tokens.every((t) => aliasT.includes(t)))
+          );
+        };
+        const strongAll = shortlist.filter(strongMatch);
         const withProp = await filterByProp(shortlist, requireProp);
-        if (withProp.length) shortlist = withProp;
+        if (withProp.length) {
+          const strongProp = withProp.filter(strongMatch);
+          // Priorité aux matches forts AVEC la propriété (« dirigeant chinois »
+          // → RPC avec P35, pas la « Chine » civilisation). Aucun fort avec la
+          // propriété → le plus notable parmi les forts, JAMAIS un voisin.
+          shortlist = strongProp.length ? strongProp : strongAll.length ? strongAll : withProp;
+        }
       }
       // Libellé exact en priorité seulement sans autre signal (« kinshasa » →
-      // la ville). Sinon la notoriété départage les homonymes.
+      // la ville). Plusieurs libellés exacts (« Suisse » = pays ET commune de
+      // Moselle) → la notoriété départage, comme le Knowledge Graph.
       if (!preferDesc && !requireProp) {
         const sk = normalizeQueryText(subject);
-        const exact = shortlist.find((c) => normalizeQueryText(c.label ?? "") === sk);
-        if (exact) {
+        const exacts = shortlist.filter((c) => normalizeQueryText(c.label ?? "") === sk);
+        if (exacts.length) {
+          const exact =
+            exacts.length === 1 ? exacts[0] : (await mostNotable(exacts)) ?? exacts[0];
           return { id: exact.id, label: exact.label ?? subject, description: exact.description };
         }
       }
@@ -140,7 +168,8 @@ export async function getClaims(id: string): Promise<Claims | undefined> {
   try {
     const res = await fetch(
       `https://www.wikidata.org/w/api.php?action=wbgetentities&ids=${id}&props=claims&format=json`,
-      { signal: AbortSignal.timeout(MS), headers: UA, next: { revalidate: 3600 } },
+      // Dump complet (~10 Mo pour un pays) — plus long que les petites requêtes.
+      { signal: AbortSignal.timeout(3200), headers: UA, next: { revalidate: 3600 } },
     );
     if (!res.ok) return undefined;
     const data = (await res.json()) as {
@@ -229,6 +258,58 @@ const UNIT_SHORT: Record<string, string> = {
  * Valeurs d'une propriété — entités résolues en libellés, dates et quantités
  * formatées. `opts.age` transforme une date de naissance en âge courant.
  */
+/**
+ * Revendications ciblées par propriété — `wbgetclaims` renvoie de petites
+ * réponses là où `wbgetentities&props=claims` télécharge le dump COMPLET
+ * (~10 Mo pour un pays) et expire sous la latence réseau. C'est la
+ * différence entre une réponse fiable et un timeout intermittent.
+ */
+export async function getClaimsFor(
+  id: string,
+  props: string[],
+  opts?: { concurrency?: number },
+): Promise<Claims | undefined> {
+  const out: Claims = {};
+  const conc = opts?.concurrency ?? 6;
+  // Chunks séquentiels : 40 requêtes simultanées font expirer les dernières
+  // en file d'attente socket et déclenchent le rate-limit Wikidata.
+  for (let i = 0; i < props.length; i += conc) {
+    const chunk = props.slice(i, i + conc);
+    await Promise.all(
+      chunk.map(async (p) => {
+        try {
+          const res = await fetch(
+            `https://www.wikidata.org/w/api.php?action=wbgetclaims&entity=${id}&property=${p}&format=json`,
+            { signal: AbortSignal.timeout(MS), headers: UA, next: { revalidate: 3600 } },
+          );
+          if (!res.ok) return;
+          const data = (await res.json()) as { claims?: Claims };
+          if (data.claims?.[p]) out[p] = data.claims[p];
+        } catch {
+          /* propriété ignorée */
+        }
+      }),
+    );
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
+/** Ids d'entités pointées par une propriété (pour les questions à 2 sauts :
+ *  « première dame » = P26 du titulaire P35). */
+export function claimEntityIds(claims: Claims, props: string[]): string[] {
+  const out: string[] = [];
+  for (const p of props) {
+    for (const snak of allSnaks(claims[p], 3)) {
+      const v = snak.mainsnak?.datavalue?.value;
+      if (v && typeof v === "object") {
+        if ("id" in v && typeof v.id === "string") out.push(v.id);
+        else if ("numericId" in v && typeof v.numericId === "number") out.push(`Q${v.numericId}`);
+      }
+    }
+  }
+  return out;
+}
+
 export async function claimValues(
   claims: Claims,
   props: string[],
@@ -265,9 +346,11 @@ export async function claimValues(
         out.push(v);
       } else if (v && typeof v === "object") {
         if ("id" in v && typeof v.id === "string") {
-          out.push(labels.get(v.id) ?? (entityIds.length === 1 ? v.id : ""));
+          // Jamais de Q-ID brut affiché — un libellé non résolu vaut mieux
+          // vide (→ plan B suivant) qu'une chaîne « Q57553 ».
+          out.push(labels.get(v.id) ?? "");
         } else if ("numericId" in v && typeof v.numericId === "number") {
-          out.push(labels.get(`Q${v.numericId}`) ?? (entityIds.length === 1 ? `Q${v.numericId}` : ""));
+          out.push(labels.get(`Q${v.numericId}`) ?? "");
         } else if ("time" in v && typeof v.time === "string") {
           if (opts?.age) {
             const birth = new Date(v.time.replace(/^\+/, ""));

@@ -142,4 +142,53 @@ describe("answerQuestion — Knowledge Graph structuré", () => {
     if (!a) return;
     expect(a.instant.lines[0].label.toLowerCase()).toMatch(/fond|cré|naissance|date|mention/);
   }, 30000);
+
+  it("« qui fut le premier ministre ougandais » (démonyme + passé) → PM Ouganda", async () => {
+    const intent = parseSearchIntent("qui fut le premier ministre ougandais");
+    console.log("OUGANDAIS INTENT:", JSON.stringify(intent));
+    if (intent.kind !== "question") return;
+    expect(intent.subject).toBe("Ouganda");
+    const a = await answerQuestion(intent);
+    console.log("OUGANDAIS:", JSON.stringify(a?.instant.lines));
+    if (!a) return;
+    expect(a.instant.lines[0].label.toLowerCase()).toMatch(/premier ministre|actuel|réponse|identité/);
+  }, 30000);
+
+  it("« quelle est la capitale ougandaise » (adjectif) → Kampala", async () => {
+    const intent = parseSearchIntent("quelle est la capitale ougandaise");
+    if (intent.kind !== "question") return;
+    expect(intent.subject).toBe("Ouganda");
+    const a = await answerQuestion(intent);
+    console.log("CAPITALE OUG:", JSON.stringify(a?.instant.lines));
+    if (!a) return;
+    expect(a.instant.lines[0].value.toLowerCase()).toContain("kampala");
+  }, 30000);
+
+  it("« qui est la première dame de france » (2 sauts) → conjointe du président", async () => {
+    const intent = parseSearchIntent("qui est la premiere dame de france");
+    if (intent.kind !== "question") return;
+    const a = await answerQuestion(intent);
+    console.log("1ERE DAME:", JSON.stringify(a?.instant.lines));
+    if (!a) return;
+    expect(a.instant.lines[0].value.toLowerCase()).toContain("macron");
+  }, 30000);
+
+  it("« qui est le maire de kinshasa » → entité VILLE, jamais un voisin pays", async () => {
+    const intent = parseSearchIntent("qui est le maire de kinshasa");
+    if (intent.kind !== "question") return;
+    const a = await answerQuestion(intent);
+    console.log("MAIRE KIN:", JSON.stringify(a?.instant.lines), a?.panel.title);
+    if (!a) return;
+    // Le panneau doit rester Kinshasa — pas la RDC ni un politicien voisin.
+    expect(a.panel.title.toLowerCase()).toContain("kinshasa");
+  }, 30000);
+
+  it("« qui est le dirigeant chinois » → RPC (pas la « Chine » civilisation)", async () => {
+    const intent = parseSearchIntent("qui est le dirigeant chinois");
+    if (intent.kind !== "question") return;
+    const a = await answerQuestion(intent);
+    console.log("CHINE:", JSON.stringify(a?.instant.lines));
+    if (!a) return;
+    expect(JSON.stringify(a.instant.lines).toLowerCase()).toMatch(/jinping|xi|président|dirigeant/);
+  }, 30000);
 });

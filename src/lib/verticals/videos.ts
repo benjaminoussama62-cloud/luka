@@ -186,11 +186,22 @@ export async function searchVideosNative(query: string): Promise<MediaResult[]> 
   ]);
 
   const seen = new Set<string>();
+  const seenTitle = new Set<string>();
   const merged: MediaResult[] = [];
   for (const v of [...dailymotion, ...indexed, ...piped]) {
     const key = v.url;
-    if (seen.has(key)) continue;
+    // Le même contenu arrive via plusieurs fournisseurs avec des URLs
+    // différentes — dédup aussi sur le titre normalisé.
+    const tkey = v.title
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/\p{M}/gu, "")
+      .replace(/[^\p{L}\p{N}]+/gu, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (seen.has(key) || (tkey && seenTitle.has(tkey))) continue;
     seen.add(key);
+    if (tkey) seenTitle.add(tkey);
     merged.push(v);
     if (merged.length >= 24) break;
   }

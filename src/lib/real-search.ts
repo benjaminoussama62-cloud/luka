@@ -1066,6 +1066,26 @@ async function liveSearchCore(
     }
   }
 
+  // Question : le panneau Ayebi n'est recevable que si son sujet (titre) est
+  // visé par la question. Un article qui partage des mots-clés avec la
+  // question (« premier ministre » dans la bio de Matata Ponyo) n'est PAS la
+  // réponse — Google n'affiche jamais une entité voisine quand la cible n'a
+  // pas de panneau.
+  if (ayebiPanel && qIntent) {
+    const nq = q
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/\p{M}/gu, "");
+    const titleInQuery = ayebiPanel.title
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/\p{M}/gu, "")
+      .split(/\s+/)
+      .filter((t) => t.length > 2)
+      .every((t) => nq.includes(t));
+    if (!titleInQuery) ayebiPanel = undefined;
+  }
+
   const ftsDocs = rankedFts.map((h) => ({
     id: h.docId,
     title: h.title,
@@ -1387,7 +1407,7 @@ async function liveSearchCore(
 
   const panel =
     (!navSite && !factualIntent ? ayebiPanel : undefined) ??
-    (sisterFastPath || navSite || factualIntent
+    (sisterFastPath || navSite || factualIntent || qIntent
       ? undefined
       : (() => {
           const kg = panelFromQuery(q);

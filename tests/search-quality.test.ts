@@ -60,8 +60,11 @@ describe("parseSearchIntent — questions", () => {
     expect(intent.kind).toBe("question");
     if (intent.kind === "question") {
       expect(intent.qtype).toBe("which");
-      expect(intent.wikiQuery.toLowerCase()).toContain("president");
+      // Le wikiQuery cible le SUJET seul — l'attribut vit dans `attr`
+      // (un « femme poutine » résolvait une chanson satirique).
+      expect(intent.attr?.toLowerCase()).toContain("president");
       expect(intent.wikiQuery.toLowerCase()).toContain("congo");
+      expect(intent.wikiQuery.toLowerCase()).not.toContain("president");
     }
   });
 
