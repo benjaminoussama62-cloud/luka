@@ -17,6 +17,16 @@ const LINKS = [
     text: "Collecte, finalités, conservation et protection des données personnelles.",
   },
   {
+    href: "/privacy/mail",
+    title: "Confidentialité — Ayeba Mail",
+    text: "Notice propre à la messagerie : compte, messages chiffrés, conservation.",
+  },
+  {
+    href: "/privacy/navigateur",
+    title: "Confidentialité — Navigateur",
+    text: "Données locales, recherches et absence de télémétrie dans les apps Ayeba.",
+  },
+  {
     href: "/terms",
     title: "Conditions d’utilisation",
     text: "Règles d’usage du moteur, des comptes et des services associés.",

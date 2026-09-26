@@ -105,6 +105,14 @@ export default function PrivacyPage() {
           par vos soins ou la fermeture du compte.
         </p>
         <p>
+          Le détail propre au service (chiffrement, métadonnées, envoi vers l’extérieur,
+          conservation) figure dans la{" "}
+          <Link href="/privacy/mail" className="text-[var(--ink)] underline">
+            notice de confidentialité Ayeba Mail
+          </Link>
+          .
+        </p>
+        <p>
           Le contenu des messages n’est pas lu à des fins publicitaires et ne sert pas à établir un
           profil commercial. Des traitements automatisés limités peuvent s’appliquer pour la
           sécurité du service (anti-abus, anti-spam, intégrité technique).

@@ -20,6 +20,8 @@ export async function GET(req: Request) {
     "/opensearch",
     "/legal",
     "/privacy",
+    "/privacy/mail",
+    "/privacy/navigateur",
     "/terms",
     "/mentions-legales",
   ];
