@@ -23,6 +23,9 @@ export type SearchIntent =
        *  libellées en anglais (« Minister of Sports of Guinea »). */
       attrEn?: string;
       entityEn?: string;
+      /** Langue détectée de la requête (« ru », « sw »…) — repli de
+       *  résolution dans la langue native. */
+      lang?: string;
       /** Question au passé (« qui fut… », « en 1980 ») — le titulaire rendu
        *  par Wikidata est l'ACTUEL ; on le labellise honnêtement. */
       past?: boolean;

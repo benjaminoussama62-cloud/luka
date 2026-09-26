@@ -39,8 +39,16 @@ export async function searchEntity(
    *  question sur des provinces exige un pays/territoire — un musée ou un
    *  sujet homonyme (« MALI » = musée de Lima) ne peut plus voler la requête. */
   expectDesc?: RegExp,
+  /** Langue native de la requête (« ru ») — « Мали » résout en russe là où
+   *  fr|en ne matchent rien. */
+  langHint?: string,
 ): Promise<WikiEntity | undefined> {
-  for (const lang of ["fr", "en"] as const) {
+  const langs = [
+    langHint && /^[a-z]{2,3}$/i.test(langHint) ? langHint.toLowerCase() : undefined,
+    "fr",
+    "en",
+  ].filter((l, i, a): l is string => Boolean(l) && a.indexOf(l) === i);
+  for (const lang of langs) {
     try {
       const res = await fetch(
         `https://www.wikidata.org/w/api.php?action=wbsearchentities&search=${encodeURIComponent(subject)}&language=${lang}&uselang=${lang}&format=json&limit=6&type=item`,
@@ -79,7 +87,9 @@ export async function searchEntity(
         : [];
       // Aucun candidat « personne » dans cette langue → essayer la suivante :
       // « poutine » en FR ne retourne que le plat, EN rend Vladimir Putin.
-      if (preferDesc && !hinted.length) continue;
+      // Sauf langue NATIVE non-fr/en : les descriptions russes/arabes ne
+      // matchent jamais le vocabulaire du filtre — le pool reste valide.
+      if (preferDesc && !hinted.length && (lang === "fr" || lang === "en")) continue;
       let shortlist = (hinted.length ? hinted : pool).slice(0, 6);
       // Contrainte sémantique : « où est mort X » exige une entité avec P570
       // (un vivant — footballeur homonyme — n'a pas de lieu de décès).

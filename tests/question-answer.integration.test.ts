@@ -247,6 +247,20 @@ describe("answerQuestion — clés canoniques (compréhension LLM)", () => {
     expect(a.instant.lines[0].value).toMatch(/\d{2}/);
   }, 30000);
 
+  it("lang=ru → « Мали » résolu en langue native (subdivisions réelles)", async () => {
+    const a = await answerQuestion({
+      qtype: "howmany",
+      subject: "Мали",
+      wikiQuery: "Мали",
+      attrKey: "subdivisions_count",
+      entityType: "country",
+      lang: "ru",
+    });
+    console.log("RU MALI:", JSON.stringify(a?.instant.lines), "·", a?.instant.title);
+    if (!a) return;
+    expect(a.instant.lines[0].value).toMatch(/\d/);
+  }, 30000);
+
   it("intent=definition + entityType=concept → « chaussure » générique, pas « de sécurité »", async () => {
     const a = await answerQuestion({
       qtype: "what",

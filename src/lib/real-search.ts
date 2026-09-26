@@ -992,6 +992,7 @@ async function liveSearchCore(
         entityEn: understanding.entityEn || undefined,
         attrKey: understanding.attrKey || undefined,
         entityType: understanding.entityType || undefined,
+        lang: understanding.lang || undefined,
       };
     } else if (ruleIntent.kind === "question" && understanding.entity) {
       // Règles ont reconnu une question — le modèle enrichit : sujet
@@ -1004,6 +1005,7 @@ async function liveSearchCore(
         entityEn: understanding.entityEn || undefined,
         attrKey: understanding.attrKey || undefined,
         entityType: understanding.entityType || undefined,
+        lang: understanding.lang || undefined,
       };
     }
     // Suggestion « vouliez-vous dire » : la correction du modèle prime sur

@@ -27,7 +27,7 @@ export type WikiAnswer = {
   url: string;
   description?: string;
   image?: string;
-  lang: "fr" | "en";
+  lang: string;
 };
 
 const UA = { "User-Agent": "Ayeba/1.0 (https://ayeba.app; search answers)" };
@@ -55,8 +55,16 @@ function extractMatchesSubject(extract: string, title: string, subject: string):
   return tokens.length === 1 ? matched >= 1 : matched >= Math.ceil(tokens.length / 2);
 }
 
-export async function fetchWikiAnswer(subject: string): Promise<WikiAnswer | undefined> {
-  for (const lang of ["fr", "en"] as const) {
+export async function fetchWikiAnswer(
+  subject: string,
+  langHint?: string,
+): Promise<WikiAnswer | undefined> {
+  const langs = [
+    langHint && /^[a-z]{2,3}$/i.test(langHint) ? langHint.toLowerCase() : undefined,
+    "fr",
+    "en",
+  ].filter((l, i, a): l is string => Boolean(l) && a.indexOf(l) === i);
+  for (const lang of langs) {
     try {
       const open = await fetch(
         `https://${lang}.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(subject)}&limit=4&namespace=0&format=json&origin=*`,
@@ -227,6 +235,9 @@ type QuestionIntentLike = {
    *  Wikidata libellées en anglais (« Minister of Foreign Affairs of Russia »). */
   attrEn?: string;
   entityEn?: string;
+  /** Langue détectée de la requête (« ru », « sw »…) — résolution Wikidata
+   *  et Wikipedia dans la langue native en dernier repli. */
+  lang?: string;
   past?: boolean;
 };
 
@@ -540,6 +551,20 @@ const PERSON_DESC =
 const GEO_DESC =
   /pays|état|state|country|nation|république|territoire|province|région|region|commune|ville|city|district|département|departement|souverain|empire|royaume|continent|île|island|fleuve|river|lac|lake|montagne|mountain|forêt|forest|océan|ocean|mer\b|sea\b/i;
 
+/** Territoire POLITIQUE uniquement — une rivière ou une montagne homonyme
+ *  (« Мали » = rivière du Myanmar) ne peut répondre à « combien de
+ *  provinces ». GEO_DESC reste pour les questions sur les lieux naturels. */
+const POLITICAL_GEO_DESC =
+  /pays|état|state|country|nation|république|territoire|province|région|region|commune|ville|city|district|département|departement|souverain|empire|royaume|continent/i;
+
+/** Attributs qui exigent une entité politique — jamais un cours d'eau. */
+const POLITICAL_ATTR_KEYS = new Set([
+  "capital", "currency", "official_language", "spoken_language",
+  "subdivisions_count", "population", "area", "density", "head_of_state",
+  "head_of_government", "officeholder", "mayor", "governor", "demonym",
+  "iso_code", "tld", "calling_code", "anthem", "flag", "timezone",
+]);
+
 /** L'attribut exige une entité territoriale (« provinces du Mali »). */
 function expectsGeoEntity(attr?: string): boolean {
   return !!attr &&
@@ -580,9 +605,9 @@ export async function answerQuestion(intent: QuestionIntentLike): Promise<Questi
     intent.entityType === "country" ||
     intent.entityType === "city" ||
     intent.entityType === "region" ||
-    intent.entityType === "place"
-      ? GEO_DESC
-      : expectsGeoEntity(intent.attr) || intent.attrKey === "officeholder"
+    (intent.attrKey != null && POLITICAL_ATTR_KEYS.has(intent.attrKey))
+      ? POLITICAL_GEO_DESC
+      : intent.entityType === "place" || expectsGeoEntity(intent.attr)
         ? GEO_DESC
         : undefined;
   const requireProp =
@@ -600,17 +625,17 @@ export async function answerQuestion(intent: QuestionIntentLike): Promise<Questi
       ? [intent.wikiQuery, intent.entityEn]
       : [intent.wikiQuery];
   const [wikiA, wikiB, directEntity] = await Promise.all([
-    fetchWikiAnswer(wikiQueries[0]),
-    wikiQueries[1] ? fetchWikiAnswer(wikiQueries[1]) : Promise.resolve(undefined),
+    fetchWikiAnswer(wikiQueries[0], intent.lang),
+    wikiQueries[1] ? fetchWikiAnswer(wikiQueries[1], intent.lang) : Promise.resolve(undefined),
     attrIntent
-      ? searchEntity(intent.subject, preferDesc, requireProp, expectDesc)
+      ? searchEntity(intent.subject, preferDesc, requireProp, expectDesc, intent.lang)
       : Promise.resolve(undefined),
   ]);
   const wiki = wikiA ?? wikiB;
   const entity =
     directEntity ??
     (wiki ? await searchEntity(wiki.title, preferDesc, requireProp, expectDesc) : undefined) ??
-    (await searchEntity(intent.subject, preferDesc, requireProp, expectDesc)) ??
+    (await searchEntity(intent.subject, preferDesc, requireProp, expectDesc, intent.lang)) ??
     // Forme anglaise canonique : « Мали » en fr|en ne matche rien, « Mali »
     // résout. Le modèle l'émet pour toute langue non-latine.
     (intent.entityEn && intent.entityEn !== intent.subject
