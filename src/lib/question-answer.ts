@@ -97,6 +97,73 @@ export async function fetchWikiAnswer(subject: string): Promise<WikiAnswer | und
   return undefined;
 }
 
+/** Corps complet d'un article — `prop=extracts` SANS exintro : le résumé
+ *  REST ne rend que le chapeau ; la réponse (« langue parlée au Sankuru »)
+ *  est souvent dans le corps. C'est l'équivalent du featured snippet. */
+async function fetchWikiBody(title: string, lang: string): Promise<string | undefined> {
+  try {
+    const res = await fetch(
+      `https://${lang}.wikipedia.org/w/api.php?action=query&prop=extracts&explaintext&exlimit=1&titles=${encodeURIComponent(title)}&format=json&origin=*`,
+      { signal: AbortSignal.timeout(FETCH_MS), headers: UA, next: { revalidate: 3600 } },
+    );
+    if (!res.ok) return undefined;
+    const data = (await res.json()) as {
+      query?: { pages?: Record<string, { extract?: string }> };
+    };
+    const page = Object.values(data.query?.pages ?? {})[0];
+    const text = page?.extract;
+    return text && text.length > 60 ? text : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Termes du domaine par clé canonique — la phrase cherchée cite l'attribut
+ *  (« langue parlée », « monnaie »), peu importe la langue de la question. */
+const BODY_ATTR_TERMS: Record<string, string[]> = {
+  spoken_language: ["langue", "language", "parl", "spoken", "dialecte", "dialect"],
+  official_language: ["langue", "language", "offici", "official"],
+  currency: ["monnaie", "currency", "franc", "dollar", "euro"],
+  religion: ["religion", "culte", "chrétien", "musulman", "christian", "muslim", "catholic"],
+  population: ["population", "habitants", "inhabitants", "démographie", "demography"],
+  demonym: ["gentilé", "demonym", "habitants", "appelés", "called"],
+};
+
+/** Phrases réelles du corps d'article citant l'attribut demandé — score =
+ *  nombre de termes du domaine présents, ordre d'apparition conservé. */
+function bodySentencesForAttr(
+  body: string,
+  intent: { attr?: string; attrEn?: string; attrKey?: string },
+): string[] {
+  const terms = new Set<string>(BODY_ATTR_TERMS[intent.attrKey ?? ""] ?? []);
+  for (const raw of [intent.attr, intent.attrEn]) {
+    if (!raw) continue;
+    for (const w of raw.toLowerCase().split(/[^\p{L}]+/u)) {
+      if (w.length >= 4 && !/^(avec|dans|pour|quel|quelle|est|sont|the|this|that|what|which)$/.test(w)) {
+        terms.add(w);
+      }
+    }
+  }
+  if (!terms.size) return [];
+  const sentences = body.split(/(?<=[.!?])\s+/).filter((s) => s.length >= 25 && s.length <= 400);
+  const scored = sentences
+    .map((s, i) => {
+      const low = s.toLowerCase();
+      let score = 0;
+      for (const t of terms) if (low.includes(t)) score++;
+      return { s, score, i };
+    })
+    .filter((x) => x.score > 0)
+    .sort((a, b) => b.score - a.score || a.i - b.i);
+  if (!scored.length || scored[0].score < 2) return [];
+  // Meilleure phrase + éventuellement sa suivante si elle complète.
+  const best = scored[0];
+  const out = [best.s.trim()];
+  const next = scored.find((x) => x.i === best.i + 1 && x.score > 0);
+  if (next && out.join(" ").length < 380) out.push(next.s.trim());
+  return out;
+}
+
 /** Premières phrases d'un extrait — la réponse directe affichée en carte. */
 export function firstSentences(text: string, max = 2, cap = 420): string {
   const clean = text.replace(/\s+/g, " ").trim();
@@ -526,16 +593,29 @@ export async function answerQuestion(intent: QuestionIntentLike): Promise<Questi
         : earlySpec?.props[0];
   const attrIntent =
     intent.qtype === "which" || intent.qtype === "where" || intent.qtype === "howmany";
-  const [wiki, directEntity] = await Promise.all([
-    fetchWikiAnswer(intent.wikiQuery),
+  // Wiki cherché sous les deux formes : le libellé natif ET la forme
+  // anglaise canonique — « Мали » ne trouve rien, « Mali » résout.
+  const wikiQueries =
+    intent.entityEn && intent.entityEn !== intent.wikiQuery
+      ? [intent.wikiQuery, intent.entityEn]
+      : [intent.wikiQuery];
+  const [wikiA, wikiB, directEntity] = await Promise.all([
+    fetchWikiAnswer(wikiQueries[0]),
+    wikiQueries[1] ? fetchWikiAnswer(wikiQueries[1]) : Promise.resolve(undefined),
     attrIntent
       ? searchEntity(intent.subject, preferDesc, requireProp, expectDesc)
       : Promise.resolve(undefined),
   ]);
+  const wiki = wikiA ?? wikiB;
   const entity =
     directEntity ??
     (wiki ? await searchEntity(wiki.title, preferDesc, requireProp, expectDesc) : undefined) ??
-    (await searchEntity(intent.subject, preferDesc, requireProp, expectDesc));
+    (await searchEntity(intent.subject, preferDesc, requireProp, expectDesc)) ??
+    // Forme anglaise canonique : « Мали » en fr|en ne matche rien, « Mali »
+    // résout. Le modèle l'émet pour toute langue non-latine.
+    (intent.entityEn && intent.entityEn !== intent.subject
+      ? await searchEntity(intent.entityEn, preferDesc, requireProp, expectDesc)
+      : undefined);
 
   let lines: { label: string; value: string }[] = [];
   // Le libellé d'entité prime (« République démocratique du Congo ») — le titre
@@ -590,8 +670,10 @@ export async function answerQuestion(intent: QuestionIntentLike): Promise<Questi
     return [];
   };
 
+  let spec: ReturnType<typeof attrProps> | null = null;
+  let attrMiss = false;
   if (entity) {
-    const spec = attrProps(intent.qtype, intent.attr, intent.attrKey);
+    spec = attrProps(intent.qtype, intent.attr, intent.attrKey);
     // Uniquement les propriétés nécessaires : le dump complet d'une entité
     // pays pèse ~10 Mo et expire sous la latence réseau (réponses absentes ou
     // aléatoires en prod). wbgetclaims renvoie de petites réponses en parallèle.
@@ -599,7 +681,18 @@ export async function answerQuestion(intent: QuestionIntentLike): Promise<Questi
     // par question faisaient throttler l'IP chez Wikidata (falaise de
     // réponses après quelques questions). Un appel unique, même lourd, est
     // plus fiable et caché côté Vercel (revalidate).
-    const claims = await getClaims(entity.id);
+    // Double voie : l'appel CIBLÉ sur les propriétés demandées (petites
+    // réponses, ~200 ms) garantit la réponse même quand le dump complet
+    // échoue — Poutine ou un pays pèsent 20-40 Mo et expirent toujours.
+    // Le dump, en parallèle, sert au panneau de connaissance (best-effort).
+    const specProps = spec
+      ? [...spec.props, ...(spec.fallback?.props ?? []), ...(spec.hop?.props ?? [])]
+      : [];
+    const [dumpClaims, targetedClaims] = await Promise.all([
+      getClaims(entity.id),
+      specProps.length ? getClaimsFor(entity.id, specProps) : Promise.resolve(undefined),
+    ]);
+    const claims = dumpClaims ?? targetedClaims;
     if (claims) {
       panelImage ??= await entityImage(claims);
       if (spec) {
@@ -618,8 +711,22 @@ export async function answerQuestion(intent: QuestionIntentLike): Promise<Questi
         }
         if (!lines.length && spec.count) {
           // « combien de provinces » → dénombrement réel des P150 + exemples
-          // de noms résolus. Jamais un chiffre inventé.
-          const ids = claimEntityIds(claims, spec.props);
+          // de noms résolus. Jamais un chiffre inventé. TOUTES les
+          // revendications non-dépréciées comptent — allSnaks(max=3)
+          // sous-dénombrait (« 3 » affiché pour 4+ régions).
+          const allIds = new Set<string>();
+          for (const p of spec.props) {
+            for (const snak of claims[p] ?? []) {
+              if (snak.rank === "deprecated") continue;
+              const v = snak.mainsnak?.datavalue?.value;
+              if (v && typeof v === "object") {
+                if ("id" in v && typeof v.id === "string") allIds.add(v.id);
+                else if ("numericId" in v && typeof v.numericId === "number")
+                  allIds.add(`Q${v.numericId}`);
+              }
+            }
+          }
+          const ids = [...allIds];
           if (ids.length) {
             const sample = (await claimValues(claims, spec.props, { max: 4 })) ?? [];
             const value = sample.length
@@ -702,7 +809,7 @@ export async function answerQuestion(intent: QuestionIntentLike): Promise<Questi
       // P6, « ministre des sports » sans P1308) → pas de fiche générique :
       // afficher « Fondation : 1881 » ou la fiche d'identité du pays à une
       // question de fonction est trompeur.
-      const attrMiss = (spec != null || officeholderAsked) && !lines.length;
+      attrMiss = (spec != null || officeholderAsked) && !lines.length;
       if (!lines.length && intent.qtype !== "who" && !attrMiss) {
         const m = await batchClaimValues(
           claims,
@@ -746,7 +853,22 @@ export async function answerQuestion(intent: QuestionIntentLike): Promise<Questi
 
   // Même extraction quand l'entité ou les claims manquent (wiki seul).
   if (!lines.length) lines = wikiExtraction();
-  if (!lines.length && wiki) {
+  // Corps d'article : attribut reconnu sans revendication Wikidata (le
+  // Sankuru n'a pas de P1412) → phrases RÉELLES citant le domaine demandé —
+  // le « featured snippet » de Google, pas le chapeau générique.
+  if (!lines.length && (spec || officeholderAsked) && wiki) {
+    const body = await fetchWikiBody(wiki.title, wiki.lang);
+    if (body) {
+      const sents = bodySentencesForAttr(body, intent);
+      if (sents.length) {
+        lines = [{ label: QTYPE_LABEL[intent.qtype], value: sents.join(" ") }];
+      }
+    }
+  }
+  // Attribut reconnu sans réponse trouvée → pas de chapeau générique :
+  // afficher « La Guinée est un pays… » à « qui est le ministre des sports »
+  // est une non-réponse déguisée. Rien vaut mieux qu'une carte trompeuse.
+  if (!lines.length && wiki && !spec && !officeholderAsked) {
     lines = [{ label: QTYPE_LABEL[intent.qtype], value: firstSentences(wiki.extract, 2) }];
   }
   if (!lines.length && entity?.description && !/homonymie|disambiguation/i.test(entity.description)) {
