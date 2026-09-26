@@ -1,11 +1,11 @@
-name: Build AYEBA Android AAB
+name: Build Ayeba Mail Android AAB
 
 on:
   workflow_dispatch:
   push:
     paths:
-      - "mobile/ayeba-app/**"
-      - ".github/workflows/android-aab.yml"
+      - "mobile/ayeba-mail/**"
+      - ".github/workflows/android-aab-mail.yml"
 
 jobs:
   build-aab:
@@ -14,7 +14,7 @@ jobs:
       contents: write
     defaults:
       run:
-        working-directory: mobile/ayeba-app
+        working-directory: mobile/ayeba-mail
 
     steps:
       - uses: actions/checkout@v4
@@ -23,7 +23,7 @@ jobs:
         with:
           node-version: "20"
           cache: npm
-          cache-dependency-path: mobile/ayeba-app/package-lock.json
+          cache-dependency-path: mobile/ayeba-mail/package-lock.json
 
       - uses: actions/setup-java@v4
         with:
@@ -42,7 +42,7 @@ jobs:
           npx cap sync android
           node scripts/patch-android.js
 
-      - name: Prepare upload keystore (same key every build)
+      - name: Prepare upload keystore (même clé que l'app Ayeba)
         env:
           KS_B64: ${{ secrets.AYEBA_KEYSTORE_BASE64 }}
           KS_PASS: ${{ secrets.AYEBA_KEYSTORE_PASS }}
@@ -55,14 +55,6 @@ jobs:
           keytool -list -v -keystore ayeba-upload.keystore -storepass "$PASS" 2>/dev/null | grep "SHA1:" || true
           printf 'storePassword=%s\nkeyPassword=%s\nkeyAlias=ayeba\nstoreFile=../ayeba-upload.keystore\n' "$PASS" "$PASS" > android/keystore.properties
 
-      - name: Backup keystore artifact (save once → GitHub secret)
-        if: ${{ secrets.AYEBA_KEYSTORE_BASE64 == '' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: SAVE-upload-keystore
-          path: mobile/ayeba-app/ayeba-upload.keystore
-          retention-days: 90
-
       - name: Build release AAB
         run: |
           cd android
@@ -71,23 +63,23 @@ jobs:
         env:
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
           JAVA_HOME: ${{ env.JAVA_HOME }}
-          AYEBA_VERSION: "1.0.2"
-          AYEBA_VERSION_CODE: "3"
+          AYEBA_VERSION: "1.0.1"
+          AYEBA_VERSION_CODE: "2"
 
       - name: Upload AAB artifact
         uses: actions/upload-artifact@v4
         with:
-          name: AYEBA-PlayStore-aab
-          path: mobile/ayeba-app/android/app/build/outputs/bundle/release/app-release.aab
+          name: AyebaMail-PlayStore-aab
+          path: mobile/ayeba-mail/android/app/build/outputs/bundle/release/app-release.aab
           retention-days: 30
 
       - name: Publish AAB on GitHub Releases (download sans login)
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: mobile-1.0.2
-          name: AYEBA Mobile 1.0.2
+          tag_name: mail-1.0.1
+          name: Ayeba Mail 1.0.1
           body: |
-            Fichier Play Store : **app-release.aab** → renommer `AYEBA-1.0.2.aab` (API 35)
-            Package : `app.ayeba.mobile` — versionCode 3
-          files: mobile/ayeba-app/android/app/build/outputs/bundle/release/app-release.aab
+            Fichier Play Store : **app-release.aab** → renommer `AyebaMail-1.0.1.aab` (API 35)
+            Package : `app.ayeba.mail` — versionCode 2
+          files: mobile/ayeba-mail/android/app/build/outputs/bundle/release/app-release.aab
           overwrite_files: true
