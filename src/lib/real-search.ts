@@ -1375,29 +1375,19 @@ async function liveSearchCore(
     ...nativeImages,
   ];
 
-  // Écosystème d'abord quand il a du contenu : TALA (vidéo), puis web mondial.
-  const talaCard: MediaResult = {
-    id: "tala",
-    title: `${q} — sur TALA`,
-    url: `https://to-tala.com/search?q=${encodeURIComponent(q)}`,
-    thumb: "https://www.google.com/s2/favicons?domain=to-tala.com&sz=128",
-    source: "TALA",
-    type: "video",
-  };
+  // Vidéos : uniquement des résultats réels (Dailymotion/Piped/index).
+  // Jamais de carte « sur TALA » sans contenu vérifié — sinon c'est une fausse
+  // promesse. Un lien « plus sur YouTube » reste honnête (vraie recherche).
   const videos: MediaResult[] = [
-    talaCard,
-    ...(nativeVideos.length
-      ? nativeVideos
-      : [
-          {
-            id: "yt-fallback",
-            title: `${q} — vidéos`,
-            url: `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`,
-            thumb: "https://www.google.com/s2/favicons?domain=youtube.com&sz=128",
-            source: "YouTube",
-            type: "video" as const,
-          },
-        ]),
+    ...nativeVideos,
+    {
+      id: "yt-more",
+      title: `Plus de vidéos sur « ${q} »`,
+      url: `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`,
+      thumb: "https://www.google.com/s2/favicons?domain=youtube.com&sz=128",
+      source: "YouTube",
+      type: "video" as const,
+    },
   ];
 
   const maps = nativeMaps;

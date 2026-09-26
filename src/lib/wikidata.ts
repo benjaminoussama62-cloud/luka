@@ -34,6 +34,7 @@ export type Claims = Record<string, Snak[]>;
 export async function searchEntity(
   subject: string,
   preferDesc?: RegExp,
+  requireProp?: string,
 ): Promise<WikiEntity | undefined> {
   for (const lang of ["fr", "en"] as const) {
     try {
@@ -43,22 +44,44 @@ export async function searchEntity(
       );
       if (!res.ok) continue;
       const data = (await res.json()) as {
-        search?: { id: string; label?: string; description?: string }[];
+        search?: {
+          id: string;
+          label?: string;
+          description?: string;
+          match?: { text?: string };
+        }[];
       };
       const cands = data.search ?? [];
       const tokens = meaningfulTokens(subject);
-      const subjectMatch = (c: { label?: string; description?: string }) => {
-        const hay = normalizeQueryText(`${c.label ?? ""} ${c.description ?? ""}`);
+      const subjectMatch = (c: { label?: string; description?: string; match?: { text?: string } }) => {
+        const hay = normalizeQueryText(`${c.label ?? ""} ${c.description ?? ""} ${c.match?.text ?? ""}`);
         return tokens.length === 0 || tokens.some((t) => tokenMatchesInHay(t, hay));
       };
       const eligible = cands.filter(subjectMatch);
-      const pool = eligible.length ? eligible : cands;
-      // Notoriété = nombre de sitelinks (comme le Knowledge Graph de Google :
-      // « khadafi » → Mouammar Kadhafi, pas un footballeur homonyme).
+      let pool = eligible.length ? eligible : cands;
+      // Exclure les pages d'homonymie (« UDPS » → page d'homonymie sans faits).
+      const real = pool.filter((c) => !/homonymie|disambiguation/i.test(c.description ?? ""));
+      if (!real.length) continue;
+      pool = real;
       const hinted = preferDesc
         ? pool.filter((c) => preferDesc.test(`${c.label ?? ""} ${c.description ?? ""}`))
         : [];
-      const shortlist = (hinted.length ? hinted : pool).slice(0, 4);
+      let shortlist = (hinted.length ? hinted : pool).slice(0, 6);
+      // Contrainte sémantique : « où est mort X » exige une entité avec P570
+      // (un vivant — footballeur homonyme — n'a pas de lieu de décès).
+      if (requireProp && shortlist.length > 1) {
+        const withProp = await filterByProp(shortlist, requireProp);
+        if (withProp.length) shortlist = withProp;
+      }
+      // Libellé exact en priorité seulement sans autre signal (« kinshasa » →
+      // la ville). Sinon la notoriété départage les homonymes.
+      if (!preferDesc && !requireProp) {
+        const sk = normalizeQueryText(subject);
+        const exact = shortlist.find((c) => normalizeQueryText(c.label ?? "") === sk);
+        if (exact) {
+          return { id: exact.id, label: exact.label ?? subject, description: exact.description };
+        }
+      }
       const picked = shortlist.length <= 1 ? shortlist[0] : await mostNotable(shortlist);
       if (picked) {
         return { id: picked.id, label: picked.label ?? subject, description: picked.description };
@@ -68,6 +91,23 @@ export async function searchEntity(
     }
   }
   return undefined;
+}
+
+/** Ne garde que les candidats possédant la propriété exigée (P570 pour « mort »…). */
+async function filterByProp<T extends { id: string }>(cands: T[], prop: string): Promise<T[]> {
+  try {
+    const res = await fetch(
+      `https://www.wikidata.org/w/api.php?action=wbgetentities&ids=${cands.map((c) => c.id).join("|")}&props=claims&format=json`,
+      { signal: AbortSignal.timeout(MS), headers: UA, next: { revalidate: 3600 } },
+    );
+    if (!res.ok) return [];
+    const data = (await res.json()) as {
+      entities?: Record<string, { claims?: Record<string, unknown[]> }>;
+    };
+    return cands.filter((c) => (data.entities?.[c.id]?.claims?.[prop] ?? []).length > 0);
+  } catch {
+    return [];
+  }
 }
 
 /** Le candidat le plus notable = le plus de sitelinks Wikipédia. */

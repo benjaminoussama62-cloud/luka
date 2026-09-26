@@ -361,12 +361,13 @@ function EmptyResults() {
 
 function Modals() {
   const lite = typeof window !== "undefined" && isMobileApp();
+  const { deepResearchOpen } = useAyeba();
   return (
     <>
       <LoginModal />
       {!lite ? (
         <>
-          <DeepResearchPanel />
+          {deepResearchOpen ? <DeepResearchPanel /> : null}
           <InteractiveCanvas />
           <CodeExecutor />
           <PodcastPlayer />

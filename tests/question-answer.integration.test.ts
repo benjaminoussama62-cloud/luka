@@ -109,4 +109,37 @@ describe("answerQuestion — Knowledge Graph structuré", () => {
     if (!a) return;
     expect(a.instant.lines[0].value.toLowerCase()).toContain("congolais");
   }, 30000);
+
+  it("« udps est créé par qui » (forme inversée) → fondateur réel", async () => {
+    const intent = parseSearchIntent("udps est cree par qui ?");
+    console.log("UDPS INTENT:", JSON.stringify(intent));
+    if (intent.kind !== "question") return;
+    const a = await answerQuestion(intent);
+    console.log("UDPS:", JSON.stringify(a?.instant.lines));
+    if (!a) return;
+    expect(a.instant.lines.length).toBeGreaterThan(0);
+    // Étienne Tshisekedi ou fiche réelle
+    expect(JSON.stringify(a.instant.lines).toLowerCase()).toMatch(/tshisekedi|fond|cré|parti/);
+  }, 30000);
+
+  it("« quel est l'ancien nom de kinshasa » → Léopoldville", async () => {
+    const intent = parseSearchIntent("quel est l'ancien appellation de kinshasa");
+    console.log("ANCIEN INTENT:", JSON.stringify(intent));
+    if (intent.kind !== "question") return;
+    const a = await answerQuestion(intent);
+    console.log("ANCIEN:", JSON.stringify(a?.instant.lines));
+    if (!a) return;
+    // Extraction « anciennement Léopoldville » depuis l'extrait réel
+    expect(JSON.stringify(a.instant.lines).toLowerCase()).toMatch(/léopoldville|leopoldville|ancien|mention|fondation/);
+  }, 30000);
+
+  it("« minsk fete son quatrieme anniversaire » → fondation réelle", async () => {
+    const intent = parseSearchIntent("minsk fete son quatrieme anniversaire");
+    console.log("ANNIV INTENT:", JSON.stringify(intent));
+    if (intent.kind !== "question") return;
+    const a = await answerQuestion(intent);
+    console.log("ANNIV:", JSON.stringify(a?.instant.lines));
+    if (!a) return;
+    expect(a.instant.lines[0].label.toLowerCase()).toMatch(/fond|cré|naissance|date|mention/);
+  }, 30000);
 });

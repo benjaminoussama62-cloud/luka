@@ -70,7 +70,6 @@ export function searchVideosIndexed(query: string, limit = 20): MediaResult[] {
 const PIPED_INSTANCES = [
   "https://pipedapi.kavin.rocks",
   "https://pipedapi.adminforge.de",
-  "https://api.piped.yt",
 ];
 
 export async function fetchPipedVideos(query: string): Promise<MediaResult[]> {
@@ -78,7 +77,7 @@ export async function fetchPipedVideos(query: string): Promise<MediaResult[]> {
     try {
       const res = await fetch(
         `${base}/search?q=${encodeURIComponent(query)}&filter=videos`,
-        { signal: AbortSignal.timeout(8000), headers: { "User-Agent": "AyebaSearch/2.0" } },
+        { signal: AbortSignal.timeout(3200), headers: { "User-Agent": "AyebaSearch/2.0" } },
       );
       if (!res.ok) continue;
       const data = (await res.json()) as {
@@ -166,15 +165,20 @@ export async function fetchDailymotionVideos(query: string): Promise<MediaResult
 }
 
 export async function searchVideosNative(query: string): Promise<MediaResult[]> {
-  const [piped, indexed, dailymotion] = await Promise.all([
-    fetchPipedVideos(query),
-    Promise.resolve(searchVideosIndexed(query, 12)),
+  // Piped est lent/flaky (instances bénévoles) — borné à 4s pour ne pas
+  // bloquer la SERP ; Dailymotion et l'index sont rapides et fiables.
+  const [dailymotion, indexed, piped] = await Promise.all([
     fetchDailymotionVideos(query),
+    Promise.resolve(searchVideosIndexed(query, 12)),
+    Promise.race([
+      fetchPipedVideos(query),
+      new Promise<MediaResult[]>((r) => setTimeout(() => r([]), 4000)),
+    ]),
   ]);
 
   const seen = new Set<string>();
   const merged: MediaResult[] = [];
-  for (const v of [...piped, ...indexed, ...dailymotion]) {
+  for (const v of [...dailymotion, ...indexed, ...piped]) {
     const key = v.url;
     if (seen.has(key)) continue;
     seen.add(key);

@@ -73,6 +73,8 @@ export async function fetchOpenverse(query: string): Promise<MediaResult[]> {
         url?: string;
         thumbnail?: string;
         foreign_landing_url?: string;
+        source?: string;
+        provider?: string;
         width?: number;
         height?: number;
       }>;
@@ -84,7 +86,8 @@ export async function fetchOpenverse(query: string): Promise<MediaResult[]> {
         title: img.title || query,
         url: img.foreign_landing_url || img.url || "#",
         thumb: img.thumbnail || img.url || "",
-        source: "Openverse",
+        // Le vrai fournisseur (flickr, wikimedia, smk…) — pas l'agrégateur.
+        source: img.source ?? img.provider ?? "Openverse",
         type: "image",
       };
       out.push(item);

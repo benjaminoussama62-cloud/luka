@@ -271,6 +271,11 @@ const QUESTION_ATTR_RULES: { qtype: QuestionType; re: RegExp; attrMap?: Record<s
     // « quelle commune se trouve au sud est de la rdc »
     re: /^quel(?:le)?s?\s+(\S+)\s+(?:se\s+)?(?:trouve|situe|est|sont)\s+(.+)$/,
   },
+  {
+    qtype: "which",
+    // « quel est l'ancien nom/appellation de kinshasa » → extraction « anciennement … »
+    re: /^(?:quel(?:le)?s?\s+(?:est|etait|sont|fut)\s+)?(?:le\s+|la\s+|les\s+|l['''])?(ancien\w*\s*\w*|appellation)\s+(?:de|du|des|d['''])\s+(.+)$/,
+  },
 ];
 
 const QUESTION_RULES: { qtype: QuestionType; re: RegExp; attrFixed?: string }[] = [
@@ -282,6 +287,20 @@ const QUESTION_RULES: { qtype: QuestionType; re: RegExp; attrFixed?: string }[] 
   { qtype: "which", re: /^a qui appartient\s+(.+)$/, attrFixed: "proprietaire" },
   { qtype: "which", re: /^dans quel pays (?:se trouve|est|vit|joue)\w*\s+(.+)$/, attrFixed: "pays" },
   { qtype: "which", re: /^(?:quel est |quelle est )?le proprietaire (?:de|du|des|d['''])\s*(.+)$/, attrFixed: "proprietaire" },
+  // « X est créé/fondé/inventé par qui » — forme inversée
+  {
+    qtype: "which",
+    re: /^(.+?)\s+(?:est|etait|fut|a ete|ont ete)\s+(?:cree|creee|fonde|fondee|invente|inventee|lance|lancee|construit|construite|ecrit|ecrite)\w*\s+par\s+(?:qui|quelle entreprise|quel pays|quel)\w*\s*$/,
+    attrFixed: "fondateur",
+  },
+  // « X fête son N-ième anniversaire/année » → date de fondation
+  {
+    qtype: "when",
+    re: /^(.+?)\s+fete\s+\w+(?:\s+\w+)?\s+an\w*\s*$/,
+    attrFixed: "fondation",
+  },
+  { qtype: "when", re: /^anniversaire (?:de|du|des|d['''])\s+(.+)$/, attrFixed: "fondation" },
+  { qtype: "when", re: /^depuis quand\s+(?:existe|y a[- ]t[''']il)?\s*(.+)$/, attrFixed: "fondation" },
   {
     qtype: "what",
     re: /^(?:qu['']est[- ]ce que|qu['']est[- ]ce qu[''']|quest[- ]ce que|c['']est quoi|que signifie|qu['']appelle[- ]t[''']on|definition (?:de|du|des|d[''']))\s*(.+)$/,
@@ -349,7 +368,10 @@ function parseQuestionIntent(raw: string): SearchIntent | null {
       kind: "question",
       qtype: rule.qtype,
       subject: canon,
-      wikiQuery: rule.qtype === "where" || rule.qtype === "howmany" ? canon : `${attr} ${canon}`,
+      wikiQuery:
+        rule.qtype === "where" || rule.qtype === "howmany" || /ancien|appellation/.test(attr)
+          ? canon
+          : `${attr} ${canon}`,
       attr,
     };
   }

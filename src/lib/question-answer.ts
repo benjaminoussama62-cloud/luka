@@ -2,14 +2,12 @@ import { meaningfulTokens, normalizeQueryText, tokenMatchesInHay } from "./searc
 import type { FeaturedSnippet, InstantAnswer, KnowledgePanel } from "./types";
 import type { QuestionType } from "./query-intent";
 import {
-  ageValue,
   claimValue,
   claimValues,
   entityImage,
   entityUrl,
   getClaims,
   searchEntity,
-  type Claims,
 } from "./wikidata";
 
 /**
@@ -153,7 +151,9 @@ type QuestionIntentLike = {
 /** Attribut demandé → propriété(s) Wikidata. Couverture large FR/EN.
  *  Ordre significatif : les expressions composées (« lieu de mort ») avant les
  *  mots simples (« mort ») qui leur sont inclus. */
-const ATTR_PROPS: { re: RegExp; props: string[]; label: string; age?: boolean }[] = [
+type AttrSpec = { props: string[]; label: string; age?: boolean; fallback?: { props: string[]; label: string } };
+
+const ATTR_PROPS: (AttrSpec & { re: RegExp })[] = [
   // — composés d'abord —
   { re: /lieu de naissance|birthplace|ou est ne|born in/i, props: ["P19"], label: "Lieu de naissance" },
   { re: /lieu de (mort|deces)|death place|ou est mort/i, props: ["P20"], label: "Lieu de décès" },
@@ -221,7 +221,7 @@ const ATTR_PROPS: { re: RegExp; props: string[]; label: string; age?: boolean }[
   // — dates & divers —
   { re: /naissance|\bne\b|\bnee\b|birth/i, props: ["P569"], label: "Naissance" },
   { re: /mort|deces|death|died/i, props: ["P570"], label: "Décès" },
-  { re: /fondation|cree|creation|founded|established|lancement/i, props: ["P571"], label: "Fondation" },
+  { re: /fondation|cree|creation|founded|established|lancement|anniversaire/i, props: ["P571"], fallback: { props: ["P1249"], label: "Première mention" }, label: "Fondation" },
   { re: /dissolution|fermeture|disparition/i, props: ["P576"], label: "Dissolution" },
   { re: /site (officiel|web)|website|official site|url/i, props: ["P856"], label: "Site officiel" },
   { re: /duree|dure|duration|long/i, props: ["P2047"], label: "Durée" },
@@ -239,17 +239,20 @@ const DEFAULT_PROPS: Record<QuestionType, string[]> = {
   what: [],
 };
 
-const WHEN_ATTR_PROPS: Record<string, { props: string[]; label: string }> = {
+const WHEN_ATTR_PROPS: Record<string, { props: string[]; label: string; fallback?: { props: string[]; label: string } }> = {
   mort: { props: ["P570"], label: "Décès" },
-  fondation: { props: ["P571"], label: "Fondation" },
+  fondation: { props: ["P571"], fallback: { props: ["P1249"], label: "Première mention" }, label: "Fondation" },
   naissance: { props: ["P569"], label: "Naissance" },
 };
 
-function attrProps(qtype: QuestionType, attr?: string): { props: string[]; label: string; age?: boolean } | null {
+function attrProps(qtype: QuestionType, attr?: string): AttrSpec | null {
   if (attr) {
     const hit = ATTR_PROPS.find((a) => a.re.test(attr));
     if (hit) return hit;
     if (qtype === "when" && WHEN_ATTR_PROPS[attr]) return WHEN_ATTR_PROPS[attr];
+    // Attribut demandé mais non mappé → pas de défaut trompeur
+    // (« ancien nom » ne doit JAMAIS retourner P35 président).
+    return null;
   }
   const def = DEFAULT_PROPS[qtype];
   return def.length ? { props: def, label: "Réponse" } : null;
@@ -288,17 +291,61 @@ export async function answerQuestion(intent: QuestionIntentLike): Promise<Questi
   const wiki = await fetchWikiAnswer(intent.wikiQuery);
   const attrIntent =
     intent.qtype === "which" || intent.qtype === "where" || intent.qtype === "howmany";
+  // Contrainte sémantique de désambiguïsation : une question « mort » exige une
+  // entité morte (P570), « naissance » une entité née (P569) — un footballeur
+  // homonyme vivant ne peut pas répondre « où est mort khadafi ».
+  const requireProp =
+    intent.attr && /mort|deces|sepulture|died|death/.test(intent.attr) && !/naissance|ne\b/.test(intent.attr)
+      ? "P570"
+      : intent.attr && /naissance|\bnee?\b|birth|age/.test(intent.attr)
+        ? "P569"
+        : undefined;
+  const preferDesc = personHint ? PERSON_DESC : undefined;
   const entity =
     (attrIntent
-      ? await searchEntity(intent.subject, personHint ? PERSON_DESC : undefined)
+      ? await searchEntity(intent.subject, preferDesc, requireProp)
       : undefined) ??
-    (wiki ? await searchEntity(wiki.title, personHint ? PERSON_DESC : undefined) : undefined) ??
-    (await searchEntity(intent.subject, personHint ? PERSON_DESC : undefined));
+    (wiki ? await searchEntity(wiki.title, preferDesc, requireProp) : undefined) ??
+    (await searchEntity(intent.subject, preferDesc, requireProp));
 
   let lines: { label: string; value: string }[] = [];
   let entityName = wiki?.title ?? entity?.label ?? intent.subject;
   let structuredSource: string | undefined;
   let panelImage: string | undefined = wiki?.image;
+
+  // Extraction depuis l'extrait réel — pour les attrs sans propriété Wikidata
+  // (« fondé en 1982 par Étienne Tshisekedi », « anciennement Léopoldville »).
+  const wikiExtraction = (): { label: string; value: string }[] => {
+    if (!wiki || !intent.attr) return [];
+    let m: RegExpMatchArray | null = null;
+    const trimTail = (v: string) =>
+      v
+        .trim()
+        .replace(/[.,;:]+$/, "")
+        .replace(/\s+(?:de|du|des|d[''']|of|the|à|au|en|in)\s*$/, "")
+        .replace(/\s+(?:de|du|des|of|in)\s+\d[\d ]*(?:\s*[àaà–-]\s*\d[\d ]*)?$/, "");
+    if (/fondateur|createur|inventeur|auteur|lance/.test(intent.attr)) {
+      m =
+        wiki.extract.match(
+          /(?:fond[ée]+s?|cr[ée]+[ée]?s?|invent[ée]+s?|lanc[ée]+s?|initi[ée]+s?)\w*[^.]{0,50}?par\s+(?:le\s+|la\s+|les\s+|l['''])?([A-ZÉÈÊÀ][\p{L}'' .-]{2,50})/u,
+        ) ??
+        wiki.extract.match(
+          /(?:founded|created|invented|launched|established|initiated)\w*[^.]{0,50}?by\s+([A-Z][\p{L}'' .-]{2,50})/u,
+        );
+      if (m?.[1]) return [{ label: "Fondateur", value: trimTail(m[1]) }];
+    }
+    if (/ancien|appellation|nomme|appele|jadis/.test(intent.attr)) {
+      m =
+        wiki.extract.match(
+          /(?:anciennement|autrefois|jadis|appelée?|nommée?|dite?|sous le nom(?: d[''']| de )?|ex[- ])\s*(?:le\s+|la\s+|les\s+|l['''])?([A-ZÉÈÊÀ][\p{L}''.-]+(?:\s+(?:de|du|des|d[''']\s*)?[\p{L}\d''.-]+){0,3})/u,
+        ) ??
+        wiki.extract.match(
+          /(?:formerly|previously|once)\s+(?:known as|called|named)?\s*(?:the\s+)?([A-Z][\p{L}''.-]+(?:\s+(?:of|the|de|du|des)?\s*[\p{L}\d''.-]+){0,3})/u,
+        );
+      if (m?.[1]) return [{ label: "Ancien nom", value: trimTail(m[1]) }];
+    }
+    return [];
+  };
 
   if (entity) {
     const claims = await getClaims(entity.id);
@@ -312,6 +359,14 @@ export async function answerQuestion(intent: QuestionIntentLike): Promise<Questi
         if (values?.length) {
           lines = [{ label: spec.label, value: values.join(" · ") }];
           structuredSource = entityUrl(entity.id);
+        } else if (spec.fallback) {
+          // « fondation » d'une ville sans P571 → première mention écrite (P1249),
+          // labellisée honnêtement (« Minsk : Première mention 1067 »).
+          const fv = await claimValues(claims, spec.fallback.props, { max: 3 });
+          if (fv?.length) {
+            lines = [{ label: spec.fallback.label, value: fv.join(" · ") }];
+            structuredSource = entityUrl(entity.id);
+          }
         }
       }
       // « qui est X » — fiche enrichie : naissance, nationalité, occupation réelles.
@@ -333,6 +388,7 @@ export async function answerQuestion(intent: QuestionIntentLike): Promise<Questi
         const cand: { label: string; props: string[] }[] = [
           { label: "Naissance", props: ["P569"] },
           { label: "Fondation", props: ["P571"] },
+          { label: "Première mention", props: ["P1249"] },
           { label: "Décès", props: ["P570"] },
         ];
         for (const c of cand) {
@@ -344,6 +400,8 @@ export async function answerQuestion(intent: QuestionIntentLike): Promise<Questi
           }
         }
       }
+      // Extraction réelle avant la fiche (« ancien nom », « fondé par »…).
+      if (!lines.length) lines = wikiExtraction();
       // Fiche d'entité générique — toute question reconnue sort des faits réels
       // (comme le panneau Knowledge Graph de Google), même sans attr mappé.
       if (!lines.length && intent.qtype !== "who") {
@@ -355,7 +413,7 @@ export async function answerQuestion(intent: QuestionIntentLike): Promise<Questi
           { label: "Occupation", props: ["P106"] },
           { label: "Pays", props: ["P17"] },
           { label: "Capitale", props: ["P36"] },
-          { label: "Président", props: ["P35", "P6"] },
+          { label: "Dirigeant", props: ["P35", "P6"] },
           { label: "Population", props: ["P1082"] },
           { label: "Superficie", props: ["P2046"] },
           { label: "Localisation", props: ["P131", "P276"] },
@@ -378,10 +436,15 @@ export async function answerQuestion(intent: QuestionIntentLike): Promise<Questi
     }
   }
 
+  // Même extraction quand l'entité ou les claims manquent (wiki seul).
+  if (!lines.length) lines = wikiExtraction();
   if (!lines.length && wiki) {
     lines = [{ label: QTYPE_LABEL[intent.qtype], value: firstSentences(wiki.extract, 2) }];
   }
-  if (!lines.length && !wiki) return undefined;
+  if (!lines.length && entity?.description && !/homonymie|disambiguation/i.test(entity.description)) {
+    lines = [{ label: QTYPE_LABEL[intent.qtype], value: entity.description }];
+  }
+  if (!lines.length) return undefined;
 
   const headline = lines[0];
   const sources = [
