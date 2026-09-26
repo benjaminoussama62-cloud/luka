@@ -96,6 +96,12 @@ export async function searchEntity(
           // → RPC avec P35, pas la « Chine » civilisation). Aucun fort avec la
           // propriété → le plus notable parmi les forts, JAMAIS un voisin.
           shortlist = strongProp.length ? strongProp : strongAll.length ? strongAll : withProp;
+        } else if (strongAll.length) {
+          // Aucun candidat avec la propriété — ou requête en échec (throttle).
+          // Le match exact du sujet reste, JAMAIS un voisin plus notable
+          // (« maire de kinshasa » : la RDC a un P6 ET un alias « Congo-
+          // Kinshasa », mais elle n'est pas la ville demandée).
+          shortlist = strongAll;
         }
       }
       // Libellé exact en priorité seulement sans autre signal (« kinshasa » →

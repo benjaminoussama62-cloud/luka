@@ -34,7 +34,19 @@ export function indexProduct(p: {
     );
 }
 
+/**
+ * Lignes fabriquées par l'ancien catalogue template (« messi… — négociable
+ * CDF ») : elles pointaient vers des pages de RECHERCHE, pas des produits,
+ * et se sont auto-indexées. Un vrai produit mène à une fiche produit.
+ */
+const FAKE_PRODUCT_URL = /(?:\/search[/?]|\/catalog\/|\?q=|[?&]q=|openstreetmap\.org\/search|alibaba\.com\/trade\/search)/i;
+const FAKE_PRODUCT_IDS = new Set([
+  "sombateka", "jumia-1", "jumia-electronics", "local-market", "local-lub",
+  "phones-rdc", "mines-b2b",
+]);
+
 export function searchProducts(query: string, limit = 24): ShopItem[] {
+  if (!canUseSyncDb()) return [];
   const q = `%${query.toLowerCase()}%`;
   const rows = getDb()
     .prepare(
@@ -42,7 +54,7 @@ export function searchProducts(query: string, limit = 24): ShopItem[] {
        WHERE lower(title) LIKE ? OR lower(query_tags) LIKE ? OR lower(category) LIKE ?
        ORDER BY rating DESC NULLS LAST, indexed_at DESC LIMIT ?`,
     )
-    .all(q, q, q, limit) as Array<{
+    .all(q, q, q, limit * 2) as Array<{
     id: string;
     title: string;
     price: number | null;
@@ -54,129 +66,19 @@ export function searchProducts(query: string, limit = 24): ShopItem[] {
     category: string;
   }>;
 
-  return rows.map((r) => ({
-    id: r.id,
-    title: r.title,
-    price: r.price != null ? String(Math.round(r.price)) : "—",
-    currency: r.currency,
-    store: r.store,
-    url: r.url,
-    thumb: r.thumb ?? undefined,
-    rating: r.rating ?? undefined,
-  }));
-}
-
-function thumb(domain: string) {
-  return `https://www.google.com/s2/favicons?domain=${domain}&sz=128`;
-}
-
-/** Catalogue RDC structuré + index local */
-export function buildNativeShopping(query: string): ShopItem[] {
-  const q = encodeURIComponent(query);
-  const ql = query.toLowerCase();
-
-  const catalog: ShopItem[] = [
-    {
-      id: "sombateka",
-      title: `${query} — Sombateka Online`,
-      price: "boutique RDC",
-      currency: "CDF",
-      store: "Sombateka",
-      url: `https://sombatekaonline.com/search?q=${q}`,
-      thumb: thumb("sombatekaonline.com"),
-      rating: 4.6,
-    },
-    {
-      id: "jumia-1",
-      title: `${query} — Jumia RDC`,
-      price: "à partir de",
-      currency: "CDF",
-      store: "Jumia",
-      url: `https://www.jumia.cd/catalog/?q=${q}`,
-      thumb: thumb("jumia.cd"),
-      rating: 4.3,
-    },
-    {
-      id: "jumia-electronics",
-      title: `Électronique · ${query}`,
-      price: "promo",
-      currency: "CDF",
-      store: "Jumia",
-      url: `https://www.jumia.cd/electronics/?q=${q}`,
-      thumb: thumb("jumia.cd"),
-      rating: 4.1,
-    },
-    {
-      id: "local-market",
-      title: `${query} — Marchés Kinshasa`,
-      price: "négociable",
-      currency: "CDF",
-      store: "Marché local",
-      url: `https://www.openstreetmap.org/search?query=${encodeURIComponent(query + " marché Kinshasa")}`,
-      thumb: thumb("openstreetmap.org"),
-      rating: 4.0,
-    },
-    {
-      id: "local-lub",
-      title: `${query} — Lubumbashi`,
-      price: "négociable",
-      currency: "CDF",
-      store: "Marché local",
-      url: `https://www.openstreetmap.org/search?query=${encodeURIComponent(query + " Lubumbashi")}`,
-      thumb: thumb("openstreetmap.org"),
-      rating: 3.9,
-    },
-  ];
-
-  if (/phone|téléphone|samsung|iphone|tecno|infinix/i.test(ql)) {
-    catalog.unshift({
-      id: "phones-rdc",
-      title: "Smartphones — comparatif RDC",
-      price: "150–800",
-      currency: "USD",
-      store: "Multi-boutiques",
-      url: `https://www.jumia.cd/mobile-phones/?q=${q}`,
-      thumb: thumb("jumia.cd"),
-      rating: 4.4,
-    });
-  }
-
-  if (/cobalt|cuivre|mine|minera/i.test(ql)) {
-    catalog.unshift({
-      id: "mines-b2b",
-      title: "Minerais & B2B — Congo",
-      price: "devis",
-      currency: "USD",
-      store: "Alibaba B2B",
-      url: `https://www.alibaba.com/trade/search?SearchText=${encodeURIComponent(query + " DRC")}`,
-      thumb: thumb("alibaba.com"),
-      rating: 4.0,
-    });
-  }
-
-  if (!canUseSyncDb()) return catalog;
-
-  for (const item of catalog) {
-    indexProduct({
-      id: item.id,
-      title: item.title,
-      store: item.store,
-      url: item.url,
-      thumb: item.thumb,
-      rating: item.rating,
-      tags: query,
-    });
-  }
-
-  const indexed = searchProducts(query, 12);
-  const seen = new Set<string>();
-  const merged: ShopItem[] = [];
-  for (const item of [...catalog, ...indexed]) {
-    if (seen.has(item.id)) continue;
-    seen.add(item.id);
-    merged.push(item);
-  }
-  return merged.slice(0, 20);
+  return rows
+    .filter((r) => !FAKE_PRODUCT_IDS.has(r.id) && !FAKE_PRODUCT_URL.test(r.url))
+    .slice(0, limit)
+    .map((r) => ({
+      id: r.id,
+      title: r.title,
+      price: r.price != null ? String(Math.round(r.price)) : "—",
+      currency: r.currency,
+      store: r.store,
+      url: r.url,
+      thumb: r.thumb ?? undefined,
+      rating: r.rating ?? undefined,
+    }));
 }
 
 export type ShopFilters = {

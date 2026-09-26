@@ -7,7 +7,10 @@ export type RouteInfo = {
 };
 
 export async function fetchNominatimDeep(query: string, limit = 16): Promise<MapPlace[]> {
-  const q = query.includes("RDC") || query.includes("Congo") ? query : `${query} République démocratique du Congo`;
+  // La requête est cherchée telle quelle — forcer « + RDC » détruisait les
+  // sujets non congolais (« forêt amazone » → aucun lieu). Le contexte RDC
+  // se joue à l'appelant (isCongoHint), pas ici.
+  const q = query;
   try {
     const res = await fetch(
       `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=${limit}&addressdetails=1&extratags=1`,

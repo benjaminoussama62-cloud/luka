@@ -55,6 +55,30 @@ export function searchImages(query: string, limit = 24): MediaResult[] {
   }));
 }
 
+/** Tokens significatifs pour le filtre de pertinence des médias. */
+function mediaTokens(query: string): string[] {
+  return query
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .split(/[^a-z0-9]+/)
+    .filter((t) => t.length >= 3);
+}
+
+/**
+ * Le titre doit partager un token significatif avec la requête — sinon les
+ * agrégateurs renvoient leurs scans de domaine public (« Flore d'Auvergne »
+ * pour « messi »). Aucun token pertinent dans la requête → pas de filtre.
+ */
+export function mediaRelevant(title: string, tokens: string[]): boolean {
+  if (!tokens.length) return true;
+  const t = title
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "");
+  return tokens.some((tok) => t.includes(tok));
+}
+
 export async function fetchOpenverse(query: string): Promise<MediaResult[]> {
   try {
     const res = await fetch(
@@ -79,8 +103,10 @@ export async function fetchOpenverse(query: string): Promise<MediaResult[]> {
         height?: number;
       }>;
     };
+    const tokens = mediaTokens(query);
     const out: MediaResult[] = [];
     for (const img of data.results ?? []) {
+      if (!mediaRelevant(img.title ?? "", tokens)) continue;
       const item: MediaResult = {
         id: img.id || `ov-${out.length}`,
         title: img.title || query,
@@ -147,10 +173,12 @@ export async function fetchCommonsImages(query: string): Promise<MediaResult[]> 
         >;
       };
     };
+    const tokens = mediaTokens(query);
     const out: MediaResult[] = [];
     for (const page of Object.values(data.query?.pages ?? {})) {
       const info = page.imageinfo?.[0];
       if (!info?.thumburl || !info.url) continue;
+      if (!mediaRelevant(page.title ?? "", tokens)) continue;
       out.push({
         id: `commons-${out.length}`,
         title: (page.title ?? query).replace(/^File:/, ""),

@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { cleanSnippet, isJunkHit } from "@/lib/real-search";
+import { cleanSnippet, evalMath, isJunkHit } from "@/lib/real-search";
 import {
   normalizeSmsFrench,
   parseSearchIntent,
   upstreamQuery,
 } from "@/lib/query-intent";
+import { mediaRelevant } from "@/lib/verticals/images";
 import { tokenMatchesInHay } from "@/lib/search-relevance";
 
 describe("isJunkHit — filtre anti-bruit SERP", () => {
@@ -89,6 +90,102 @@ describe("parseSearchIntent — questions", () => {
   it("envoie le sujet aux sources upstream, pas la question", () => {
     const intent = parseSearchIntent("qui est vladimir putin ?");
     expect(upstreamQuery("qui est vladimir putin ?", intent)).toBe("vladimir putin");
+  });
+});
+
+describe("parseSearchIntent — calcul (toute forme, pas seulement « ? »)", () => {
+  const mathQueries = [
+    "1+1",
+    "1 + 1 = ?",
+    "2x+4=10",
+    "x = 2+3x",
+    "combien font 6 et 7",
+    "racine de 144",
+    "20% de 150",
+    "3 au carré",
+    "5 fois 8",
+    "(12+8)*3",
+  ];
+  for (const q of mathQueries) {
+    it(`« ${q} » est un calcul`, () => {
+      expect(parseSearchIntent(q).kind).toBe("math");
+    });
+  }
+  it("une requête ordinaire n'est pas un calcul", () => {
+    expect(parseSearchIntent("rdc").kind).not.toBe("math");
+    expect(parseSearchIntent("formule 1 grand prix").kind).not.toBe("math");
+    expect(parseSearchIntent("iphone 15 plus").kind).not.toBe("math");
+  });
+});
+
+describe("evalMath — résultats réels calculés", () => {
+  const cases: [string, string][] = [
+    ["1+1", "2"],
+    ["6+7", "13"],
+    ["5*8", "40"],
+    ["(144^0.5)", "12"],
+    ["(20*150/100)", "30"],
+    ["2*x+4=10", "x = 3"],
+    ["x=2+3*x", "x = -1"],
+    ["3*x-6=0", "x = 2"],
+  ];
+  for (const [expr, expected] of cases) {
+    it(`${expr} → ${expected}`, () => {
+      expect(evalMath(expr)).toBe(expected);
+    });
+  }
+  it("retourne undefined si l'expression n'est pas évaluable", () => {
+    expect(evalMath("1/0")).toBeUndefined();
+    expect(evalMath("abc")).toBeUndefined();
+  });
+});
+
+describe("parseSearchIntent — interrogatif n'importe où dans la phrase", () => {
+  it("« messi a combien de but en carriere » → question sur Messi", () => {
+    const intent = parseSearchIntent("messi a combien de but en carriere");
+    expect(intent.kind).toBe("question");
+    if (intent.kind === "question") {
+      expect(intent.subject.toLowerCase()).toContain("messi");
+      expect(intent.attr?.toLowerCase()).toContain("but");
+    }
+  });
+  it("« la foret amazone est dans quel pays » → question sur la forêt", () => {
+    const intent = parseSearchIntent("la foret amazone est dans quel pays");
+    expect(intent.kind).toBe("question");
+    if (intent.kind === "question") {
+      expect(intent.subject.toLowerCase()).toContain("amazone");
+    }
+  });
+  it("« mbappe joue dans quel club » → question sur Mbappé", () => {
+    const intent = parseSearchIntent("mbappe joue dans quel club");
+    expect(intent.kind).toBe("question");
+    if (intent.kind === "question") {
+      expect(intent.subject.toLowerCase()).toContain("mbappe");
+    }
+  });
+  it("« putin a quel age » → question sur Poutine", () => {
+    const intent = parseSearchIntent("putin a quel age");
+    expect(intent.kind).toBe("question");
+    if (intent.kind === "question") {
+      expect(intent.subject.toLowerCase()).toContain("putin");
+    }
+  });
+  it("un « ou » déclaratif n'est PAS une question", () => {
+    for (const q of ["thé ou café", "messi ou ronaldo", "n'importe quoi"]) {
+      expect(parseSearchIntent(q).kind).not.toBe("question");
+    }
+  });
+});
+
+describe("mediaRelevant — filtre anti hors-sujet (images)", () => {
+  const messiTokens = ["messi", "but", "carriere"];
+  it("rejette les scans de domaine public sans rapport", () => {
+    expect(mediaRelevant("Flore d'Auvergne — planche botanique", messiTokens)).toBe(false);
+    expect(mediaRelevant("Cours de médecine pratique (1890)", messiTokens)).toBe(false);
+  });
+  it("garde les images sur le sujet", () => {
+    expect(mediaRelevant("Lionel Messi en 2018", messiTokens)).toBe(true);
+    expect(mediaRelevant("Messi célèbre un but", messiTokens)).toBe(true);
   });
 });
 

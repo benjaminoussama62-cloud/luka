@@ -13,7 +13,8 @@ import { rankHits } from "./search-index/ranking";
 import { searchImagesNative } from "./verticals/images";
 import { searchMapsNative } from "./verticals/maps";
 import { searchVideosNative } from "./verticals/videos";
-import { buildNativeShopping } from "./verticals/shopping";
+import { searchProducts } from "./verticals/shopping";
+import { searchCommunity } from "./verticals/community";
 import { getDbMode } from "./storage/database";
 import { searchAyebiAsync, searchIndexAsync } from "./storage/turso-async";
 import {
@@ -31,6 +32,7 @@ import {
 } from "./search-relevance";
 import {
   geoMismatchPenalty,
+  geoSubjectsInQuery,
   knownCapitalAnswer,
   normalizeSmsFrench,
   parseSearchIntent,
@@ -38,6 +40,7 @@ import {
 } from "./query-intent";
 import type {
   AlgorithmSliders,
+  CommunityPost,
   FeaturedSnippet,
   KnowledgePanel,
   MapPlace,
@@ -624,23 +627,68 @@ function relatedFrom(query: string, results: SearchResult[]): string[] {
   return [...out].slice(0, 6);
 }
 
-function tryMathSnippet(query: string): FeaturedSnippet | undefined {
-  const display = query.trim().replace(/,/g, ".");
-  const expr = display.replace(/=+\s*$/, "");
-  if (!/^[\d\s+\-*/().^%]+$/.test(expr) || expr.length > 40 || !/[\d]/.test(expr)) return undefined;
-  if (!/[+\-*/^]/.test(expr)) return undefined;
+/**
+ * Évaluation réelle — pas de chaîne préenregistrée :
+ *  - arithmétique « 2*(3+4)^2 », « 20% de 150 »
+ *  - équation du 1er degré « x = 2+3*x », « 2x+4 = 10 » → solution exacte
+ */
+export function evalMath(expr: string): string | undefined {
+  const eq = expr.match(/^([^=]+)=([^=]+)$/);
+  if (eq) {
+    const varName = ((eq[1] + eq[2]).match(/[a-z]/i) ?? [])[0];
+    if (!varName) return undefined;
+    // Décompose un membre en { coef·var + const } — termes ±N, ±Nx, ±N*x.
+    const side = (s: string): { a: number; b: number } | null => {
+      const t = s.replace(/\s+/g, "");
+      const varRe = new RegExp(`^([+-]?)([\\d.]*)\\*?${varName}$`, "i");
+      const terms = t.match(/[+-]?[^+-]+/g);
+      if (!terms) return null;
+      let a = 0;
+      let b = 0;
+      for (const term of terms) {
+        const varTerm = term.match(varRe);
+        if (varTerm) {
+          const sign = varTerm[1] === "-" ? -1 : 1;
+          const num = varTerm[2] === "" ? 1 : Number(varTerm[2]);
+          if (!Number.isFinite(num)) return null;
+          a += sign * num;
+          continue;
+        }
+        const constTerm = term.match(/^([+-]?)([\d.]+)$/);
+        if (!constTerm) return null;
+        const num = Number(constTerm[2]);
+        if (!Number.isFinite(num)) return null;
+        b += (constTerm[1] === "-" ? -1 : 1) * num;
+      }
+      return { a, b };
+    };
+    const L = side(eq[1]);
+    const R = side(eq[2]);
+    if (!L || !R) return undefined;
+    const a = L.a - R.a;
+    const b = R.b - L.b;
+    if (a === 0) return b === 0 ? `${varName} ∈ ℝ — infinité de solutions` : "Pas de solution";
+    const x = b / a;
+    return `${varName} = ${Number.isInteger(x) ? String(x) : x.toLocaleString("fr-FR", { maximumFractionDigits: 4 })}`;
+  }
   try {
     const val = Function(`"use strict"; return (${expr.replace(/\^/g, "**")})`)();
     if (typeof val !== "number" || !Number.isFinite(val)) return undefined;
-    return {
-      title: display,
-      text: String(val),
-      url: "#calc",
-      domain: "ayeba",
-    };
+    return Number.isInteger(val)
+      ? String(val)
+      : val.toLocaleString("fr-FR", { maximumFractionDigits: 6 });
   } catch {
     return undefined;
   }
+}
+
+function tryMathSnippet(query: string): FeaturedSnippet | undefined {
+  const display = query.trim().replace(/[?!.\s]+$/, "");
+  const intent = parseSearchIntent(query);
+  if (intent.kind !== "math") return undefined;
+  const text = evalMath(intent.expr);
+  if (!text) return undefined;
+  return { title: display, text, url: "#calc", domain: "ayeba" };
 }
 
 function buildSynthesis(
@@ -913,6 +961,10 @@ async function liveSearchCore(
   const administrativeQuestion =
     /\b(quartier|quartiers|commune|communes|district|districts|subdivision|subdivisions)\b/i.test(q);
   const qIntent = intent.kind === "question" ? intent : undefined;
+  // Médias (images, vidéos, cartes) : le SUJET résolu, pas la phrase brute.
+  // « messi a combien de buts » cherche des images de « messi », pas des
+  // scans de manuscrits qui matchent les mots-outils de la question.
+  const mediaQ = qIntent ? qIntent.subject : webQ;
   // Factual = on peut produire une réponse locale fiable (capitale connue, géo/admin
   // Kinshasa documentées, calcul). Un mot comme « commune » seul ne qualifie PAS —
   // sinon tout résultat web serait jeté (bug « aucun résultat direct »).
@@ -1066,25 +1118,29 @@ async function liveSearchCore(
     }
   }
 
-  // Question : le panneau Ayebi n'est recevable que si son sujet (titre) est
-  // visé par la question. Un article qui partage des mots-clés avec la
-  // question (« premier ministre » dans la bio de Matata Ponyo) n'est PAS la
-  // réponse — Google n'affiche jamais une entité voisine quand la cible n'a
-  // pas de panneau.
-  if (ayebiPanel && qIntent) {
-    const nq = q
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/\p{M}/gu, "");
-    const titleInQuery = ayebiPanel.title
+  // Un panneau n'est recevable que si son sujet (titre) est visé par la
+  // requête — pour TOUTES les requêtes, pas seulement les questions. Un
+  // article qui partage des mots-clés avec la requête (« premier ministre »
+  // dans la bio de Matata Ponyo, « forêt » pour « amazone ») n'est PAS le
+  // sujet — Google n'affiche jamais une entité voisine comme panneau.
+  const nqPanel = q
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "");
+  // Expansion d'alias : « rdc » ≈ « république démocratique du congo » —
+  // sinon un panneau légitime titré « République… » serait rejeté.
+  const hayPanel = `${nqPanel} ${geoSubjectsInQuery(q)
+    .map((s) => s.replace(/-/g, " "))
+    .join(" ")}`;
+  const titleMatchesQuery = (title: string) =>
+    title
       .toLowerCase()
       .normalize("NFD")
       .replace(/\p{M}/gu, "")
-      .split(/\s+/)
-      .filter((t) => t.length > 2)
-      .every((t) => nq.includes(t));
-    if (!titleInQuery) ayebiPanel = undefined;
-  }
+      .split(/[^\p{L}\p{N}]+/u)
+      .filter((t) => t.length > 2 && !/^(le|la|les|des|du|de|et|en|au|aux|sur|par|pour|avec|sans|dans|the|of|and|for)$/.test(t))
+      .every((t) => hayPanel.includes(t));
+  if (ayebiPanel && !titleMatchesQuery(ayebiPanel.title)) ayebiPanel = undefined;
 
   const ftsDocs = rankedFts.map((h) => ({
     id: h.docId,
@@ -1117,6 +1173,7 @@ async function liveSearchCore(
     nativeImages,
     nativeVideos,
     nativeMaps,
+    communityPosts,
     instantAnswers,
     questionAnswer,
   ] = await timed(opts.timings, "upstream", () =>
@@ -1147,17 +1204,20 @@ async function liveSearchCore(
         : settled(fetchWikiSummary(webQ), undefined, Math.min(UPSTREAM_FAST_MS, msLeft())),
       offline
         ? Promise.resolve([] as MediaResult[])
-        : settled(searchImagesNative(webQ), [], Math.min(2400, msLeft())),
+        : settled(searchImagesNative(mediaQ), [], Math.min(2400, msLeft())),
       offline
         ? Promise.resolve([] as MediaResult[])
-        : settled(searchVideosNative(webQ), [], Math.min(2600, msLeft())),
+        : settled(searchVideosNative(mediaQ), [], Math.min(2600, msLeft())),
       offline
         ? Promise.resolve([] as MapPlace[])
         : settled(
-            searchMapsNative(isCongoHint(q) ? `${q} République démocratique du Congo` : q),
+            searchMapsNative(isCongoHint(q) ? `${mediaQ} République démocratique du Congo` : mediaQ),
             [],
             Math.min(UPSTREAM_FAST_MS, msLeft()),
           ),
+      offline || sisterFastPath
+        ? Promise.resolve([] as CommunityPost[])
+        : settled(searchCommunity(webQ), [], Math.min(2000, msLeft())),
       sisterFastPath
         ? Promise.resolve([])
         : settled(resolveInstantAnswers(q), [], offline ? 150 : upstreamMs),
@@ -1180,6 +1240,18 @@ async function liveSearchCore(
   // Réponse directe à la question — en tête des réponses instantanées.
   if (questionAnswer && qIntent) {
     instantAnswers.unshift(questionAnswer.instant);
+  }
+  // Calcul : résultat réel en tête, comme le calculateur de Google.
+  if (intent.kind === "math") {
+    const mathResult = evalMath(intent.expr);
+    if (mathResult) {
+      instantAnswers.unshift({
+        kind: "calc",
+        title: intent.display,
+        lines: [{ label: "Résultat", value: mathResult }],
+        footnote: "Calcul local — évaluation directe, aucune donnée simulée",
+      });
+    }
   }
 
   const localDocs = [
@@ -1403,7 +1475,9 @@ async function liveSearchCore(
   const videos: MediaResult[] = [...nativeVideos];
 
   const maps = nativeMaps;
-  const shopping = buildNativeShopping(q);
+  // Shopping = produits RÉELS indexés par le crawler uniquement — jamais de
+  // carte « négociable CDF ★ 4.3 » fabriquée depuis le texte de la requête.
+  const shopping = searchProducts(q, 20);
 
   const panel =
     (!navSite && !factualIntent ? ayebiPanel : undefined) ??
@@ -1411,7 +1485,11 @@ async function liveSearchCore(
       ? undefined
       : (() => {
           const kg = panelFromQuery(q);
-          if (kg && relevanceScore(`${kg.entity.label} ${kg.entity.summary}`, q) >= 45) {
+          if (
+            kg &&
+            titleMatchesQuery(kg.entity.label) &&
+            relevanceScore(`${kg.entity.label} ${kg.entity.summary}`, q) >= 45
+          ) {
             return {
               title: kg.entity.label,
               subtitle: kg.entity.kind,
@@ -1569,56 +1647,9 @@ async function liveSearchCore(
     news: newsResults.length ? newsResults : results.filter((r) => r.sourceType === "news"),
     maps,
     shopping,
-    community: [
-      {
-        id: "cm-jemsa",
-        platform: "jemsa",
-        title: `« ${q} » sur JEMSA`,
-        excerpt:
-          "Discussions, profils et savoirs de la communauté JEMSA — le réseau du savoir de l'écosystème Ayeba.",
-        author: "jemsa",
-        url: `https://jemsa.net/search?q=${encodeURIComponent(q)}`,
-        trustScore: 85,
-        engagement: 0,
-        postedAt: new Date().toISOString().slice(0, 10),
-      },
-      {
-        id: "cm-reddit",
-        platform: "reddit",
-        title: `Fils Reddit autour de « ${q} »`,
-        excerpt:
-          "Discussions publiques : retours d'expérience, débats et sources partagées par la communauté.",
-        author: "reddit",
-        url: `https://www.reddit.com/search/?q=${encodeURIComponent(q)}`,
-        trustScore: 70,
-        engagement: 0,
-        postedAt: new Date().toISOString().slice(0, 10),
-      },
-      {
-        id: "cm-yt",
-        platform: "youtube",
-        title: `Vidéos et témoignages — ${q}`,
-        excerpt:
-          "Reportages, conférences et interventions publiques indexés sur YouTube.",
-        author: "youtube",
-        url: `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`,
-        trustScore: 72,
-        engagement: 0,
-        postedAt: new Date().toISOString().slice(0, 10),
-      },
-      {
-        id: "cm-x",
-        platform: "x",
-        title: `Conversation publique — ${q}`,
-        excerpt:
-          "Posts récents sur X : signaux faibles, réactions et annonces en temps réel.",
-        author: "x",
-        url: `https://x.com/search?q=${encodeURIComponent(q)}`,
-        trustScore: 60,
-        engagement: 0,
-        postedAt: new Date().toISOString().slice(0, 10),
-      },
-    ],
+    // Communauté = fils RÉELS (Reddit, HN) — jamais de carte template
+    // « …sur JEMSA » générée depuis le texte de la requête.
+    community: communityPosts,
     related: relatedFrom(q, results),
     peopleAlsoAsk,
     knowledge: knowledgePanel,
@@ -1628,22 +1659,6 @@ async function liveSearchCore(
     instantAnswers: instantAnswers.length ? instantAnswers : undefined,
     aiSummary,
     isSensitiveTopic,
-    opposingViews: isSensitiveTopic
-      ? [
-          {
-            title: `Point de vue A — ${q}`,
-            url: `https://duckduckgo.com/?q=${encodeURIComponent(q + " pour")}`,
-            stance: "Position A",
-            snippet: "Articles et tribunes favorables — à croiser.",
-          },
-          {
-            title: `Point de vue B — ${q}`,
-            url: `https://duckduckgo.com/?q=${encodeURIComponent(q + " contre")}`,
-            stance: "Position B",
-            snippet: "Articles et analyses critiques — pour sortir de la bulle.",
-          },
-        ]
-      : undefined,
     canvas: [
       {
         id: "t1",
@@ -1655,26 +1670,6 @@ async function liveSearchCore(
           String(r.trust.credibility),
           r.congoRelevant ? "Oui" : "Non",
         ]),
-      },
-    ],
-    code: /\b(calcul|math|fibonacci|code|javascript)\b/i.test(q)
-      ? {
-          language: "javascript",
-          code: `function fibonacci(n){\n  const o=[]; let a=0,b=1;\n  for(let i=0;i<n;i++){ o.push(a); [a,b]=[b,a+b]; }\n  return o;\n}\nconsole.log(fibonacci(12).join(", "));`,
-          output: "0, 1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89",
-          verified: true,
-        }
-      : undefined,
-    podcast: [
-      {
-        speaker: "A",
-        text: aiSummary.slice(0, 220) || `Recherche sur « ${q} ».`,
-      },
-      {
-        speaker: "B",
-        text: results[0]
-          ? `Pour approfondir, commencez par ${results[0].domain} — puis croisez avec les autres sources listées.`
-          : `Peu de sources solides pour l'instant. Reformulez la requête.`,
       },
     ],
   };

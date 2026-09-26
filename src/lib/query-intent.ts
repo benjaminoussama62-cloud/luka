@@ -703,6 +703,232 @@ function parseQuestionIntent(raw: string): SearchIntent | null {
       past: isPastQuery(nq) || undefined,
     };
   }
+
+  // Marqueur interrogatif N'IMPORTE OÙ dans la phrase — la position du mot et
+  // la ponctuation ne définissent pas une question :
+  //   « messi a combien de buts en carrière » → sujet « messi », attr « buts »
+  //   « la forêt amazone est dans quel pays » → sujet « forêt amazone », attr « pays »
+  //   « le pape actuel c'est qui »            → sujet « pape »
+  // Garde-fou : le marqueur doit toucher un mot-outil (« a », « est », « dans »)
+  // ou la requête finir par « ? » — sinon « thé ou café » deviendrait une question.
+  const generic = parseLooseQuestion(nq, raw);
+  if (generic) return generic;
+
+  return null;
+}
+
+/** Mots-outils sans valeur d'entité — délimiteurs entre sujet et attribut. */
+const GLUE_WORDS = new Set([
+  "a", "ai", "as", "ont", "avez", "avons", "est", "sont", "etait", "etaient",
+  "fut", "furent", "sera", "serait", "soit", "se", "s", "c", "ce", "ca",
+  "cela", "celui", "celle", "ceux", "celles", "dans", "de", "du", "des", "d",
+  "en", "au", "aux", "par", "pour", "sur", "sous", "chez", "avec", "sans",
+  "vers", "y", "le", "la", "les", "l", "un", "une", "et", "ou", "mais", "ni",
+  "car", "donc", "alors", "que", "qui", "quoi", "dont", "il", "elle", "ils",
+  "elles", "on", "nous", "vous", "je", "j", "tu", "t", "m", "me", "te",
+  "lui", "leur", "son", "sa", "ses", "mon", "ma", "mes", "ton", "ta", "tes",
+  "the", "an", "of", "in", "on", "at", "to", "for", "is", "are", "was",
+  "were", "do", "does", "did", "be", "been", "it", "its",
+]);
+
+/** Verbes de liaison courants pouvant précéder le marqueur interrogatif. */
+const VERB_WORDS = new Set([
+  "trouve", "trouves", "trouvent", "situe", "situee", "situes", "situees",
+  "situent", "localise", "localisee", "vit", "vis", "vivent", "habite",
+  "habites", "habitent", "reside", "resides", "resident", "joue", "joues",
+  "jouent", "evolue", "evolues", "travaille", "travailles", "travaillent",
+  "fete", "fetes", "mesure", "mesures", "mesurent", "pese", "peses", "pesent",
+  "coute", "coutes", "coutent", "vaut", "vaux", "fait", "font", "compte",
+  "comptes", "comptent", "possede", "possedes", "possedent", "appartient",
+  "appartiennent", "devient", "deviennent", "reste", "restent", "pense",
+  "penses", "pensent", "dit", "dits", "disent", "vient", "viennent",
+  "appelle", "appelles", "nomme", "nommes", "nomment", "concerne", "regarde",
+  "parle", "parles", "parlent", "interesse", "interesses",
+]);
+
+/** Retire les mots-outils/verbes en TÊTE ou en QUEUE d'un fragment. */
+function stripGlue(s: string, edge: "head" | "tail"): string {
+  const tokens = s.split(/\s+/).filter(Boolean);
+  if (edge === "head") {
+    while (tokens.length && (GLUE_WORDS.has(tokens[0]) || VERB_WORDS.has(tokens[0]))) tokens.shift();
+  } else {
+    while (tokens.length && (GLUE_WORDS.has(tokens[tokens.length - 1]) || VERB_WORDS.has(tokens[tokens.length - 1]))) tokens.pop();
+  }
+  return tokens.join(" ");
+}
+
+/** Marqueur interrogatif → type de question. */
+const LOOSE_MARKERS: [RegExp, QuestionType][] = [
+  [/\bcombien\b/, "howmany"],
+  [/\bquand\b/, "when"],
+  [/\bou\b/, "where"],
+  [/\bqui\b/, "who"],
+  [/\bquelles?\b|\bquels?\b|\blequel\b|\blaquelle\b|\blesquelles\b|\blesquels\b/, "which"],
+  [/\bcomment\b|\bpourquoi\b|\bquoi\b/, "what"],
+  [/\bwho\b|\bwhom\b/, "who"],
+  [/\bwhere\b/, "where"],
+  [/\bwhen\b/, "when"],
+  [/\bwhich\b/, "which"],
+  [/\bhow many\b|\bhow much\b/, "howmany"],
+  [/\bhow\b|\bwhy\b|\bwhat\b/, "what"],
+];
+
+/**
+ * Question « lâche » : le marqueur peut être n'importe où dans la phrase.
+ * Structure reconnue : [SUJET] …verbe/outil… [MARQUEUR] …outil… [ATTRIBUT].
+ * Exige un ancrage (mot-outil adjacent ou « ? » final) pour ne pas détourner
+ * les requêtes déclaratives contenant un mot comme « ou » (thé ou café).
+ */
+function parseLooseQuestion(nq: string, raw: string): SearchIntent | null {
+  const hasQMark = /\?\s*$/.test(raw.trim());
+  for (const [re, qtype] of LOOSE_MARKERS) {
+    const mm = nq.match(new RegExp(`${re.source}`.replace(/^\^/, ""), "i"));
+    if (!mm || mm.index == null) continue;
+    const idx = mm.index;
+    const marker = mm[0];
+    const before = nq.slice(0, idx).trim();
+    const after = nq.slice(idx + marker.length).trim();
+    if (idx === 0) continue; // en tête, les règles structurées ont déjà eu leur chance
+
+    const prevWord = before.split(/\s+/).pop() ?? "";
+    const nextWord = after.split(/\s+/)[0] ?? "";
+    // Le marqueur exige un sujet significatif AVANT lui — « thé ou café »
+    // n'a que « the » (mot-outil anglais) avant « ou » : pas une question.
+    const subjectBefore = stripGlue(before, "tail");
+    const anchored =
+      subjectBefore.length >= 2 &&
+      (GLUE_WORDS.has(prevWord) ||
+        VERB_WORDS.has(prevWord) ||
+        GLUE_WORDS.has(nextWord) ||
+        VERB_WORDS.has(nextWord) ||
+        // « ou » est trop ambigu (« X ou Y ? » = comparaison, pas « où ») —
+        // seuls les autres marqueurs s'ancrent au « ? » seul.
+        (hasQMark && marker !== "ou"));
+    if (!anchored) continue;
+
+    let subject = subjectBefore;
+    // Attribut = mots significatifs en tête seulement — « de buts en
+    // carrière » → « buts » ; « en » coupe la suite qui n'est pas la propriété.
+    const attrTokens = stripGlue(after, "head").split(/\s+/).filter(Boolean);
+    const headTokens: string[] = [];
+    for (const tok of attrTokens) {
+      if (GLUE_WORDS.has(tok) || VERB_WORDS.has(tok)) break;
+      headTokens.push(tok);
+    }
+    let attr = headTokens.join(" ");
+
+    // « c'est qui/quoi » en fin → attribut vide, sujet conservé.
+    if (/^(qui|quoi|lequel|laquelle)\b/.test(marker) && !attr) attr = "";
+
+    if (subject.length < 2) {
+      if (after.length < 2) continue;
+      subject = stripGlue(after, "head");
+      attr = "";
+    }
+    if (subject.length < 2) continue;
+    // L'attribut « lâche » ne dépasse pas quelques mots — sinon il contient le
+    // reste de la phrase et n'est pas une propriété demandée.
+    if (attr.split(/\s+/).length > 5) attr = attr.split(/\s+/).slice(0, 5).join(" ");
+
+    const canon = normalizeCountry(cleanSubject(subject));
+    if (canon.length < 2) continue;
+    const attrFinal =
+      attr ||
+      (qtype === "where" ? verbAttr(nq) : qtype === "what" ? whatAttr(nq) : qtype === "when" ? whenAttr(subject, nq) : undefined);
+    if (!attrFinal && (qtype === "who" || qtype === "which" || qtype === "what")) {
+      const split = splitRoleEntity(canon);
+      if (split) {
+        return {
+          kind: "question",
+          qtype: "which",
+          subject: split.entity,
+          wikiQuery: `${split.attr} ${split.entity}`,
+          attr: split.attr,
+          past: isPastQuery(nq) || undefined,
+        };
+      }
+    }
+    return {
+      kind: "question",
+      qtype,
+      subject: canon,
+      wikiQuery: canon,
+      attr: attrFinal,
+      past: isPastQuery(nq) || undefined,
+    };
+  }
+  return null;
+}
+
+/**
+ * Mathématiques — toute requête mathématiquement structurée, pas seulement
+ * celles finissant par « ? » : « 1+1 », « x = 2+3x », « 2x+4=10 »,
+ * « combien font 6 et 7 », « racine de 144 », « 20% de 150 », « 3 au carré ».
+ * Retourne l'expression (ou l'équation du 1er degré) à évaluer — jamais un
+ * texte à chercher sur le web.
+ */
+function parseMathIntent(raw: string): { kind: "math"; expr: string; display: string } | null {
+  const trimmed = raw.trim().replace(/[?!.\s]+$/, "");
+  if (!trimmed || trimmed.length > 60) return null;
+  let t = trimmed
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .replace(/,/g, ".")
+    .replace(/\s+/g, " ");
+
+  // Formes verbales françaises → expression.
+  t = t.replace(/^combien\s+(?:font|fait|vaut|donne|egalent?)\s+/, "");
+  const pct = t.match(/^([\d.]+)\s*(?:%|pour\s*cents?)\s*de\s*([\d.]+)$/);
+  if (pct) t = `(${pct[1]}*${pct[2]}/100)`;
+  const root = t.match(/^racine(?:\s+carree?)?\s+(?:de\s+|d[''']\s*)?\(?([\d.]+)\)?$/);
+  if (root) t = `(${root[1]}^0.5)`;
+  const cubic = t.match(/^racine\s+cubique\s+(?:de\s+|d[''']\s*)?\(?([\d.]+)\)?$/);
+  if (cubic) t = `(${cubic[1]}^(1/3))`;
+  t = t
+    .replace(/\bau\s+carre\b/g, "^2")
+    .replace(/\bau\s+cube\b/g, "^3")
+    .replace(/\bpuissance\b/g, "^")
+    .replace(/\bfois\b|\bmultiplie\s+par\b|\bx(?=\s*\d)/g, "*")
+    .replace(/\bplus\b/g, "+")
+    .replace(/\bmoins\b/g, "-")
+    .replace(/\bdivise\s+par\b|\bsur\b/g, "/")
+    .replace(/\bet\b/g, "+")
+    .replace(/\bsqrt\s*\(?\s*([\d.]+)\s*\)?/g, "($1^0.5)")
+    .trim();
+
+  // Équation : exactement un « = ». « x = 2+3x », « 2x+4 = 10 » → résolution
+  // du 1er degré ; « 2+3 = » → le « = » terminal est décoratif, on évalue la
+  // partie gauche ; plusieurs « = » ou variable absente → pas un calcul.
+  const eq = t.match(/^([^=]+)=\s*([^=]*)$/);
+  if (eq) {
+    const [left, right] = [eq[1].trim(), eq[2].trim()];
+    if (!right) {
+      t = left; // « 2+3 = » → évalue « 2+3 »
+    } else {
+      const vars = new Set((left + right).match(/[a-z]/g) ?? []);
+      if (vars.size === 1) {
+        const v = [...vars][0];
+        const sides = [left, right].map((s) =>
+          s.replace(new RegExp(`(\\d)${v}`, "g"), `$1*${v}`),
+        );
+        if (sides.every((s) => /^[\d\s+\-*/().^%a-z]+$/.test(s))) {
+          return { kind: "math", expr: `${sides[0]}=${sides[1]}`, display: trimmed };
+        }
+      }
+      return null;
+    }
+  }
+
+  // Expression arithmétique pure (avec ou sans « ? »/« = » final).
+  if (
+    /^[\d\s+\-*/().^%*]+$/.test(t) &&
+    /[\d]/.test(t) &&
+    /[+\-*/^*]/.test(t) &&
+    /\d\s*[+\-*/^*]\s*[\d(]/.test(t) // exige une vraie opération entre nombres
+  ) {
+    return { kind: "math", expr: t, display: trimmed };
+  }
   return null;
 }
 
@@ -710,15 +936,8 @@ export function parseSearchIntent(query: string): SearchIntent {
   const raw = query.trim();
   if (!raw) return { kind: "general" };
 
-  const mathDisplay = raw.replace(/,/g, ".");
-  const mathExpr = mathDisplay.replace(/=+\s*$/, "");
-  if (
-    /^[\d\s+\-*/().^%]+=?\s*$/.test(mathDisplay) &&
-    /[\d]/.test(mathExpr) &&
-    /[+\-*/^]/.test(mathExpr)
-  ) {
-    return { kind: "math", expr: mathExpr, display: raw };
-  }
+  const math = parseMathIntent(raw);
+  if (math) return math;
 
   const capital = parseCapitalIntent(raw);
   // Capitale « connue » → réponse instantanée hors-ligne. Sinon on laisse
