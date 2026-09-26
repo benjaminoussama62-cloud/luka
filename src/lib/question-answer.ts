@@ -229,6 +229,54 @@ const ATTR_PROPS: (AttrSpec & { re: RegExp })[] = [
   { re: /ville|commune|quartier|province|etat|region|departement|district|localite|arrondissement/i, props: ["P159", "P131", "P276", "P17"], label: "Localisation" },
 ];
 
+/** Fiche courte pour les questions sans attribut mappé. */
+const FICHE: { label: string; props: string[] }[] = [
+  { label: "Naissance", props: ["P569"] },
+  { label: "Décès", props: ["P570"] },
+  { label: "Fondation", props: ["P571"] },
+  { label: "Nationalité", props: ["P27"] },
+  { label: "Occupation", props: ["P106"] },
+  { label: "Pays", props: ["P17"] },
+  { label: "Capitale", props: ["P36"] },
+  { label: "Dirigeant", props: ["P35", "P6"] },
+  { label: "Population", props: ["P1082"] },
+  { label: "Superficie", props: ["P2046"] },
+  { label: "Localisation", props: ["P131", "P276"] },
+  { label: "Siège", props: ["P159"] },
+  { label: "Fondateur", props: ["P112"] },
+  { label: "Site officiel", props: ["P856"] },
+];
+
+/** Faits du panneau de connaissance — équivalent du Knowledge Panel Google :
+ *  « Né », « Décédé », « Conjoint », « Enfants », « Fonction », « Parti »… */
+const PANEL_FACTS: { label: string; props: string[]; max?: number }[] = [
+  { label: "Né", props: ["P569"] },
+  { label: "Lieu de naissance", props: ["P19"] },
+  { label: "Décédé", props: ["P570"] },
+  { label: "Lieu de décès", props: ["P20"] },
+  { label: "Conjoint", props: ["P26"], max: 2 },
+  { label: "Enfants", props: ["P40"], max: 5 },
+  { label: "Nationalité", props: ["P27"] },
+  { label: "Occupation", props: ["P106"], max: 3 },
+  { label: "Fonction", props: ["P39"], max: 3 },
+  { label: "Parti", props: ["P102"], max: 2 },
+  { label: "Distinctions", props: ["P166"], max: 3 },
+  { label: "Œuvre notable", props: ["P800"], max: 3 },
+  { label: "Fondation", props: ["P571"] },
+  { label: "Fondateur", props: ["P112"], max: 3 },
+  { label: "Siège", props: ["P159"] },
+  { label: "Propriétaire", props: ["P127"] },
+  { label: "Pays", props: ["P17"] },
+  { label: "Capitale", props: ["P36"] },
+  { label: "Dirigeant", props: ["P35", "P6"] },
+  { label: "Population", props: ["P1082"] },
+  { label: "Superficie", props: ["P2046"] },
+  { label: "Monnaie", props: ["P38"] },
+  { label: "Langue officielle", props: ["P37"] },
+  { label: "Localisation", props: ["P131", "P276"] },
+  { label: "Site officiel", props: ["P856"] },
+];
+
 /** Propriétés par défaut selon le type de question quand aucun attr ne matche. */
 const DEFAULT_PROPS: Record<QuestionType, string[]> = {
   where: ["P159", "P131", "P17"],
@@ -312,6 +360,7 @@ export async function answerQuestion(intent: QuestionIntentLike): Promise<Questi
   let entityName = wiki?.title ?? entity?.label ?? intent.subject;
   let structuredSource: string | undefined;
   let panelImage: string | undefined = wiki?.image;
+  let panelFacts: { label: string; value: string }[] = [];
 
   // Extraction depuis l'extrait réel — pour les attrs sans propriété Wikidata
   // (« fondé en 1982 par Étienne Tshisekedi », « anciennement Léopoldville »).
@@ -405,22 +454,6 @@ export async function answerQuestion(intent: QuestionIntentLike): Promise<Questi
       // Fiche d'entité générique — toute question reconnue sort des faits réels
       // (comme le panneau Knowledge Graph de Google), même sans attr mappé.
       if (!lines.length && intent.qtype !== "who") {
-        const FICHE: { label: string; props: string[] }[] = [
-          { label: "Naissance", props: ["P569"] },
-          { label: "Décès", props: ["P570"] },
-          { label: "Fondation", props: ["P571"] },
-          { label: "Nationalité", props: ["P27"] },
-          { label: "Occupation", props: ["P106"] },
-          { label: "Pays", props: ["P17"] },
-          { label: "Capitale", props: ["P36"] },
-          { label: "Dirigeant", props: ["P35", "P6"] },
-          { label: "Population", props: ["P1082"] },
-          { label: "Superficie", props: ["P2046"] },
-          { label: "Localisation", props: ["P131", "P276"] },
-          { label: "Siège", props: ["P159"] },
-          { label: "Fondateur", props: ["P112"] },
-          { label: "Site officiel", props: ["P856"] },
-        ];
         const facts: { label: string; value: string }[] = [];
         for (const f of FICHE) {
           if (facts.length >= 4) break;
@@ -432,6 +465,15 @@ export async function answerQuestion(intent: QuestionIntentLike): Promise<Questi
           structuredSource = entityUrl(entity.id);
         }
       }
+      // Panneau de connaissance riche (style Google) — faits structurés de
+      // l'entité : naissance, décès, conjoint, enfants, fonction, parti…
+      const pf: { label: string; value: string }[] = [];
+      for (const f of PANEL_FACTS) {
+        if (pf.length >= 8) break;
+        const v = await claimValues(claims, f.props, { max: f.max ?? 2 });
+        if (v?.length) pf.push({ label: f.label, value: v.join(", ") });
+      }
+      panelFacts = pf;
       if (entity.label && !wiki) entityName = entity.label;
     }
   }
@@ -470,19 +512,26 @@ export async function answerQuestion(intent: QuestionIntentLike): Promise<Questi
     domain: wiki ? `${wiki.lang}.wikipedia.org` : "wikidata.org",
   };
 
-  const panel: KnowledgePanel = wiki
-    ? { ...wikiAnswerToPanel(wiki), image: wiki.image ?? panelImage }
-    : {
-        title: entityName,
-        subtitle: entity?.description ?? "Entité Wikidata",
-        summary: `${entityName} — ${entity?.description ?? "entité du graphe de connaissances"}.`,
-        facts: [
-          { label: "Source", value: "Wikidata" },
-          { label: "Lien", value: entityUrl(entity!.id) },
-        ],
-        sources: ["wikidata.org"],
-        image: panelImage,
-      };
+  const panel: KnowledgePanel = {
+    title: entityName,
+    subtitle: entity?.description ?? wiki?.description ?? `Wikipédia (${wiki?.lang ?? "fr"})`,
+    summary: wiki?.extract ?? `${entityName} — ${entity?.description ?? "entité du graphe de connaissances"}.`,
+    // Faits structurés réels (Wikidata) — le panneau type Google, pas juste
+    // « Source / Lien ». Complétés par la source Wikipedia.
+    facts: [
+      ...panelFacts,
+      ...(wiki
+        ? [{ label: "Lire sur Wikipédia", value: wiki.url }]
+        : entity
+          ? [{ label: "Lien", value: entityUrl(entity.id) }]
+          : []),
+    ],
+    sources: [
+      ...(entity ? ["wikidata.org"] : []),
+      ...(wiki ? [`${wiki.lang}.wikipedia.org`] : []),
+    ],
+    image: wiki?.image ?? panelImage,
+  };
 
   return { instant, snippet, panel };
 }

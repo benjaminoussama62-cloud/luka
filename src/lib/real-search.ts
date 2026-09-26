@@ -1376,19 +1376,9 @@ async function liveSearchCore(
   ];
 
   // Vidéos : uniquement des résultats réels (Dailymotion/Piped/index).
-  // Jamais de carte « sur TALA » sans contenu vérifié — sinon c'est une fausse
-  // promesse. Un lien « plus sur YouTube » reste honnête (vraie recherche).
-  const videos: MediaResult[] = [
-    ...nativeVideos,
-    {
-      id: "yt-more",
-      title: `Plus de vidéos sur « ${q} »`,
-      url: `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`,
-      thumb: "https://www.google.com/s2/favicons?domain=youtube.com&sz=128",
-      source: "YouTube",
-      type: "video" as const,
-    },
-  ];
+  // Jamais de carte générique — un lien « recherche YouTube » déguisé en vidéo
+  // est de la fausse donnée.
+  const videos: MediaResult[] = [...nativeVideos];
 
   const maps = nativeMaps;
   const shopping = buildNativeShopping(q);
@@ -1444,10 +1434,15 @@ async function liveSearchCore(
     wikipediaKnowledge = knowledge;
   }
 
-  // Question → le panneau vient de la réponse résolue (entité Wikidata +
-  // extrait Wikipedia), même si fetchWikiSummary sur la requête brute a échoué.
-  if (questionAnswer && !wikipediaKnowledge && !knowledgePanel) {
-    wikipediaKnowledge = questionAnswer.panel;
+  // Question → le panneau PRINCIPAL est l'entité résolue (Wikidata/Wikipedia)
+  // — comme le Knowledge Panel de Google (« Saddam Hussein » pour la question
+  // « qui est sadam hussein »). Le graphe Ayebi peut dériver vers un sujet
+  // voisin et ne doit jamais le détrôner ; il passe en panneau secondaire.
+  if (questionAnswer) {
+    if (knowledgePanel && knowledgePanel.title !== questionAnswer.panel.title) {
+      wikipediaKnowledge ??= knowledgePanel;
+    }
+    knowledgePanel = questionAnswer.panel;
   }
 
   const topWeb = results.find(
