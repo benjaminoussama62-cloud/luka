@@ -30,8 +30,8 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+      # SDK Android préinstallé sur ubuntu-latest (ANDROID_HOME déjà défini) —
+      # android-actions/setup-android@v3 est cassé sur les runners récents.
 
       - name: Accept SDK licenses
         run: yes | sdkmanager --licenses || true
