@@ -361,7 +361,9 @@ export async function answerQuestion(intent: QuestionIntentLike): Promise<Questi
     (await searchEntity(intent.subject, preferDesc, requireProp));
 
   let lines: { label: string; value: string }[] = [];
-  let entityName = wiki?.title ?? entity?.label ?? intent.subject;
+  // Le libellé d'entité prime (« République démocratique du Congo ») — le titre
+  // wiki peut résoudre l'attribut (« Président de la RDC », la fonction).
+  let entityName = entity?.label ?? wiki?.title ?? intent.subject;
   let structuredSource: string | undefined;
   let panelImage: string | undefined = wiki?.image;
   let panelFacts: { label: string; value: string }[] = [];
