@@ -304,6 +304,93 @@ export async function claimValue(claims: Claims, props: string[]): Promise<strin
   return vs?.[0];
 }
 
+/**
+ * Version batchée de claimValues : résout TOUS les libellés d'un ensemble de
+ * specs en 1-2 appels wbgetentities au lieu d'un appel par propriété.
+ * Indispensable pour le panneau de connaissance (25 propriétés en ~1s).
+ */
+export async function batchClaimValues(
+  claims: Claims,
+  specs: { key: string; props: string[]; max?: number; age?: boolean }[],
+): Promise<Map<string, string[]>> {
+  // 1. Collecter tous les Q-ids et unités à résoudre.
+  const ids = new Set<string>();
+  for (const spec of specs) {
+    for (const p of spec.props) {
+      for (const snak of allSnaks(claims[p], spec.max ?? 3)) {
+        const v = snak.mainsnak?.datavalue?.value;
+        if (v && typeof v === "object") {
+          if ("id" in v && typeof v.id === "string") ids.add(v.id);
+          if ("numericId" in v && typeof v.numericId === "number") ids.add(`Q${v.numericId}`);
+          if ("unit" in v && typeof v.unit === "string") {
+            const m = v.unit.match(/Q\d+$/);
+            if (m && !UNIT_SHORT[m[0]]) ids.add(m[0]);
+          }
+        }
+      }
+    }
+  }
+  // 2. Un appel de résolution par tranche de 45 (limite API ~50).
+  const allIds = [...ids];
+  const labels = new Map<string, string>();
+  for (let i = 0; i < allIds.length; i += 45) {
+    const part = await resolveLabels(allIds.slice(i, i + 45));
+    for (const [k, v] of part) labels.set(k, v);
+  }
+  // 3. Formater chaque spec avec les libellés déjà résolus.
+  const out = new Map<string, string[]>();
+  for (const spec of specs) {
+    for (const p of spec.props) {
+      const snaks = allSnaks(claims[p], spec.max ?? 3);
+      if (!snaks.length) continue;
+      const vals: string[] = [];
+      for (const snak of snaks) {
+        const dv = snak.mainsnak?.datavalue;
+        if (!dv) continue;
+        const v = dv.value;
+        if (typeof v === "string") {
+          vals.push(v);
+        } else if (v && typeof v === "object") {
+          if ("id" in v && typeof v.id === "string") {
+            const l = labels.get(v.id);
+            if (l) vals.push(l);
+          } else if ("numericId" in v && typeof v.numericId === "number") {
+            const l = labels.get(`Q${v.numericId}`);
+            if (l) vals.push(l);
+          } else if ("time" in v && typeof v.time === "string") {
+            if (spec.age) {
+              const birth = new Date(v.time.replace(/^\+/, ""));
+              if (!Number.isNaN(birth.getTime())) {
+                const age = Math.floor((Date.now() - birth.getTime()) / (365.25 * 24 * 3600 * 1000));
+                vals.push(`${age} ans (né(e) le ${formatTime(v.time, v.precision)})`);
+              }
+            } else {
+              vals.push(formatTime(v.time, v.precision));
+            }
+          } else if ("amount" in v && typeof v.amount === "string") {
+            const n = Number(v.amount);
+            if (!Number.isFinite(n)) continue;
+            const unitId = typeof v.unit === "string" ? (v.unit.match(/Q\d+$/)?.[0] ?? "") : "";
+            const unit = UNIT_SHORT[unitId] ?? (unitId ? labels.get(unitId) ?? "" : "");
+            const formatted = Math.abs(n) >= 1000
+              ? Math.round(n).toLocaleString("fr-FR")
+              : n.toLocaleString("fr-FR", { maximumFractionDigits: 2 });
+            vals.push(unit ? `${formatted} ${unit}` : formatted);
+          } else if ("text" in v && typeof v.text === "string") {
+            vals.push(v.text);
+          }
+        }
+      }
+      const cleaned = [...new Set(vals.filter((s) => s.trim()))];
+      if (cleaned.length) {
+        out.set(spec.key, cleaned);
+        break; // premier prop non vide de la spec
+      }
+    }
+  }
+  return out;
+}
+
 /** Âge courant depuis P569 — calcul réel, pas un texte figé. */
 export async function ageValue(claims: Claims): Promise<string | undefined> {
   const vs = await claimValues(claims, ["P569"], { age: true, max: 1 });

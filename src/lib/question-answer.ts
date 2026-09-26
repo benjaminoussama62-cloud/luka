@@ -2,6 +2,7 @@ import { meaningfulTokens, normalizeQueryText, tokenMatchesInHay } from "./searc
 import type { FeaturedSnippet, InstantAnswer, KnowledgePanel } from "./types";
 import type { QuestionType } from "./query-intent";
 import {
+  batchClaimValues,
   claimValue,
   claimValues,
   entityImage,
@@ -336,9 +337,9 @@ export async function answerQuestion(intent: QuestionIntentLike): Promise<Questi
   // « Vladimir Poutine », pas le plat québécois) — mais pour les questions
   // attribut/sujet (« président DE la rdc »), le sujet EST l'entité (le pays) ;
   // le titre Wikipedia résoudrait « Président de la RDC » (la fonction).
-  const wiki = await fetchWikiAnswer(intent.wikiQuery);
-  const attrIntent =
-    intent.qtype === "which" || intent.qtype === "where" || intent.qtype === "howmany";
+  // Wiki et entité en parallèle — chaque appel coûte ~1s, en série la réponse
+  // dépasserait le budget temps de la SERP.
+  const preferDesc = personHint ? PERSON_DESC : undefined;
   // Contrainte sémantique de désambiguïsation : une question « mort » exige une
   // entité morte (P570), « naissance » une entité née (P569) — un footballeur
   // homonyme vivant ne peut pas répondre « où est mort khadafi ».
@@ -348,11 +349,14 @@ export async function answerQuestion(intent: QuestionIntentLike): Promise<Questi
       : intent.attr && /naissance|\bnee?\b|birth|age/.test(intent.attr)
         ? "P569"
         : undefined;
-  const preferDesc = personHint ? PERSON_DESC : undefined;
+  const attrIntent =
+    intent.qtype === "which" || intent.qtype === "where" || intent.qtype === "howmany";
+  const [wiki, directEntity] = await Promise.all([
+    fetchWikiAnswer(intent.wikiQuery),
+    attrIntent ? searchEntity(intent.subject, preferDesc, requireProp) : Promise.resolve(undefined),
+  ]);
   const entity =
-    (attrIntent
-      ? await searchEntity(intent.subject, preferDesc, requireProp)
-      : undefined) ??
+    directEntity ??
     (wiki ? await searchEntity(wiki.title, preferDesc, requireProp) : undefined) ??
     (await searchEntity(intent.subject, preferDesc, requireProp));
 
@@ -420,15 +424,13 @@ export async function answerQuestion(intent: QuestionIntentLike): Promise<Questi
       }
       // « qui est X » — fiche enrichie : naissance, nationalité, occupation réelles.
       if (intent.qtype === "who" && !lines.length) {
-        const facts: { label: string; value: string }[] = [];
-        const birth = await claimValue(claims, ["P569"]);
-        if (birth) facts.push({ label: "Naissance", value: birth });
-        const death = await claimValue(claims, ["P570"]);
-        if (death) facts.push({ label: "Décès", value: death });
-        const nat = await claimValues(claims, ["P27"], { max: 2 });
-        if (nat?.length) facts.push({ label: "Nationalité", value: nat.join(", ") });
-        const occ = await claimValues(claims, ["P106"], { max: 2 });
-        if (occ?.length) facts.push({ label: "Occupation", value: occ.join(", ") });
+        const m = await batchClaimValues(claims, [
+          { key: "Naissance", props: ["P569"], max: 1 },
+          { key: "Décès", props: ["P570"], max: 1 },
+          { key: "Nationalité", props: ["P27"], max: 2 },
+          { key: "Occupation", props: ["P106"], max: 2 },
+        ]);
+        const facts = [...m.entries()].map(([label, vs]) => ({ label, value: vs.join(", ") }));
         lines = facts.slice(0, 4);
         if (facts.length) structuredSource = entityUrl(entity.id);
       }
@@ -454,26 +456,23 @@ export async function answerQuestion(intent: QuestionIntentLike): Promise<Questi
       // Fiche d'entité générique — toute question reconnue sort des faits réels
       // (comme le panneau Knowledge Graph de Google), même sans attr mappé.
       if (!lines.length && intent.qtype !== "who") {
-        const facts: { label: string; value: string }[] = [];
-        for (const f of FICHE) {
-          if (facts.length >= 4) break;
-          const v = await claimValues(claims, f.props, { max: 2 });
-          if (v?.length) facts.push({ label: f.label, value: v.join(", ") });
-        }
+        const m = await batchClaimValues(
+          claims,
+          FICHE.map((f) => ({ key: f.label, props: f.props, max: 2 })),
+        );
+        const facts = [...m.entries()].slice(0, 4).map(([label, vs]) => ({ label, value: vs.join(", ") }));
         if (facts.length) {
           lines = facts;
           structuredSource = entityUrl(entity.id);
         }
       }
       // Panneau de connaissance riche (style Google) — faits structurés de
-      // l'entité : naissance, décès, conjoint, enfants, fonction, parti…
-      const pf: { label: string; value: string }[] = [];
-      for (const f of PANEL_FACTS) {
-        if (pf.length >= 8) break;
-        const v = await claimValues(claims, f.props, { max: f.max ?? 2 });
-        if (v?.length) pf.push({ label: f.label, value: v.join(", ") });
-      }
-      panelFacts = pf;
+      // l'entité en UN batch de résolution de libellés (~1 appel, pas 25).
+      const pm = await batchClaimValues(
+        claims,
+        PANEL_FACTS.map((f) => ({ key: f.label, props: f.props, max: f.max ?? 2 })),
+      );
+      panelFacts = [...pm.entries()].slice(0, 8).map(([label, vs]) => ({ label, value: vs.join(", ") }));
       if (entity.label && !wiki) entityName = entity.label;
     }
   }

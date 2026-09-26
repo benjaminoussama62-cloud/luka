@@ -1127,10 +1127,10 @@ async function liveSearchCore(
         : settled(fetchWikiSummary(webQ), undefined, Math.min(UPSTREAM_FAST_MS, msLeft())),
       offline
         ? Promise.resolve([] as MediaResult[])
-        : settled(searchImagesNative(webQ), [], Math.min(UPSTREAM_FAST_MS, msLeft())),
+        : settled(searchImagesNative(webQ), [], Math.min(2400, msLeft())),
       offline
         ? Promise.resolve([] as MediaResult[])
-        : settled(searchVideosNative(webQ), [], upstreamMs),
+        : settled(searchVideosNative(webQ), [], Math.min(2600, msLeft())),
       offline
         ? Promise.resolve([] as MapPlace[])
         : settled(
@@ -1148,7 +1148,9 @@ async function liveSearchCore(
         : settled(
             answerQuestion(qIntent),
             undefined,
-            Math.min(UPSTREAM_MS, msLeft()),
+            // La réponse directe EST le produit pour une question — vrai budget,
+            // sinon elle timeout toujours (wiki+entité+claims ≈ 2-3s en série).
+            Math.min(3100, msLeft()),
           ),
     ]),
   );

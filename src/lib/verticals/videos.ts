@@ -145,9 +145,18 @@ export async function fetchDailymotionVideos(query: string): Promise<MediaResult
         "owner.screenname"?: string;
       }>;
     };
+    // Filtre de pertinence : au moins un token significatif de la requête dans
+    // le titre — sinon Dailymotion renvoie ses vidéos du moment, hors-sujet.
+    const strip = (s: string) =>
+      s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+    const tokens = strip(query).split(/[^a-z0-9]+/).filter((t) => t.length >= 3);
+    const relevant = (title: string) => {
+      const t = strip(title);
+      return tokens.some((tok) => t.includes(tok));
+    };
     const out: MediaResult[] = [];
     for (const v of data.list ?? []) {
-      if (!v.id || !v.title) continue;
+      if (!v.id || !v.title || !relevant(v.title)) continue;
       out.push({
         id: `dm-${v.id}`,
         title: v.title,
