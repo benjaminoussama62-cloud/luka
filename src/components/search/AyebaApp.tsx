@@ -337,6 +337,15 @@ function PeopleAlsoAskBlock() {
 function EmptyResults() {
   const { response, search } = useAyeba();
   if (!response || response.results.length > 0) return null;
+  // Calcul / réponse instantanée = résultat direct — ne pas afficher le vide.
+  if (
+    response.instantAnswer ||
+    response.instantAnswers?.length ||
+    response.featuredSnippet ||
+    response.knowledge
+  ) {
+    return null;
+  }
   return (
     <div className="ayeba-panel p-8 text-center">
       <p className="ayeba-kicker ayeba-kicker-accent mb-3">Aucun résultat direct</p>

@@ -24,7 +24,7 @@ export const ATTR_KEYS = [
   "capital", "currency", "official_language", "spoken_language", "population",
   "area", "density", "country", "continent", "anthem", "flag", "elevation",
   "river", "river_mouth", "airport", "calling_code", "timezone", "demonym",
-  "iso_code", "tld", "postal_code", "subdivisions_count", "location",
+  "iso_code", "tld", "postal_code", "subdivisions_count", "location", "world_count",
   // gouvernance
   "head_of_state", "head_of_government", "monarch", "first_lady", "mayor",
   "officeholder", "governor",
@@ -124,7 +124,7 @@ intent:
 - "general" : tout le reste
 
 attrKey — vocabulaire fermé, choisis la clé la plus précise :
-territoire: capital, currency, official_language, spoken_language, population, area, density, country, continent, anthem, flag, elevation, river, river_mouth, airport, calling_code, timezone, demonym, iso_code, tld, postal_code, subdivisions_count, location
+territoire: capital, currency, official_language, spoken_language, population, area, density, country, continent, anthem, flag, elevation, river, river_mouth, airport, calling_code, timezone, demonym, iso_code, tld, postal_code, subdivisions_count, location, world_count
 gouvernance: head_of_state (président/roi dirigeant actuel), head_of_government (premier ministre), monarch, first_lady, mayor, governor, officeholder (« ministre de X », tout titulaire d'un poste nommé — mets le poste dans attribute)
 organisation/œuvre: founder, ceo, headquarters, creator, author, composer, director, performer, owner, parent_org, employees, website, inception, dissolution, duration
 personne: birth_date, death_date, birthplace, death_place, death_cause, resting_place, age, spouse, mother, father, siblings, children, nationality, height, weight, religion, party, team, awards, education, occupation, position_held, net_worth, notable_work
@@ -134,8 +134,11 @@ Règles strictes:
 - Ne devine jamais un fait : tu classifies la requête, tu ne réponds pas à la question.
 - entity = l'entité dont PARLE la requête, pas l'attribut. « qui est le ministre des sports en guinée » → entity="Guinea", attrKey="officeholder", attribute="ministre des sports", entityType="country".
 - « combien de provinces/régions/départements… » → attrKey="subdivisions_count", qtype="howmany".
+- « combien de continents / planètes / océans » (sans pays) → attrKey="world_count", entity="continents"|"planètes"|"océans", entityType="concept". JAMAIS entity=Europe.
 - « dans quel pays/continent/région se trouve X » → entity=X, attrKey="country"|"continent"|"location".
 - « c'est quoi X » / « what is X » → intent="definition", entity=X, entityType="concept" (le concept générique, jamais un sous-type).
+- Calcul / racine / équation (« racine carrée de 9 », « 8x=2+2 ») → intent="calc", expr évaluable.
+- Monnaie d'un pays (« quelle monnaie en France ») → attrKey="currency", entity=pays — la devise PRINCIPALE (euro pour la France), pas les devises d'outre-mer.
 - Si la requête est une simple série de mots-clés, intent="general" et entity=sujet principal.
 - Requête service/commerce local (« maison de retraite à Kinshasa », « hôpital à Goma », « pharmacie Limete ») → intent="general" (PAS question), entity="" ou le service+lieu, attrKey="". Ne jamais réduire à la seule ville.
 - « Lemba / Gombe / Limete est une commune » (RDC) → entity=nom de la commune, entityType="place", intent="question", attrKey="location". Priorité Kinshasa RDC, pas les homonymes européens.`;

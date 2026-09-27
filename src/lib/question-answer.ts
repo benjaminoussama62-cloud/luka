@@ -1,6 +1,7 @@
 import { meaningfulTokens, normalizeQueryText, tokenMatchesInHay } from "./search-relevance";
 import type { FeaturedSnippet, InstantAnswer, KnowledgePanel } from "./types";
 import type { QuestionType } from "./query-intent";
+import { worldCountAnswer } from "./query-intent";
 import {
   batchClaimValues,
   claimEntityIds,
@@ -10,6 +11,7 @@ import {
   entityUrl,
   getClaims,
   getClaimsFor,
+  preferPrimaryCurrencyLabels,
   searchEntity,
   searchPositionEntity,
 } from "./wikidata";
@@ -574,8 +576,36 @@ function expectsGeoEntity(attr?: string): boolean {
 }
 
 export async function answerQuestion(intent: QuestionIntentLike): Promise<QuestionAnswerBundle | undefined> {
-  // Questions sur des personnes → préférer l'entité « personne » en cas d'homonymie
-  // (« poutine » → Vladimir Poutine, pas le plat québécois).
+  // Comptages mondiaux (« combien de continents ») — avant tout Wikidata
+  // qui sinon résolvait « Europe » + population.
+  if (intent.attrKey === "world_count" || (intent.qtype === "howmany" && /^(continents?|planetes?|planètes?|oceans?|océans?)$/i.test(intent.subject.trim()))) {
+    const wc = worldCountAnswer(intent.subject);
+    if (wc) {
+      const instant: InstantAnswer = {
+        kind: "answer",
+        title: wc.title,
+        lines: [{ label: "Réponse", value: wc.value }],
+        footnote: wc.detail,
+      };
+      return {
+        instant,
+        panel: {
+          title: wc.title,
+          subtitle: "Réponse factuelle",
+          summary: `${wc.value}. ${wc.detail}`,
+          facts: [{ label: "Nombre", value: wc.value }],
+          sources: ["ayeba-knowledge"],
+        },
+        snippet: {
+          title: wc.title,
+          text: `${wc.value} — ${wc.detail}`,
+          url: "https://fr.wikipedia.org/wiki/Continent",
+          domain: "wikipedia.org",
+        },
+      };
+    }
+  }
+
   const personHint =
     intent.qtype === "who" ||
     (intent.qtype === "when" && (intent.attr === "naissance" || intent.attr === "mort")) ||
@@ -787,6 +817,17 @@ export async function answerQuestion(intent: QuestionIntentLike): Promise<Questi
             }
           }
           if (values?.length) {
+            // Monnaie : une devise principale (euro pour la France), pas le
+            // franc Pacifique listé pour l'outre-mer.
+            if (
+              intent.attrKey === "currency" ||
+              (intent.attr != null && /monnaie|devise|currency/i.test(intent.attr))
+            ) {
+              values = preferPrimaryCurrencyLabels(
+                values,
+                `${intent.subject} ${intent.attr ?? ""} ${intent.wikiQuery}`,
+              );
+            }
             // « qui fut/était… » → Wikidata rend le titulaire ACTUEL ; on le
             // dit honnêtement (« Président (actuel) ») plutôt que de prétendre
             // répondre à une question historique.

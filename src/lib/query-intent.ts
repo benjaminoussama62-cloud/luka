@@ -883,13 +883,28 @@ function parseLooseQuestion(nq: string, raw: string): SearchIntent | null {
  */
 function parseMathIntent(raw: string): { kind: "math"; expr: string; display: string } | null {
   const trimmed = raw.trim().replace(/[?!.\s]+$/, "");
-  if (!trimmed || trimmed.length > 60) return null;
+  if (!trimmed || trimmed.length > 120) return null;
   let t = trimmed
     .toLowerCase()
     .normalize("NFD")
     .replace(/\p{M}/gu, "")
     .replace(/,/g, ".")
     .replace(/\s+/g, " ");
+
+  // Enlever le bruit « c'est quoi / quelle équation / ce quel… » pour
+  // ne garder que l'expression mathématique (« racine carrée de 9 », « 8x=2+2 »).
+  t = t
+    .replace(
+      /^(?:c['’]?est\s+quoi|c\s+quoi|qu['’]?est[- ]ce\s+que|quelle?\s+est|combien\s+(?:font|fait|vaut|donne|egalent?))\s+/i,
+      "",
+    )
+    .replace(
+      /\s+(?:ce|c['’]?est|cest)?\s*(?:quel(?:le)?|quoi)\s+(?:equation|équation|calcul|resultat|résultat).*$/i,
+      "",
+    )
+    .replace(/\s+(?:c['’]?est\s+quoi|c\s+quoi).*$/i, "")
+    .replace(/^la\s+/, "")
+    .trim();
 
   // Formes verbales françaises → expression.
   t = t.replace(/^combien\s+(?:font|fait|vaut|donne|egalent?)\s+/, "");
@@ -920,13 +935,19 @@ function parseMathIntent(raw: string): { kind: "math"; expr: string; display: st
     if (!right) {
       t = left; // « 2+3 = » → évalue « 2+3 »
     } else {
-      const vars = new Set((left + right).match(/[a-z]/g) ?? []);
-      if (vars.size === 1) {
+      // Garder seulement coef / var / opérateurs à droite et à gauche.
+      const cleanSide = (s: string) =>
+        s
+          .replace(/[^0-9a-z+\-*/().^%\s]/gi, "")
+          .replace(/\s+/g, "")
+          .trim();
+      const L = cleanSide(left);
+      const R = cleanSide(right);
+      const vars = new Set((L + R).match(/[a-z]/g) ?? []);
+      if (vars.size === 1 && L && R) {
         const v = [...vars][0];
-        const sides = [left, right].map((s) =>
-          s.replace(new RegExp(`(\\d)${v}`, "g"), `$1*${v}`),
-        );
-        if (sides.every((s) => /^[\d\s+\-*/().^%a-z]+$/.test(s))) {
+        const sides = [L, R].map((s) => s.replace(new RegExp(`(\\d)${v}`, "g"), `$1*${v}`));
+        if (sides.every((s) => /^[\d+\-*/().^%a-z]+$/i.test(s))) {
           return { kind: "math", expr: `${sides[0]}=${sides[1]}`, display: trimmed };
         }
       }
@@ -946,12 +967,103 @@ function parseMathIntent(raw: string): { kind: "math"; expr: string; display: st
   return null;
 }
 
+/**
+ * Comptages mondiaux (« combien de continents ») — pas une entité Europe
+ * avec sa population. Réponses canoniques stables (modèle scolaire courant).
+ */
+function parseWorldCountIntent(raw: string): SearchIntent | null {
+  const nq = normalizeSmsFrench(raw)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "");
+  if (
+    /\b(?:il\s+existe\s+)?combien\s+(?:y\s+a[- ]t[- ]il\s+)?(?:de\s+)?continents?\b/.test(nq) ||
+    /\b(?:nombre|nombre\s+total)\s+de\s+continents?\b/.test(nq)
+  ) {
+    return {
+      kind: "question",
+      qtype: "howmany",
+      subject: "continents",
+      wikiQuery: "Continent",
+      attr: "nombre",
+      attrKey: "world_count",
+      entityType: "concept",
+    };
+  }
+  if (
+    /\b(?:il\s+existe\s+)?combien\s+(?:y\s+a[- ]t[- ]il\s+)?(?:de\s+)?planetes?\b/.test(nq) ||
+    /\b(?:nombre|nombre\s+total)\s+de\s+planetes?\b/.test(nq)
+  ) {
+    return {
+      kind: "question",
+      qtype: "howmany",
+      subject: "planètes",
+      wikiQuery: "Planète",
+      attr: "nombre",
+      attrKey: "world_count",
+      entityType: "concept",
+    };
+  }
+  if (
+    /\b(?:il\s+existe\s+)?combien\s+(?:y\s+a[- ]t[- ]il\s+)?(?:de\s+)?oceans?\b/.test(nq) ||
+    /\b(?:nombre|nombre\s+total)\s+de\s+oceans?\b/.test(nq)
+  ) {
+    return {
+      kind: "question",
+      qtype: "howmany",
+      subject: "océans",
+      wikiQuery: "Océan",
+      attr: "nombre",
+      attrKey: "world_count",
+      entityType: "concept",
+    };
+  }
+  return null;
+}
+
+export function worldCountAnswer(subject: string): {
+  title: string;
+  value: string;
+  detail: string;
+} | null {
+  const k = subject
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "");
+  if (/continent/.test(k)) {
+    return {
+      title: "Continents",
+      value: "7",
+      detail:
+        "Modèle scolaire courant : Afrique, Amérique, Antarctique, Asie, Europe, Océanie (parfois l’Amérique est scindée en deux).",
+    };
+  }
+  if (/planet/.test(k)) {
+    return {
+      title: "Planètes du Système solaire",
+      value: "8",
+      detail: "Mercure, Vénus, Terre, Mars, Jupiter, Saturne, Uranus, Neptune (Pluton est une planète naine).",
+    };
+  }
+  if (/ocean/.test(k)) {
+    return {
+      title: "Océans",
+      value: "5",
+      detail: "Pacifique, Atlantique, Indien, Austral et Arctique.",
+    };
+  }
+  return null;
+}
+
 export function parseSearchIntent(query: string): SearchIntent {
   const raw = query.trim();
   if (!raw) return { kind: "general" };
 
   const math = parseMathIntent(raw);
   if (math) return math;
+
+  const world = parseWorldCountIntent(raw);
+  if (world) return world;
 
   const capital = parseCapitalIntent(raw);
   // Capitale « connue » → réponse instantanée hors-ligne. Sinon on laisse

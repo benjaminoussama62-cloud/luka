@@ -319,6 +319,41 @@ function allSnaks(claims: Snak[] | undefined, max = 3): Snak[] {
   return (preferred.length ? preferred : normal).slice(0, max);
 }
 
+/** Monnaie officielle principale — écarter CFP / outre-mer sauf demande explicite. */
+export function preferPrimaryCurrencyLabels(
+  labels: string[],
+  queryHint = "",
+): string[] {
+  if (!labels.length) return labels;
+  const q = queryHint
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "");
+  const wantOverseas = /\b(pacifique|cfp|xpf|caledonie|polynesie|outre[- ]mer|nouvelle[- ]caledonie|wallis|futuna)\b/.test(
+    q,
+  );
+  if (wantOverseas) return labels;
+  const scored = labels.map((lab) => {
+    const l = lab
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/\p{M}/gu, "");
+    let score = 0;
+    if (/\beuro\b|\beur\b/.test(l)) score += 100;
+    if (/\bdollar\b|\busd\b/.test(l)) score += 40;
+    if (/\bpacifique\b|\bcfp\b|\bxpf\b|change\s+franc/.test(l)) score -= 80;
+    return { lab, score };
+  });
+  scored.sort((a, b) => b.score - a.score);
+  const best = scored[0];
+  // Une seule monnaie « principale » pour la réponse courte.
+  if (best.score >= 40) return [best.lab];
+  if (best.score < 0 && scored.some((s) => s.score >= 0)) {
+    return [scored.find((s) => s.score >= 0)!.lab];
+  }
+  return [best.lab];
+}
+
 const UNIT_SHORT: Record<string, string> = {
   Q712226: "km²",
   Q25343: "m²",

@@ -1072,7 +1072,12 @@ async function liveSearchCore(
   const understanding = offline ? null : await understandQuery(rawQuery);
   const ruleIntent = parseSearchIntent(rawQuery);
   let intent = ruleIntent;
-  if (understanding) {
+  // Comptage mondial / calcul déjà résolus par règles → ne pas laisser le
+  // LLM remplacer « continents » par « Europe » ou √9 par √2.
+  const lockRuleIntent =
+    ruleIntent.kind === "math" ||
+    (ruleIntent.kind === "question" && ruleIntent.attrKey === "world_count");
+  if (understanding && !lockRuleIntent) {
     if (understanding.intent === "calc" && understanding.expr && evalMath(understanding.expr)) {
       intent = { kind: "math", expr: understanding.expr, display: understanding.corrected };
     } else if (
@@ -1839,6 +1844,14 @@ async function liveSearchCore(
   const featuredSnippet: FeaturedSnippet | undefined =
     questionSnippet ??
     tryMathSnippet(q) ??
+    (intent.kind === "math" && instantAnswers[0]?.kind === "calc"
+      ? {
+          title: instantAnswers[0].title,
+          text: instantAnswers[0].lines.map((l) => l.value).join(" · "),
+          url: "#calc",
+          domain: "ayeba",
+        }
+      : undefined) ??
     (capitalFact
       ? {
           title: `${capitalFact.capital} — capitale ${capitalFact.country}`,

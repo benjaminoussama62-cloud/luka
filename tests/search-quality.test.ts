@@ -293,3 +293,39 @@ describe("matchKinshasaCommune", () => {
     expect(matchKinshasaCommune("lembach bas-rhin france")).toBeNull();
   });
 });
+
+describe("math + world count — compréhension générale", () => {
+  it("évalue racine carrée malgré « c quoi »", async () => {
+    const { evalMath } = await import("@/lib/real-search");
+    const intent = parseSearchIntent("c quoi la racine carree de 9");
+    expect(intent.kind).toBe("math");
+    if (intent.kind === "math") {
+      expect(evalMath(intent.expr)).toBe("3");
+    }
+  });
+
+  it("résout une équation malgré le bruit « ce quel equation »", async () => {
+    const { evalMath } = await import("@/lib/real-search");
+    const intent = parseSearchIntent("8x = 2+2 ce quel equation ?");
+    expect(intent.kind).toBe("math");
+    if (intent.kind === "math") {
+      expect(evalMath(intent.expr)).toMatch(/x\s*=\s*0[,.]5/);
+    }
+  });
+
+  it("compte les continents sans résoudre Europe", () => {
+    const intent = parseSearchIntent("il existe combien de continent ?");
+    expect(intent.kind).toBe("question");
+    if (intent.kind === "question") {
+      expect(intent.attrKey).toBe("world_count");
+      expect(intent.subject.toLowerCase()).toContain("continent");
+    }
+  });
+
+  it("préférer euro au franc Pacifique", async () => {
+    const { preferPrimaryCurrencyLabels } = await import("@/lib/wikidata");
+    expect(
+      preferPrimaryCurrencyLabels(["franc Pacifique", "euro"], "quelle monnaie en france"),
+    ).toEqual(["euro"]);
+  });
+});
