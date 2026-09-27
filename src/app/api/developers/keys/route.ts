@@ -42,7 +42,14 @@ export async function POST(req: Request) {
     restrictions: body.restrictions,
     quotaPerDay: body.quotaPerDay,
   });
-  if (!created) return NextResponse.json({ error: "Projet introuvable" }, { status: 404 });
+  if (!created) {
+    const role = projectAccess(body.projectId, auth.user.id);
+    if (!role) return NextResponse.json({ error: "Projet introuvable" }, { status: 404 });
+    return NextResponse.json(
+      { error: "Seuls le propriétaire et les éditeurs peuvent créer des clés API" },
+      { status: 403 },
+    );
+  }
   // secret is returned once — it is stored only as a hash.
   return NextResponse.json(created, { status: 201 });
 }

@@ -54,5 +54,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: result.error }, { status: 400 });
   }
 
-  return NextResponse.json({ article: result.article });
+  return NextResponse.json({
+    article: result.article,
+    quality: "quality" in result ? result.quality : undefined,
+    citationWarning: "citationWarning" in result ? result.citationWarning : undefined,
+  });
 }

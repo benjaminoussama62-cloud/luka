@@ -6,7 +6,7 @@ import {
   upstreamQuery,
 } from "@/lib/query-intent";
 import { mediaRelevant } from "@/lib/verticals/images";
-import { tokenMatchesInHay } from "@/lib/search-relevance";
+import { tokenMatchesInHay, relevanceScore, relevanceAgainstSubjects, retrievalSubjects, isRetrievedHitAdmissible } from "@/lib/search-relevance";
 
 describe("isJunkHit — filtre anti-bruit SERP", () => {
   it("rejette les titres génériques sans valeur", () => {
@@ -209,5 +209,66 @@ describe("tokenMatchesInHay — tolérance translittération", () => {
   });
   it("garde le matching exact", () => {
     expect(tokenMatchesInHay("bcdc", "la bcdc est une banque")).toBe(true);
+  });
+});
+
+describe("compréhension → pertinence (toute longueur de requête)", () => {
+  it("une phrase longue score via l'entité comprise, pas tous les mots-outils", () => {
+    const longQ =
+      "qui est le chanteur américain connu sous le nom de Ye";
+    const hit = "Kanye West — Wikipédia rappeur américain aussi appelé Ye";
+    // Lexical pur sur la phrase entière : trop de tokens absents → score bas.
+    expect(relevanceScore(hit, longQ)).toBeLessThan(28);
+    // Avec sujet compris : le hit est pertinent.
+    expect(relevanceAgainstSubjects(hit, longQ, ["Ye", "Kanye West"])).toBeGreaterThanOrEqual(28);
+  });
+
+  it("une requête courte reste pertinente sans sujet supplémentaire", () => {
+    expect(
+      relevanceAgainstSubjects("Kanye West — artiste", "Ye", []),
+    ).toBeGreaterThanOrEqual(0);
+    expect(relevanceScore("Kinshasa — capitale", "Kinshasa")).toBeGreaterThanOrEqual(90);
+  });
+
+  it("retrievalSubjects privilégie l'entité sur la phrase corrigée longue", () => {
+    const subjects = retrievalSubjects({
+      query: "quel est l age actuel de vladimir poutine le president russe",
+      entity: "Vladimir Poutine",
+      entityEn: "Vladimir Putin",
+      corrected: "quel est l'âge actuel de Vladimir Poutine le président russe",
+    });
+    expect(subjects[0]).toMatch(/poutine|putin/i);
+    expect(subjects.some((s) => /âge actuel/i.test(s))).toBe(false);
+  });
+
+  it("isRetrievedHitAdmissible garde un hit wiki même si le score lexical phrase est bas", () => {
+    const r = {
+      domain: "fr.wikipedia.org",
+      url: "https://fr.wikipedia.org/wiki/Kanye_West",
+      title: "Kanye West — Wikipédia",
+      snippet: "Rappeur et producteur américain.",
+      sourceType: "wiki",
+      keywords: ["retrieved:upstream"],
+    };
+    expect(
+      isRetrievedHitAdmissible(
+        r,
+        "qui est le chanteur américain connu sous le nom de Ye",
+        ["Ye", "Kanye West"],
+      ),
+    ).toBe(true);
+  });
+
+  it("isRetrievedHitAdmissible booste first-party quand le contenu matche l'entité", () => {
+    const r = {
+      domain: "jemsa.net",
+      url: "https://jemsa.net",
+      title: "Jemsa — réseau social éducatif",
+      snippet: "Plateforme congolaise étudiants et universités.",
+      sourceType: "tech" as string,
+    };
+    expect(isRetrievedHitAdmissible(r, "réseau social étudiants kinshasa", ["Jemsa"])).toBe(
+      true,
+    );
   });
 });

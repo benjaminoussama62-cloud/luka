@@ -279,7 +279,9 @@ CREATE TABLE IF NOT EXISTS impressions (
   publisher_revenue REAL NOT NULL DEFAULT 0,
   fraud_score REAL NOT NULL DEFAULT 0,
   fraud_signals TEXT NOT NULL DEFAULT '[]',
-  is_valid INTEGER NOT NULL DEFAULT 1
+  is_valid INTEGER NOT NULL DEFAULT 1,
+  matched_query TEXT NOT NULL DEFAULT '',
+  matched_keywords TEXT NOT NULL DEFAULT '[]'
 );
 
 CREATE INDEX IF NOT EXISTS idx_impressions_timestamp ON impressions(timestamp DESC);
@@ -307,7 +309,9 @@ CREATE TABLE IF NOT EXISTS clicks (
   publisher_revenue REAL NOT NULL DEFAULT 0,
   fraud_score REAL NOT NULL DEFAULT 0,
   fraud_signals TEXT NOT NULL DEFAULT '[]',
-  is_valid INTEGER NOT NULL DEFAULT 1
+  is_valid INTEGER NOT NULL DEFAULT 1,
+  matched_query TEXT NOT NULL DEFAULT '',
+  matched_keywords TEXT NOT NULL DEFAULT '[]'
 );
 
 CREATE INDEX IF NOT EXISTS idx_clicks_timestamp ON clicks(timestamp DESC);
@@ -675,6 +679,21 @@ CREATE TABLE IF NOT EXISTS trace_tag_rules (
 
 CREATE INDEX IF NOT EXISTS idx_trace_tags_site ON trace_tag_rules(site_id);
 
+-- TRACE CONVERSION GOALS (objectifs GA4-like : name + event_type + value)
+CREATE TABLE IF NOT EXISTS trace_conversion_goals (
+  id TEXT PRIMARY KEY,
+  site_id TEXT NOT NULL REFERENCES studio_sites(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  event_type TEXT NOT NULL,
+  value REAL NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'active',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_trace_goals_site ON trace_conversion_goals(site_id);
+CREATE INDEX IF NOT EXISTS idx_trace_goals_event ON trace_conversion_goals(site_id, event_type);
+
 -- RADAR — sitemaps soumis (historique + statut de lecture réel)
 CREATE TABLE IF NOT EXISTS radar_sitemaps (
   id TEXT PRIMARY KEY,
@@ -689,6 +708,43 @@ CREATE TABLE IF NOT EXISTS radar_sitemaps (
 );
 
 CREATE INDEX IF NOT EXISTS idx_radar_sitemaps_site ON radar_sitemaps(site_id);
+
+-- RADAR — demandes d'indexation (historique type GSC "Request indexing")
+CREATE TABLE IF NOT EXISTS radar_index_requests (
+  id TEXT PRIMARY KEY,
+  site_id TEXT NOT NULL REFERENCES studio_sites(id) ON DELETE CASCADE,
+  url TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'queued',
+  reason TEXT NOT NULL DEFAULT 'request_indexing',
+  requested_at TEXT NOT NULL,
+  queue_status TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_radar_index_req_site ON radar_index_requests(site_id, requested_at DESC);
+
+-- RADAR — journal append-only de chaque inspection / test live
+CREATE TABLE IF NOT EXISTS radar_inspection_events (
+  id TEXT PRIMARY KEY,
+  site_id TEXT NOT NULL REFERENCES studio_sites(id) ON DELETE CASCADE,
+  url TEXT NOT NULL,
+  kind TEXT NOT NULL DEFAULT 'index',
+  indexed INTEGER NOT NULL DEFAULT 0,
+  title TEXT,
+  crawled_at TEXT,
+  in_queue INTEGER NOT NULL DEFAULT 0,
+  queue_status TEXT,
+  live_status INTEGER,
+  live_indexable INTEGER,
+  live_noindex INTEGER,
+  live_latency_ms INTEGER,
+  live_error TEXT,
+  clicks_30d INTEGER NOT NULL DEFAULT 0,
+  impressions_30d INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_radar_insp_events_site ON radar_inspection_events(site_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_radar_insp_events_url ON radar_inspection_events(site_id, url);
 
 -- YIELD — mots-clés de campagne (Google Ads keywords)
 CREATE TABLE IF NOT EXISTS campaign_keywords (
@@ -744,8 +800,29 @@ export function applyEnterpriseSchema(db: AyebaDatabase) {
     "ALTER TABLE velocity_metrics_detailed ADD COLUMN form_factor TEXT",
     "ALTER TABLE velocity_metrics_detailed ADD COLUMN scores TEXT NOT NULL DEFAULT '{}'",
     "ALTER TABLE velocity_metrics_detailed ADD COLUMN audits TEXT NOT NULL DEFAULT '[]'",
+    "ALTER TABLE radar_url_inspection ADD COLUMN live_status INTEGER",
+    "ALTER TABLE radar_url_inspection ADD COLUMN live_indexable INTEGER",
+    "ALTER TABLE radar_url_inspection ADD COLUMN live_noindex INTEGER",
+    "ALTER TABLE radar_url_inspection ADD COLUMN live_latency_ms INTEGER",
+    "ALTER TABLE radar_url_inspection ADD COLUMN live_fetched_at TEXT",
+    "ALTER TABLE radar_url_inspection ADD COLUMN last_kind TEXT NOT NULL DEFAULT 'index'",
+    "ALTER TABLE radar_index_requests ADD COLUMN reason TEXT NOT NULL DEFAULT 'request_indexing'",
+    "ALTER TABLE radar_index_requests ADD COLUMN requested_at TEXT",
+    "ALTER TABLE radar_index_requests ADD COLUMN queue_status TEXT",
+    "ALTER TABLE impressions ADD COLUMN matched_query TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE impressions ADD COLUMN matched_keywords TEXT NOT NULL DEFAULT '[]'",
+    "ALTER TABLE clicks ADD COLUMN matched_query TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE clicks ADD COLUMN matched_keywords TEXT NOT NULL DEFAULT '[]'",
   ];
   for (const sql of migrations) {
     try { db.exec(sql); } catch { /* column already exists */ }
+  }
+  // Soft-table créée avec created_at uniquement → copier vers requested_at si vide
+  try {
+    db.exec(
+      `UPDATE radar_index_requests SET requested_at = created_at WHERE requested_at IS NULL AND created_at IS NOT NULL`,
+    );
+  } catch {
+    /* colonne created_at absente */
   }
 }

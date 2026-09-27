@@ -8,6 +8,20 @@ import type { StudioSite } from "./types";
 
 const PSI_ENDPOINT = "https://www.googleapis.com/pagespeedonline/v5/runPagespeed";
 
+export type PsiFieldMetric = {
+  percentile: number | null;
+  category: "FAST" | "AVERAGE" | "SLOW" | null;
+};
+
+export type PsiFieldData = {
+  overallCategory: "FAST" | "AVERAGE" | "SLOW" | null;
+  lcp: PsiFieldMetric | null;
+  cls: PsiFieldMetric | null;
+  inp: PsiFieldMetric | null;
+  fcp: PsiFieldMetric | null;
+  ttfb: PsiFieldMetric | null;
+} | null;
+
 export type PsiAuditResult = {
   id: string;
   url: string;
@@ -31,6 +45,8 @@ export type PsiAuditResult = {
     serverResponseTimeMs: number | null;
     totalByteWeightBytes: number | null;
   };
+  /** CrUX — données terrain (utilisateurs Chrome réels), distinctes du lab Lighthouse. */
+  fieldData: PsiFieldData;
   opportunities: Array<{
     id: string;
     title: string;
@@ -103,6 +119,20 @@ export async function runPsiAudit(
       finalDisplayedUrl?: string;
       fetchTime?: string;
     };
+    loadingExperience?: {
+      overall_category?: string;
+      metrics?: Record<
+        string,
+        { percentile?: number; category?: string }
+      >;
+    };
+    originLoadingExperience?: {
+      overall_category?: string;
+      metrics?: Record<
+        string,
+        { percentile?: number; category?: string }
+      >;
+    };
   };
   const lhr = data.lighthouseResult;
   if (!lhr?.audits) {
@@ -139,6 +169,10 @@ export async function runPsiAudit(
     })
     .filter((d): d is NonNullable<typeof d> => d !== null);
 
+  const fieldData = parseCruxFieldData(
+    data.loadingExperience ?? data.originLoadingExperience,
+  );
+
   const result: PsiAuditResult = {
     id: `psi_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`,
     url: lhr.finalDisplayedUrl || url,
@@ -159,6 +193,7 @@ export async function runPsiAudit(
       serverResponseTimeMs: metric("server-response-time"),
       totalByteWeightBytes: metric("total-byte-weight"),
     },
+    fieldData,
     opportunities,
     diagnostics,
   };
@@ -169,7 +204,7 @@ export async function runPsiAudit(
         id, site_id, url, timestamp, form_factor, overall_score, performance_score,
         accessibility_score, best_practices_score, seo_score, scores, metrics,
         audits, opportunities, diagnostics, passed_audits, failed_audits, warnings
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, 0, 0, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?)`,
     )
     .run(
       result.id,
@@ -183,13 +218,49 @@ export async function runPsiAudit(
       result.scores.bestPractices,
       result.scores.seo,
       JSON.stringify(result.scores),
-      JSON.stringify(result.metrics),
+      JSON.stringify({ ...result.metrics, fieldData: result.fieldData }),
+      JSON.stringify({ fieldData: result.fieldData }),
       JSON.stringify(result.opportunities),
       JSON.stringify(result.diagnostics),
       result.opportunities.length,
     );
 
   return result;
+}
+
+function parseCruxCategory(raw?: string): "FAST" | "AVERAGE" | "SLOW" | null {
+  if (!raw) return null;
+  const u = raw.toUpperCase();
+  if (u === "FAST" || u === "AVERAGE" || u === "SLOW") return u;
+  return null;
+}
+
+function parseCruxFieldData(
+  exp:
+    | {
+        overall_category?: string;
+        metrics?: Record<string, { percentile?: number; category?: string }>;
+      }
+    | undefined,
+): PsiFieldData {
+  if (!exp?.metrics) return null;
+  const m = exp.metrics;
+  const one = (key: string): PsiFieldMetric | null => {
+    const row = m[key];
+    if (!row) return null;
+    return {
+      percentile: typeof row.percentile === "number" ? row.percentile : null,
+      category: parseCruxCategory(row.category),
+    };
+  };
+  return {
+    overallCategory: parseCruxCategory(exp.overall_category),
+    lcp: one("LARGEST_CONTENTFUL_PAINT_MS"),
+    cls: one("CUMULATIVE_LAYOUT_SHIFT_SCORE"),
+    inp: one("INTERACTION_TO_NEXT_PAINT") ?? one("FIRST_INPUT_DELAY_MS"),
+    fcp: one("FIRST_CONTENTFUL_PAINT_MS"),
+    ttfb: one("EXPERIMENTAL_TIME_TO_FIRST_BYTE"),
+  };
 }
 
 export function psiAuditHistory(siteId: string, limit = 20) {
@@ -214,21 +285,125 @@ export function psiAuditHistory(siteId: string, limit = 20) {
     opportunities: string;
   }>;
 
-  return rows.map((r) => ({
-    id: r.id,
-    url: r.url,
-    timestamp: r.timestamp,
-    strategy: r.form_factor || "mobile",
-    scores: {
-      overall: r.overall_score,
-      performance: r.performance_score,
-      accessibility: r.accessibility_score,
-      bestPractices: r.best_practices_score,
-      seo: r.seo_score,
-    },
-    metrics: safeParse(r.metrics),
-    opportunities: safeParse(r.opportunities),
-  }));
+  return rows.map((r) => {
+    const metrics = safeParse(r.metrics) as Record<string, unknown> | null;
+    const fieldData =
+      metrics && typeof metrics === "object" && "fieldData" in metrics
+        ? (metrics.fieldData as PsiFieldData)
+        : null;
+    return {
+      id: r.id,
+      url: r.url,
+      timestamp: r.timestamp,
+      strategy: r.form_factor || "mobile",
+      scores: {
+        overall: r.overall_score,
+        performance: r.performance_score,
+        accessibility: r.accessibility_score,
+        bestPractices: r.best_practices_score,
+        seo: r.seo_score,
+      },
+      metrics,
+      fieldData,
+      opportunities: safeParse(r.opportunities),
+    };
+  });
+}
+
+/** Top crawled URLs for a site domain (real index, no mocks). */
+export function crawledUrlsForSite(domain: string, limit = 5): string[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT url FROM crawl_documents
+       WHERE domain = ? OR domain LIKE ?
+       ORDER BY crawled_at DESC LIMIT ?`,
+    )
+    .all(domain, `%.${domain}`, Math.max(1, Math.min(limit, 5))) as Array<{ url: string }>;
+  return rows.map((r) => r.url).filter(Boolean);
+}
+
+export type PsiBatchResult = {
+  audited: PsiAuditResult[];
+  skipped: string[];
+  quotaHit: boolean;
+  errors: Array<{ url: string; error: string }>;
+  requested: number;
+};
+
+/**
+ * Sequential PageSpeed audits for top N crawled URLs (max 5).
+ * Stops immediately on HTTP 429 to respect the PAGESPEED quota.
+ */
+export async function runPsiBatchAudit(
+  site: StudioSite,
+  opts: { limit?: number; strategy?: "mobile" | "desktop" } = {},
+): Promise<PsiBatchResult> {
+  const limit = Math.max(1, Math.min(opts.limit ?? 5, 5));
+  const strategy = opts.strategy === "desktop" ? "desktop" : "mobile";
+  const urls = crawledUrlsForSite(site.domain, limit);
+  const audited: PsiAuditResult[] = [];
+  const skipped: string[] = [];
+  const errors: Array<{ url: string; error: string }> = [];
+  let quotaHit = false;
+
+  for (let i = 0; i < urls.length; i++) {
+    if (quotaHit) {
+      skipped.push(...urls.slice(i));
+      break;
+    }
+    const url = urls[i];
+    try {
+      const result = await runPsiAudit(site, url, strategy);
+      audited.push(result);
+    } catch (e) {
+      const status = (e as { status?: number })?.status;
+      const msg = e instanceof Error ? e.message : "Erreur audit";
+      if (status === 429) {
+        quotaHit = true;
+        errors.push({ url, error: msg });
+        skipped.push(...urls.slice(i + 1));
+        break;
+      }
+      errors.push({ url, error: msg });
+    }
+  }
+
+  return { audited, skipped, quotaHit, errors, requested: urls.length };
+}
+
+/**
+ * Origin-level CrUX summary from the most recent audits that carry fieldData.
+ * Prefer the newest non-null fieldData (origin or URL experience persisted at audit time).
+ */
+export function originCruxSummary(siteId: string): {
+  available: boolean;
+  fieldData: PsiFieldData;
+  sourceUrl: string | null;
+  timestamp: string | null;
+} {
+  const history = psiAuditHistory(siteId, 40);
+  for (const item of history) {
+    if (item.fieldData && item.fieldData.overallCategory) {
+      return {
+        available: true,
+        fieldData: item.fieldData,
+        sourceUrl: item.url,
+        timestamp: item.timestamp,
+      };
+    }
+  }
+  // Any fieldData even without overallCategory
+  for (const item of history) {
+    if (item.fieldData) {
+      return {
+        available: true,
+        fieldData: item.fieldData,
+        sourceUrl: item.url,
+        timestamp: item.timestamp,
+      };
+    }
+  }
+  return { available: false, fieldData: null, sourceUrl: null, timestamp: null };
 }
 
 function safeParse(raw: string): unknown {

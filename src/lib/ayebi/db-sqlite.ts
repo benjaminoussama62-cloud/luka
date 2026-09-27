@@ -1,7 +1,9 @@
-import type { AyebiArticle, AyebiCategory, AyebiReference, AyebiSection } from "./types";
+import { randomUUID } from "crypto";
+import type { AyebiArticle, AyebiCategory, AyebiQuality, AyebiReference, AyebiSection } from "./types";
 import { getDb, getDbMode } from "../storage/database";
 import { AYEBI_ARTICLES } from "./index";
 import { ECOSYSTEM_ARTICLES } from "./articles-ecosystem";
+import { extractReferences } from "./wiki-markup";
 
 export type AyebiRole = "reader" | "contributor" | "moderator" | "admin";
 export type PageProtection = "none" | "semi" | "full";
@@ -220,7 +222,13 @@ export function saveArticle(
   author: { id: string; name: string; role: AyebiRole },
   editSummary: string,
   opts?: { create?: boolean; draft?: boolean },
-): { article: StoredArticle } | { error: string } {
+):
+  | {
+      article: StoredArticle;
+      quality: { quality: AyebiQuality; stub: boolean; chars: number; sections: number; refs: number };
+      citationWarning?: string;
+    }
+  | { error: string } {
   importSeedIfEmpty();
   const db = getDb();
   const existing = getArticle(article.slug);
@@ -268,10 +276,53 @@ export function saveArticle(
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
   ).run(article.slug, revision, editSummary, articleToJson(article), author.id, author.name, now);
 
-  indexAyebiFts(article);
+  // Qualité auto avant indexation FTS (stub / quality dans content_json).
+  // Fusionne les références markup [ref:…] dans article.references pour le score.
+  const fromMarkup = extractReferences(article.sections ?? []);
+  const mergedRefs = [
+    ...(article.references ?? []),
+    ...fromMarkup.filter((r) => !(article.references ?? []).some((x) => x.url === r.url)),
+  ];
+  const articleForScore: AyebiArticle = { ...article, references: mergedRefs };
+  const scored = scoreArticleQuality(articleForScore);
+  const articleWithQuality: AyebiArticle = {
+    ...articleForScore,
+    stub: scored.stub,
+    quality: scored.quality,
+    references: mergedRefs.length ? mergedRefs : article.references,
+  };
+  db.prepare(
+    `UPDATE ayebi_articles SET stub = ?, content_json = ? WHERE slug = ?`,
+  ).run(scored.stub ? 1 : 0, articleToJson(articleWithQuality), article.slug);
+
+  indexAyebiFts(articleWithQuality);
   const saved = getArticle(article.slug);
   if (!saved) return { error: "Erreur de sauvegarde." };
-  return { article: saved };
+
+  // Notifications liste de suivi — uniquement sur modification (pas création).
+  if (existing && revision > 1) {
+    notifyWatchers({
+      slug: article.slug,
+      title: article.title,
+      revision,
+      editSummary: editSummary || "Modification",
+      actorId: author.id,
+      actorName: author.name,
+    });
+  }
+
+  return {
+    article: saved,
+    quality: scored,
+    citationWarning:
+      scored.refs === 0
+        ? "Aucune référence source — ajoutez des [ref:url|titre] ou un bloc références pour sortir du statut ébauche."
+        : scored.stub
+          ? "Article encore en ébauche — enrichissez le contenu et les sources."
+          : scored.refs < 2 && scored.chars >= 800
+            ? "Peu de références — un article encyclopédique cite généralement plusieurs sources."
+            : undefined,
+  };
 }
 
 export function getRevisions(slug: string, limit = 30): RevisionRow[] {
@@ -316,7 +367,13 @@ export function restoreRevision(
   slug: string,
   revision: number,
   author: { id: string; name: string; role: AyebiRole },
-): { article: StoredArticle } | { error: string } {
+):
+  | {
+      article: StoredArticle;
+      quality: { quality: AyebiQuality; stub: boolean; chars: number; sections: number; refs: number };
+      citationWarning?: string;
+    }
+  | { error: string } {
   const rev = getRevision(slug, revision);
   if (!rev) return { error: "Révision introuvable." };
   return saveArticle(rev.article, author, `Restauration rev. ${revision}`);
@@ -398,6 +455,148 @@ export function isWatching(userId: string, slug: string): boolean {
 export function getUserWatchlist(userId: string): string[] {
   const rows = getDb().prepare("SELECT slug FROM ayebi_watchlist WHERE user_id = ? ORDER BY created_at DESC").all(userId) as { slug: string }[];
   return rows.map((r) => r.slug);
+}
+
+/**
+ * Score qualité encyclopédique — règles générales (pas de cas isolés) :
+ * longueur utile, sections structurées, références externes.
+ */
+export function scoreArticleQuality(article: AyebiArticle): {
+  quality: AyebiQuality;
+  stub: boolean;
+  chars: number;
+  sections: number;
+  refs: number;
+} {
+  const sectionPars = (article.sections ?? []).flatMap((s) => [
+    ...s.paragraphs,
+    ...(s.subsections ?? []).flatMap((ss) => ss.paragraphs),
+  ]);
+  const bodyText = [...(article.body ?? []), ...sectionPars].join("\n");
+  const chars = `${article.summary}\n${bodyText}`.replace(/\s+/g, " ").trim().length;
+  const sections = article.sections?.length ?? (article.body?.length ? 1 : 0);
+  const markupRefs = (bodyText.match(/\[ref:[^\]]+\]/gi) ?? []).length;
+  const refs = Math.max(article.references?.length ?? 0, markupRefs);
+  const facts = article.facts?.length ?? 0;
+
+  let quality: AyebiQuality = "ébauche";
+  if (chars >= 1200 && sections >= 2 && refs >= 2) quality = "bon article";
+  if (chars >= 3500 && sections >= 4 && refs >= 5 && facts >= 4) quality = "article de qualité";
+  if (quality === "ébauche" && chars >= 400 && (sections >= 1 || facts >= 2)) quality = "standard";
+
+  const stub = chars < 400 || (refs === 0 && chars < 800);
+  return { quality, stub, chars, sections, refs };
+}
+
+export type AyebiNotification = {
+  id: string;
+  userId: string;
+  slug: string;
+  title: string;
+  summary: string;
+  actorId: string;
+  actorName: string;
+  revision: number;
+  readAt: string | null;
+  createdAt: string;
+};
+
+/** Abonnés d'une fiche (hors auteur de la modification). */
+function watchersForSlug(slug: string, excludeUserId: string): string[] {
+  const rows = getDb()
+    .prepare("SELECT user_id FROM ayebi_watchlist WHERE slug = ? AND user_id != ?")
+    .all(slug, excludeUserId) as { user_id: string }[];
+  return rows.map((r) => r.user_id);
+}
+
+export function notifyWatchers(input: {
+  slug: string;
+  title: string;
+  revision: number;
+  editSummary: string;
+  actorId: string;
+  actorName: string;
+}): number {
+  const watchers = watchersForSlug(input.slug, input.actorId);
+  if (!watchers.length) return 0;
+  const db = getDb();
+  const now = new Date().toISOString();
+  const insert = db.prepare(
+    `INSERT INTO ayebi_notifications
+     (id, user_id, slug, title, summary, actor_id, actor_name, revision, read_at, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)`,
+  );
+  let n = 0;
+  for (const userId of watchers) {
+    insert.run(
+      `an_${randomUUID().replace(/-/g, "").slice(0, 16)}`,
+      userId,
+      input.slug,
+      input.title,
+      input.editSummary.slice(0, 280),
+      input.actorId,
+      input.actorName,
+      input.revision,
+      now,
+    );
+    n++;
+  }
+  return n;
+}
+
+export function getUserNotifications(userId: string, limit = 40): AyebiNotification[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT id, user_id as userId, slug, title, summary,
+              actor_id as actorId, actor_name as actorName, revision,
+              read_at as readAt, created_at as createdAt
+       FROM ayebi_notifications
+       WHERE user_id = ?
+       ORDER BY created_at DESC
+       LIMIT ?`,
+    )
+    .all(userId, limit) as Array<Record<string, unknown>>;
+  return rows.map((r) => ({
+    id: String(r.id),
+    userId: String(r.userId),
+    slug: String(r.slug),
+    title: String(r.title),
+    summary: String(r.summary ?? ""),
+    actorId: String(r.actorId),
+    actorName: String(r.actorName),
+    revision: Number(r.revision),
+    readAt: r.readAt == null ? null : String(r.readAt),
+    createdAt: String(r.createdAt),
+  }));
+}
+
+export function countUnreadNotifications(userId: string): number {
+  const row = getDb()
+    .prepare("SELECT COUNT(*) as c FROM ayebi_notifications WHERE user_id = ? AND read_at IS NULL")
+    .get(userId) as { c: number } | undefined;
+  return row?.c ?? 0;
+}
+
+export function markNotificationsRead(userId: string, ids?: string[]): number {
+  const db = getDb();
+  const now = new Date().toISOString();
+  if (ids?.length) {
+    const placeholders = ids.map(() => "?").join(",");
+    const r = db
+      .prepare(
+        `UPDATE ayebi_notifications SET read_at = ?
+         WHERE user_id = ? AND read_at IS NULL AND id IN (${placeholders})`,
+      )
+      .run(now, userId, ...ids) as { changes: number };
+    return r.changes ?? 0;
+  }
+  const r = db
+    .prepare(
+      `UPDATE ayebi_notifications SET read_at = ?
+       WHERE user_id = ? AND read_at IS NULL`,
+    )
+    .run(now, userId) as { changes: number };
+  return r.changes ?? 0;
 }
 
 // ─── Page views ───────────────────────────────────────────────────────────────
@@ -620,20 +819,42 @@ export type SearchFilters = {
 
 export function advancedSearch(query: string, filters: SearchFilters = {}): StoredArticle[] {
   const { category, stub, sortBy = "relevance", limit = 30 } = filters;
+  const q = query.trim();
+
+  // Texte → FTS d'abord (sinon le LIMIT SQL coupe avant le filtre lexical).
+  if (q && sortBy === "relevance") {
+    let out = searchAyebiFts(q, Math.max(limit * 4, 40)) as StoredArticle[];
+    out = out.filter(Boolean);
+    if (category) out = out.filter((a) => a.category === category);
+    if (stub !== undefined) out = out.filter((a) => a.stub === stub);
+    return out.slice(0, limit);
+  }
+
   let sql = "SELECT * FROM ayebi_articles WHERE 1=1";
   const params: unknown[] = [];
-  if (category) { sql += " AND category = ?"; params.push(category); }
-  if (stub !== undefined) { sql += " AND stub = ?"; params.push(stub ? 1 : 0); }
+  if (category) {
+    sql += " AND category = ?";
+    params.push(category);
+  }
+  if (stub !== undefined) {
+    sql += " AND stub = ?";
+    params.push(stub ? 1 : 0);
+  }
+  if (q) {
+    sql += " AND (title LIKE ? OR summary LIKE ? OR tags_json LIKE ?)";
+    const like = `%${q.replace(/%/g, "")}%`;
+    params.push(like, like, like);
+  }
   const orderMap: Record<string, string> = {
     recent: "updated_at DESC",
     views: "view_count DESC",
     title: "title ASC",
     relevance: "updated_at DESC",
   };
-  sql += ` ORDER BY ${orderMap[sortBy]} LIMIT ?`;
+  sql += ` ORDER BY ${orderMap[sortBy] ?? "updated_at DESC"} LIMIT ?`;
   params.push(limit);
   const rows = getDb().prepare(sql).all(...params) as Record<string, unknown>[];
-  const articles = rows.map((row) => ({
+  return rows.map((row) => ({
     ...jsonToArticle(row),
     revision: Number(row.revision),
     protection: String(row.protection) as PageProtection,
@@ -647,15 +868,4 @@ export function advancedSearch(query: string, filters: SearchFilters = {}): Stor
     updatedBy: String(row.updated_by),
     updatedByName: String(row.updated_by_name),
   }));
-  if (!query.trim() || sortBy !== "relevance") return articles;
-  const q = query.toLowerCase().normalize("NFD").replace(/\p{M}/gu, "");
-  return articles
-    .map((a) => {
-      const hay = `${a.title} ${a.subtitle} ${a.summary} ${a.tags.join(" ")}`.toLowerCase().normalize("NFD").replace(/\p{M}/gu, "");
-      const score = hay.includes(q) ? (a.title.toLowerCase().includes(q) ? 2 : 1) : 0;
-      return { a, score };
-    })
-    .filter((x) => x.score > 0)
-    .sort((x, y) => y.score - x.score)
-    .map((x) => x.a);
 }

@@ -22,6 +22,10 @@ export default function DevelopersDocsPage() {
           <a href="#api-auth">Clés API</a>
           <a href="#api-search">Search API</a>
           <a href="#api-suggest">Suggest API</a>
+          <a href="#api-ayebi">Ayebi API</a>
+          <a href="#api-radar">Radar API</a>
+          <a href="#api-crawl">Crawl Status API</a>
+          <a href="#api-velocity">Velocity API</a>
           <a href="#api-errors">Erreurs & quotas</a>
           <a href="#discovery">Découverte OpenID</a>
           <a href="#flow">Flux authorization code</a>
@@ -44,10 +48,11 @@ export default function DevelopersDocsPage() {
             <pre className="dcw-pre">{`curl "https://ayeba.app/api/v1/search?q=kinshasa" \\
   -H "Authorization: Bearer ayb_live_…"`}</pre>
             <p className="mt-3">
-              Chaque clé peut être limitée par <strong>portées</strong> (search, suggest),{" "}
-              <strong>quota quotidien</strong>, <strong>référents</strong> et{" "}
-              <strong>adresses IP</strong> autorisés. Les appels sont journalisés et visibles dans
-              l’onglet Journaux de la console.
+              Chaque clé peut être limitée par <strong>portées</strong> (search, suggest, ayebi,
+              radar, crawl, velocity), <strong>quota quotidien</strong>, <strong>référents</strong> et{" "}
+              <strong>adresses IP</strong> autorisés. L&rsquo;API doit aussi être{" "}
+              <strong>activée</strong> dans la bibliothèque du projet. Les appels sont journalisés et
+              visibles dans l&rsquo;onglet Journaux de la console.
             </p>
           </section>
 
@@ -82,13 +87,98 @@ export default function DevelopersDocsPage() {
             </p>
           </section>
 
+          <section id="api-ayebi" className="dev-docs-section ayeba-panel">
+            <h2>Ayebi Encyclopedia API</h2>
+            <p>
+              <code className="dev-console-code">GET /api/v1/ayebi?q=…&limit=10&category=</code> —
+              recherche dans l’encyclopédie congolaise Ayebi (corpus distinct de Wikipédia).
+            </p>
+            <pre className="dcw-pre">{`{
+  "query": "kinshasa",
+  "total": 4,
+  "source": "ayebi",
+  "results": [
+    {
+      "slug": "kinshasa",
+      "title": "Kinshasa",
+      "summary": "…",
+      "category": "géographie",
+      "url": "https://ayeba.app/ayebi/kinshasa",
+      "stub": false
+    }
+  ]
+}`}</pre>
+            <p className="mt-3">
+              Portée requise : <code>ayebi</code>. Paramètre optionnel{" "}
+              <code>category</code> pour filtrer les fiches.
+            </p>
+          </section>
+
+          <section id="api-radar" className="dev-docs-section ayeba-panel">
+            <h2>Ayeba Radar Performance API <span className="dcw-chip dcw-chip-blue">Bêta</span></h2>
+            <p>
+              <code className="dev-console-code">
+                GET /api/v1/radar?domain=example.com&days=28&dim=query
+              </code>{" "}
+              — Search Analytics lecture seule pour un domaine Studio vérifié (clics, impressions,
+              CTR, position, comparaison vs période précédente).
+            </p>
+            <p className="mt-3">
+              Portée : <code>radar</code>. Le domaine doit appartenir au propriétaire du projet
+              Developers et être vérifié dans Studio.
+            </p>
+          </section>
+
+          <section id="api-crawl" className="dev-docs-section ayeba-panel">
+            <h2>Ayeba Crawl Status API</h2>
+            <p>
+              <code className="dev-console-code">GET /api/v1/crawl/status?domain=example.com</code> —
+              statut d&rsquo;indexation réel (pages indexées, file de crawl, couverture, échecs)
+              pour un domaine Studio vérifié.
+            </p>
+            <pre className="dcw-pre">{`{
+  "domain": "example.com",
+  "status": "verified",
+  "overview": {
+    "indexedPages": 42,
+    "submittedUrls": 50,
+    "coveragePct": 84,
+    "queuePending": 3,
+    "queueFailed": 0
+  },
+  "coverage": { "totals": { … }, "recentIndexed": [ … ] }
+}`}</pre>
+            <p className="mt-3">
+              Portée : <code>crawl</code>. Données issues de{" "}
+              <code>crawl_documents</code> / <code>crawl_queue</code> — aucun mock.
+            </p>
+          </section>
+
+          <section id="api-velocity" className="dev-docs-section ayeba-panel">
+            <h2>Ayeba Velocity API <span className="dcw-chip dcw-chip-blue">Bêta</span></h2>
+            <p>
+              <code className="dev-console-code">POST /api/v1/velocity</code> — déclenche un audit
+              Lighthouse réel via Google PageSpeed Insights pour une URL d&rsquo;un domaine Studio
+              vérifié.
+            </p>
+            <pre className="dcw-pre">{`curl -X POST "https://ayeba.app/api/v1/velocity" \\
+  -H "Authorization: Bearer ayb_live_…" \\
+  -H "Content-Type: application/json" \\
+  -d '{"domain":"example.com","strategy":"mobile"}'`}</pre>
+            <p className="mt-3">
+              Corps JSON : <code>domain</code> (requis), <code>url</code> (optionnel),{" "}
+              <code>strategy</code> (<code>mobile</code>|<code>desktop</code>). Portée :{" "}
+              <code>velocity</code>. Réponse : scores lab, métriques, CrUX field data, historique.
+            </p>
+          </section>
+
           <section id="api-errors" className="dev-docs-section ayeba-panel">
             <h2>Erreurs & quotas</h2>
             <ul className="dev-docs-list">
               <li><strong>401</strong> — clé absente ou invalide.</li>
               <li>
-                <strong>403</strong> — clé désactivée/révoquée, portée manquante, ou restriction
-                référent/IP non satisfaite.
+                <strong>403</strong> — clé désactivée/révoquée, portée manquante, API non activée
+                sur le projet, ou restriction référent/IP non satisfaite.
               </li>
               <li><strong>429</strong> — quota quotidien de la clé dépassé.</li>
               <li><strong>400</strong> — paramètre <code>q</code> manquant ou invalide.</li>

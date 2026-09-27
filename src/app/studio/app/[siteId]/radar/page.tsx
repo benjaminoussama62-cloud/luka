@@ -22,6 +22,9 @@ export default function StudioRadarPage() {
   const [overview, setOverview] = useState<RadarOverview | null>(null);
   const [queries, setQueries] = useState<RadarQueryRow[]>([]);
   const [pages, setPages] = useState<RadarPageRow[]>([]);
+  const [anomalies, setAnomalies] = useState<
+    Array<{ id?: string; severity: string; title: string; detail: string }>
+  >([]);
 
   const load = useCallback(async () => {
     if (!siteId) return;
@@ -31,9 +34,14 @@ export default function StudioRadarPage() {
       fetch(`/api/studio/radar/${siteId}/pages`),
     ]);
     if (o.ok) {
-      const data = (await o.json()) as { overview: RadarOverview; site: StudioSite };
+      const data = (await o.json()) as {
+        overview: RadarOverview;
+        site: StudioSite;
+        anomalies?: Array<{ severity: string; title: string; detail: string }>;
+      };
       setOverview(data.overview);
       setSite(data.site);
+      setAnomalies(data.anomalies || []);
     }
     if (q.ok) {
       const data = (await q.json()) as { queries: RadarQueryRow[] };
@@ -99,15 +107,31 @@ export default function StudioRadarPage() {
         <Metric label="File / échecs" value={`${overview.queuePending} / ${overview.queueFailed}`} />
       </section>
 
-      {overview.alerts.length ? (
+      {anomalies.length || overview.alerts.length ? (
         <section className="mt-10">
-          <h2 className="font-[family-name:var(--font-brand)] text-xl text-[var(--ink)]">Alertes</h2>
+          <h2 className="font-[family-name:var(--font-brand)] text-xl text-[var(--ink)]">
+            Alertes & anomalies
+          </h2>
+          <p className="mt-1 text-xs text-[var(--muted)]">
+            Chutes &gt; 30 % clics / impressions vs période précédente (données radar_daily réelles).
+          </p>
           <ul className="mt-4 space-y-3">
+            {anomalies.map((a, i) => (
+              <li key={a.id || `anom-${i}`} className="border-l-2 border-rose-400/50 pl-4">
+                <p className="text-sm text-[var(--ink)]">
+                  <span className="mr-2 text-[10px] uppercase tracking-wider text-[var(--faint)]">
+                    {a.severity === "critical" ? "critique" : a.severity === "warn" ? "attention" : a.severity}
+                  </span>
+                  {a.title}
+                </p>
+                <p className="mt-1 text-sm text-[var(--muted)]">{a.detail}</p>
+              </li>
+            ))}
             {overview.alerts.map((a) => (
               <li key={a.id} className="border-l-2 border-[var(--line)] pl-4">
                 <p className="text-sm text-[var(--ink)]">
                   <span className="mr-2 text-[10px] uppercase tracking-wider text-[var(--faint)]">
-                    {a.severity}
+                    {a.severity === "critical" ? "critique" : a.severity === "warn" ? "attention" : "info"}
                   </span>
                   {a.title}
                 </p>

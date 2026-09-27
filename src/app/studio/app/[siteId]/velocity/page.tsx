@@ -10,6 +10,15 @@ import {
 } from "@/components/studio/ui";
 import type { StudioSite, VelocityOverview } from "@/lib/studio/types";
 
+type PsiFieldData = {
+  overallCategory: "FAST" | "AVERAGE" | "SLOW" | null;
+  lcp: { percentile: number | null; category: string | null } | null;
+  cls: { percentile: number | null; category: string | null } | null;
+  inp: { percentile: number | null; category: string | null } | null;
+  fcp: { percentile: number | null; category: string | null } | null;
+  ttfb: { percentile: number | null; category: string | null } | null;
+};
+
 type PsiHistoryItem = {
   id: string;
   url: string;
@@ -32,7 +41,15 @@ type PsiHistoryItem = {
     serverResponseTimeMs: number | null;
     totalByteWeightBytes: number | null;
   } | null;
+  fieldData?: PsiFieldData | null;
   opportunities: Array<{ id: string; title: string; savingsMs: number | null; savingsBytes: number | null }> | null;
+};
+
+type OriginCrux = {
+  available: boolean;
+  fieldData: PsiFieldData | null;
+  sourceUrl: string | null;
+  timestamp: string | null;
 };
 
 
@@ -43,9 +60,12 @@ export default function StudioVelocityPage() {
   const [site, setSite] = useState<StudioSite | null>(null);
   const [overview, setOverview] = useState<VelocityOverview | null>(null);
   const [history, setHistory] = useState<PsiHistoryItem[]>([]);
+  const [originCrux, setOriginCrux] = useState<OriginCrux | null>(null);
+  const [crawledCount, setCrawledCount] = useState(0);
   const [auditUrl, setAuditUrl] = useState("");
   const [strategy, setStrategy] = useState<"mobile" | "desktop">("mobile");
   const [busy, setBusy] = useState(false);
+  const [batchBusy, setBatchBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -56,10 +76,14 @@ export default function StudioVelocityPage() {
       overview: VelocityOverview;
       history: PsiHistoryItem[];
       site: StudioSite;
+      originCrux?: OriginCrux;
+      crawledCount?: number;
     };
     setOverview(data.overview);
     setHistory(data.history || []);
     setSite(data.site);
+    setOriginCrux(data.originCrux || null);
+    setCrawledCount(data.crawledCount ?? 0);
     setAuditUrl((prev) => prev || `https://${data.site.domain}/`);
   }, [siteId]);
 
@@ -83,8 +107,11 @@ export default function StudioVelocityPage() {
     const data = (await res.json()) as {
       history?: PsiHistoryItem[];
       overview?: VelocityOverview;
+      originCrux?: OriginCrux;
       source?: string;
       error?: string;
+      warning?: string;
+      psiError?: string;
     };
     setBusy(false);
     if (!res.ok) {
@@ -93,7 +120,58 @@ export default function StudioVelocityPage() {
     }
     if (data.history) setHistory(data.history);
     if (data.overview) setOverview(data.overview);
-    setMsg(data.source === "pagespeed_insights" ? "Audit Lighthouse terminé." : "Audit direct terminé (PageSpeed indisponible).");
+    if (data.originCrux) setOriginCrux(data.originCrux);
+    if (data.source === "pagespeed_insights") {
+      setMsg("Audit Lighthouse (PageSpeed Insights) terminé.");
+    } else {
+      setMsg(
+        data.warning ||
+          `Audit direct uniquement — PageSpeed indisponible${data.psiError ? ` (${data.psiError})` : ""}.`,
+      );
+    }
+  }
+
+  async function onBatchAudit() {
+    setBatchBusy(true);
+    setMsg(null);
+    const res = await fetch(`/api/studio/velocity/${siteId}/audit`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ batch: true, limit: 5, strategy }),
+    });
+    const data = (await res.json()) as {
+      history?: PsiHistoryItem[];
+      overview?: VelocityOverview;
+      originCrux?: OriginCrux;
+      audited?: unknown[];
+      skipped?: string[];
+      quotaHit?: boolean;
+      requested?: number;
+      errors?: Array<{ url: string; error: string }>;
+      warning?: string;
+      error?: string;
+    };
+    setBatchBusy(false);
+    if (!res.ok) {
+      setMsg(data.error || "Lot d'audits impossible");
+      return;
+    }
+    if (data.history) setHistory(data.history);
+    if (data.overview) setOverview(data.overview);
+    if (data.originCrux) setOriginCrux(data.originCrux);
+    const n = data.audited?.length ?? 0;
+    const skipped = data.skipped?.length ?? 0;
+    const errN = data.errors?.length ?? 0;
+    if (data.warning) {
+      setMsg(data.warning);
+    } else {
+      setMsg(
+        `Lot terminé : ${n}/${data.requested ?? 0} audits PageSpeed` +
+          (skipped ? ` · ${skipped} reporté(s)` : "") +
+          (errN ? ` · ${errN} erreur(s)` : "") +
+          ".",
+      );
+    }
   }
 
   if (!site || !overview) {
@@ -147,12 +225,104 @@ export default function StudioVelocityPage() {
               </button>
             ))}
           </div>
-          <button type="submit" className="ayeba-cta h-10 px-5 text-xs" disabled={busy}>
+          <button type="submit" className="ayeba-cta h-10 px-5 text-xs" disabled={busy || batchBusy}>
             {busy ? "Analyse Lighthouse…" : "Analyser"}
+          </button>
+          <button
+            type="button"
+            className="ayeba-ghost h-10 px-4 text-xs"
+            disabled={busy || batchBusy || crawledCount === 0}
+            title={
+              crawledCount === 0
+                ? "Aucune URL crawlée pour ce domaine"
+                : `Auditer jusqu'à ${Math.min(5, crawledCount)} URL(s) indexées (séquentiel, quota PSI)`
+            }
+            onClick={() => void onBatchAudit()}
+          >
+            {batchBusy
+              ? "Lot en cours…"
+              : `Auditer le lot (${Math.min(5, crawledCount)} URL)`}
           </button>
         </div>
         {msg ? <p className="mt-3 text-sm text-[var(--accent)]">{msg}</p> : null}
       </form>
+
+      {/* CrUX origine — résumé terrain agrégé depuis les derniers audits */}
+      {originCrux?.available && originCrux.fieldData ? (
+        <section className="mt-10">
+          <SectionTitle
+            kicker="CrUX · Origine"
+            title="Expérience terrain à l'échelle du site"
+            aside={
+              originCrux.fieldData.overallCategory ? (
+                <Badge
+                  tone={
+                    originCrux.fieldData.overallCategory === "FAST"
+                      ? "good"
+                      : originCrux.fieldData.overallCategory === "AVERAGE"
+                        ? "warn"
+                        : "bad"
+                  }
+                >
+                  {originCrux.fieldData.overallCategory}
+                </Badge>
+              ) : undefined
+            }
+          />
+          <p className="mt-1 text-xs text-[var(--muted)]">
+            Dernières données CrUX persistées
+            {originCrux.sourceUrl ? ` · ${originCrux.sourceUrl}` : ""}
+            {originCrux.timestamp
+              ? ` · ${originCrux.timestamp.slice(0, 16).replace("T", " ")}`
+              : ""}
+          </p>
+          <div className="mt-4">
+            <MetricGrid>
+              <Metric
+                label="LCP (origine)"
+                value={
+                  originCrux.fieldData.lcp?.percentile != null
+                    ? `${(originCrux.fieldData.lcp.percentile / 1000).toFixed(1)} s`
+                    : "—"
+                }
+                hint={originCrux.fieldData.lcp?.category || "Chrome UX Report"}
+              />
+              <Metric
+                label="CLS (origine)"
+                value={
+                  originCrux.fieldData.cls?.percentile != null
+                    ? String(originCrux.fieldData.cls.percentile / 100)
+                    : "—"
+                }
+                hint={originCrux.fieldData.cls?.category || undefined}
+              />
+              <Metric
+                label="INP / FID"
+                value={
+                  originCrux.fieldData.inp?.percentile != null
+                    ? `${originCrux.fieldData.inp.percentile} ms`
+                    : "—"
+                }
+                hint={originCrux.fieldData.inp?.category || undefined}
+              />
+              <Metric
+                label="FCP (origine)"
+                value={
+                  originCrux.fieldData.fcp?.percentile != null
+                    ? `${(originCrux.fieldData.fcp.percentile / 1000).toFixed(1)} s`
+                    : "—"
+                }
+                hint={originCrux.fieldData.fcp?.category || undefined}
+              />
+            </MetricGrid>
+          </div>
+        </section>
+      ) : (
+        <p className="mt-6 text-xs text-[var(--muted)]">
+          Pas encore de résumé CrUX d&apos;origine — lancez un audit PageSpeed sur une URL avec
+          trafic Chrome suffisant.
+        </p>
+      )}
 
       {/* Dernier audit Lighthouse */}
       {latest ? (
@@ -169,7 +339,78 @@ export default function StudioVelocityPage() {
             <ScoreGauge score={latest.scores.seo} label="SEO" />
           </div>
 
+          {latest.fieldData ? (
+            <div className="mt-8">
+              <SectionTitle
+                kicker="Données terrain (CrUX)"
+                title="Expérience réelle des utilisateurs Chrome"
+                aside={
+                  latest.fieldData.overallCategory ? (
+                    <Badge
+                      tone={
+                        latest.fieldData.overallCategory === "FAST"
+                          ? "good"
+                          : latest.fieldData.overallCategory === "AVERAGE"
+                            ? "warn"
+                            : "bad"
+                      }
+                    >
+                      {latest.fieldData.overallCategory}
+                    </Badge>
+                  ) : undefined
+                }
+              />
+              <div className="mt-4">
+                <MetricGrid>
+                  <Metric
+                    label="LCP (terrain)"
+                    value={
+                      latest.fieldData.lcp?.percentile != null
+                        ? `${(latest.fieldData.lcp.percentile / 1000).toFixed(1)} s`
+                        : "—"
+                    }
+                    hint={latest.fieldData.lcp?.category || "Chrome UX Report"}
+                  />
+                  <Metric
+                    label="CLS (terrain)"
+                    value={
+                      latest.fieldData.cls?.percentile != null
+                        ? String(latest.fieldData.cls.percentile / 100)
+                        : "—"
+                    }
+                    hint={latest.fieldData.cls?.category || undefined}
+                  />
+                  <Metric
+                    label="INP / FID"
+                    value={
+                      latest.fieldData.inp?.percentile != null
+                        ? `${latest.fieldData.inp.percentile} ms`
+                        : "—"
+                    }
+                    hint={latest.fieldData.inp?.category || undefined}
+                  />
+                  <Metric
+                    label="FCP (terrain)"
+                    value={
+                      latest.fieldData.fcp?.percentile != null
+                        ? `${(latest.fieldData.fcp.percentile / 1000).toFixed(1)} s`
+                        : "—"
+                    }
+                    hint={latest.fieldData.fcp?.category || undefined}
+                  />
+                </MetricGrid>
+              </div>
+            </div>
+          ) : (
+            <p className="mt-4 text-xs text-[var(--muted)]">
+              Pas encore de données CrUX pour cette URL (trafic Chrome insuffisant ou audit hors
+              PageSpeed).
+            </p>
+          )}
+
           {m ? (
+            <div className="mt-8">
+              <SectionTitle kicker="Lab Lighthouse" title="Mesures simulées" />
             <MetricGrid>
               <Metric label="FCP" value={m.firstContentfulPaintMs != null ? `${(m.firstContentfulPaintMs / 1000).toFixed(1)} s` : "—"} hint="First Contentful Paint" />
               <Metric label="LCP" value={m.largestContentfulPaintMs != null ? `${(m.largestContentfulPaintMs / 1000).toFixed(1)} s` : "—"} hint="Largest Contentful Paint" />
@@ -180,6 +421,7 @@ export default function StudioVelocityPage() {
               <Metric label="Réponse serveur" value={m.serverResponseTimeMs != null ? `${m.serverResponseTimeMs} ms` : "—"} hint="TTFB" />
               <Metric label="Poids total" value={m.totalByteWeightBytes != null ? `${Math.round(m.totalByteWeightBytes / 1024)} Ko` : "—"} />
             </MetricGrid>
+            </div>
           ) : null}
 
           {latest.opportunities?.length ? (

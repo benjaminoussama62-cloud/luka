@@ -163,6 +163,21 @@ export function AyebiEditor({
       sections = all;
     }
 
+    // Avertissement client — ébauche / sans références (comme Wikipédia, on laisse publier).
+    const bodyPreview = sections.flatMap((s) => [...s.paragraphs, ...(s.subsections ?? []).flatMap((ss) => ss.paragraphs)]).join("\n");
+    const refCount = (bodyPreview.match(/\[ref:[^\]]+\]/gi) ?? []).length + (initial?.references?.length ?? 0);
+    const charCount = `${summary}\n${bodyPreview}`.replace(/\s+/g, " ").trim().length;
+    if (refCount === 0 || charCount < 400) {
+      const warn =
+        refCount === 0
+          ? "Aucune référence source — ajoutez des [ref:url|titre] pour sortir du statut ébauche. Publier quand même ?"
+          : "Cet article est encore une ébauche (contenu court). Publier quand même ?";
+      if (!confirm(warn)) {
+        setSaving(false);
+        return;
+      }
+    }
+
     const article = {
       slug: slug.trim() || slugifyTitle(title),
       title: title.trim(),
@@ -181,6 +196,7 @@ export function AyebiEditor({
       navboxSlugs: navboxText.split(",").map((s) => s.trim()).filter(Boolean),
       coordinates: !isNaN(lat) && !isNaN(lon) && coordLat && coordLon ? { lat, lon } : undefined,
       gallery: parseGallery(galleryText),
+      references: initial?.references,
     };
 
     const url = mode === "create" ? "/api/ayebi/articles" : `/api/ayebi/articles/${initial?.slug}`;
@@ -192,10 +208,20 @@ export function AyebiEditor({
       body: JSON.stringify({ ...article, editSummary }),
     });
 
-    const data = (await res.json()) as { error?: string; article?: { slug: string } };
+    const data = (await res.json()) as {
+      error?: string;
+      article?: { slug: string };
+      citationWarning?: string;
+      quality?: { quality: string; stub: boolean; refs: number };
+    };
     setSaving(false);
 
     if (!res.ok) { setError(data.error ?? "Erreur de sauvegarde."); return; }
+    if (data.citationWarning) {
+      // Avertissement encyclopédique — on enregistre quand même, comme Wikipédia.
+      setError(data.citationWarning);
+      await new Promise((r) => setTimeout(r, 1200));
+    }
     router.push(`/ayebi/${data.article?.slug ?? article.slug}`);
     router.refresh();
   }

@@ -4,6 +4,7 @@ import {
   traceAcquisition, traceAudience, traceBehavior, traceConversions,
   traceDailySeries, traceTotals,
 } from "@/lib/studio/trace-analytics";
+import { getTraceRealtime } from "@/lib/studio/trace-realtime";
 import { traceEnterpriseV2 } from "@/lib/studio/trace-v2";
 
 type Ctx = { params: Promise<{ siteId: string }> };
@@ -31,7 +32,7 @@ export async function GET(req: Request, ctx: Ctx) {
       case "realtime":
         return NextResponse.json({
           site: owned.site,
-          realtime: traceEnterpriseV2.getRealTimeAnalytics(id, 30),
+          realtime: getTraceRealtime(id, 30),
         });
       case "attribution":
         return NextResponse.json({
@@ -44,14 +45,24 @@ export async function GET(req: Request, ctx: Ctx) {
           site: owned.site,
           cohorts: traceEnterpriseV2.getCohortAnalysis(id),
         });
-      default:
+      default: {
+        // Overview keeps rich v2 panel + accurate active-user counts from events.
+        const v2 = traceEnterpriseV2.getRealTimeAnalytics(id, 30);
+        const snap = getTraceRealtime(id, 30);
         return NextResponse.json({
           site: owned.site,
           days,
           totals: traceTotals(id, days),
           daily: traceDailySeries(id, days),
-          realtime: traceEnterpriseV2.getRealTimeAnalytics(id, 30),
+          realtime: {
+            ...v2,
+            activeUsers: snap.activeUsers,
+            sessions: snap.sessions,
+            pageviews: snap.pageviews,
+            events: snap.events,
+          },
         });
+      }
     }
   } catch (e) {
     return studioError(e);

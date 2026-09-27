@@ -363,6 +363,21 @@ function migrate(db: AyebaDatabase) {
     CREATE INDEX IF NOT EXISTS idx_watchlist_user ON ayebi_watchlist(user_id);
     CREATE INDEX IF NOT EXISTS idx_watchlist_slug ON ayebi_watchlist(slug);
 
+    CREATE TABLE IF NOT EXISTS ayebi_notifications (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      slug TEXT NOT NULL,
+      title TEXT NOT NULL,
+      summary TEXT NOT NULL DEFAULT '',
+      actor_id TEXT NOT NULL,
+      actor_name TEXT NOT NULL,
+      revision INTEGER NOT NULL DEFAULT 1,
+      read_at TEXT,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_ayebi_notif_user ON ayebi_notifications(user_id, created_at);
+
     CREATE TABLE IF NOT EXISTS ayebi_page_views (
       slug TEXT NOT NULL,
       day TEXT NOT NULL,
@@ -771,6 +786,44 @@ function migrate(db: AyebaDatabase) {
     );
 
     CREATE INDEX IF NOT EXISTS idx_dev_members_user ON developer_project_members(user_id);
+
+    CREATE TABLE IF NOT EXISTS jfc_cloud_saves (
+      user_id TEXT PRIMARY KEY,
+      save_json TEXT NOT NULL,
+      revision INTEGER NOT NULL DEFAULT 1,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS jfc_ranked (
+      user_id TEXT PRIMARY KEY,
+      mmr INTEGER NOT NULL DEFAULT 1000,
+      wins INTEGER NOT NULL DEFAULT 0,
+      losses INTEGER NOT NULL DEFAULT 0,
+      streak INTEGER NOT NULL DEFAULT 0,
+      division TEXT NOT NULL DEFAULT 'Découverte',
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS jfc_ranked_matches (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      match_id TEXT NOT NULL UNIQUE,
+      user_id TEXT NOT NULL,
+      won INTEGER NOT NULL,
+      foe_mmr INTEGER NOT NULL,
+      mmr_delta INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_jfc_ranked_matches_user ON jfc_ranked_matches(user_id, created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS jfc_live_config (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      config_json TEXT NOT NULL DEFAULT '{}',
+      updated_at TEXT NOT NULL
+    );
+
+    INSERT OR IGNORE INTO jfc_live_config (id, config_json, updated_at)
+    VALUES (1, '{"seasonId":"2026-s1","seasonName":"Saison Alpha Linafoot 2026","dataVersion":"clubs-v3","rankedOpen":true,"maintenance":false}', datetime('now'));
   `);
 
   migrateAyebiColumns(db);

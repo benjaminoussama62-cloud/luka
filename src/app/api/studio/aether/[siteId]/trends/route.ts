@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { requireStudioSite, studioError } from "@/lib/studio/http";
 import {
-  aetherDomainQueries, aetherGlobalTrends, aetherQuerySeries, aetherRisingQueries,
+  aetherCountryBreakdown,
+  aetherDomainQueries,
+  aetherGlobalTrends,
+  aetherQuerySeries,
+  aetherRelatedQueries,
+  aetherRisingQueries,
 } from "@/lib/studio/aether-console";
 
 type Ctx = { params: Promise<{ siteId: string }> };
@@ -22,6 +27,8 @@ export async function GET(req: Request, ctx: Ctx) {
       rising: aetherRisingQueries(owned.site.domain),
       global: aetherGlobalTrends(7),
       querySeries: query ? aetherQuerySeries(query, owned.site.domain, days) : [],
+      related: aetherRelatedQueries(owned.site.domain, query, days),
+      countries: aetherCountryBreakdown(owned.site.domain, days, query || undefined),
       query,
     });
   } catch (e) {

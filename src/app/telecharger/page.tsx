@@ -41,7 +41,7 @@ const FEATURES = [
   },
   {
     title: "Un écosystème connecté",
-    body: "Jemsa, Sombateka, Omega, Tala et les services DevAlpha restent accessibles depuis un espace cohérent.",
+    body: "Jemsa, Sombateka, Omega, Tala, Studio et Ayebi restent accessibles depuis un espace cohérent.",
   },
 ];
 

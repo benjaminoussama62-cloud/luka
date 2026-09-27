@@ -39,6 +39,7 @@ const MODULE_NAV: {
     label: "Trace",
     sub: [
       { slug: "", label: "Vue d'ensemble" },
+      { slug: "temps-reel", label: "Temps réel" },
       { slug: "audience", label: "Audience" },
       { slug: "acquisition", label: "Acquisition" },
       { slug: "comportement", label: "Comportement" },
@@ -57,6 +58,8 @@ const MODULE_NAV: {
       { slug: "campagnes", label: "Campagnes" },
       { slug: "annonces", label: "Annonces" },
       { slug: "mots-cles", label: "Mots-clés" },
+      { slug: "termes-recherche", label: "Termes de recherche" },
+      { slug: "roas", label: "ROAS" },
       { slug: "audiences", label: "Audiences" },
       { slug: "facturation", label: "Facturation" },
     ],

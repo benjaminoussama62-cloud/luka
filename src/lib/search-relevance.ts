@@ -168,24 +168,28 @@ export function tokenMatchesInHay(token: string, hay: string): boolean {
 
 /**
  * Score de pertinence texte ↔ requête.
- * Exige un recouvrement réel — pas un seul « de » ou « langue » isolé.
+ * Sert au classement — pas à vider la SERP. Les hits déjà récupérés
+ * par un moteur amont (Wikipédia, Bing…) restent admissibles via
+ * `isRetrievedHitAdmissible` même si le score texte est bas (alias,
+ * entité résolue, titre différent de la requête).
  */
 export function relevanceScore(text: string, query: string): number {
   const hay = normalizeQueryText(text);
   const qNorm = normalizeQueryText(query);
   const qCompact = compactQuery(query);
 
-  if (qNorm.length >= 3 && tokenMatchesInHay(qNorm, hay)) return 100;
+  if (qNorm.length >= 2 && tokenMatchesInHay(qNorm, hay)) return 100;
+  if (qCompact.length >= 2 && hay.replace(/[\s._-]/g, "").includes(qCompact)) return 90;
 
-  const tokens = meaningfulTokens(query);
-  if (!tokens.length) {
-    if (qCompact.length >= 3 && hay.replace(/[\s._-]/g, "").includes(qCompact)) return 75;
-    return 0;
+  const tokens = meaningfulTokens(query, 1);
+  const significant = tokens.filter((t) => t.length >= 2 && !STOPWORDS.has(t));
+  if (!significant.length) {
+    return qCompact.length >= 2 && hay.includes(qCompact) ? 70 : 0;
   }
 
   let matched = 0;
   let score = 0;
-  for (const t of tokens) {
+  for (const t of significant) {
     if (tokenMatchesInHay(t, hay)) {
       matched++;
       score += 14;
@@ -193,14 +197,113 @@ export function relevanceScore(text: string, query: string): number {
   }
 
   const required =
-    tokens.length <= 2 ? tokens.length : Math.max(2, Math.ceil(tokens.length * 0.55));
+    significant.length <= 2
+      ? Math.min(1, significant.length)
+      : Math.max(2, Math.ceil(significant.length * 0.55));
   if (matched < required) {
-    return matched > 0 ? Math.min(12, score * 0.25) : 0;
+    return matched > 0 ? Math.min(18, score * 0.4) : 0;
   }
 
   score += matched * 10;
-  if (matched === tokens.length) score += 18;
+  if (matched === significant.length) score += 18;
   return score;
+}
+
+/**
+ * Pertinence après compréhension : score max entre la requête brute et les
+ * sujets canoniques (entité, forme corrigée courte…). Une phrase longue
+ * (« qui est le chanteur américain connu sous le nom de Ye ») ne doit pas
+ * exiger que le titre matche « chanteur », « américain », « connu » — seul
+ * le sujet compris compte pour valider le hit.
+ */
+export function relevanceAgainstSubjects(
+  text: string,
+  primaryQuery: string,
+  subjects: readonly string[] = [],
+): number {
+  let best = relevanceScore(text, primaryQuery);
+  const seen = new Set([normalizeQueryText(primaryQuery)]);
+  for (const s of subjects) {
+    const t = s?.trim();
+    if (!t || t.length < 1) continue;
+    const key = normalizeQueryText(t);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    best = Math.max(best, relevanceScore(text, t));
+  }
+  return best;
+}
+
+/** Sujets de retrieval dérivés de la compréhension (toute longueur de requête). */
+export function retrievalSubjects(input: {
+  query: string;
+  entity?: string;
+  entityEn?: string;
+  corrected?: string;
+  wikiQuery?: string;
+}): string[] {
+  const out: string[] = [];
+  const push = (s?: string) => {
+    const t = s?.trim();
+    if (!t || t.length < 1) return;
+    if (normalizeQueryText(t) === normalizeQueryText(input.query) && out.length) return;
+    if (out.some((x) => normalizeQueryText(x) === normalizeQueryText(t))) return;
+    out.push(t);
+  };
+  push(input.entity);
+  push(input.entityEn);
+  push(input.wikiQuery);
+  // Forme corrigée seulement si elle est courte / centrée sujet — pas la
+  // phrase entière qui re-diluerait le score.
+  if (input.corrected) {
+    const sig = meaningfulTokens(input.corrected, 2);
+    if (sig.length > 0 && sig.length <= 4) push(input.corrected);
+  }
+  return out;
+}
+
+/** Domaines / sources first-party Ayeba — priorité dans le ranking. */
+export const FIRST_PARTY_HOST =
+  /\b(jemsa\.net|to-tala\.com|sombatekaonline\.com|omega-web\.org|ayeba\.app|ayebi)\b/i;
+
+/**
+ * Un hit déjà ramené par un retrieval amont (wiki search, DDG, Bing…)
+ * ne doit pas être éliminé par un second filtre lexical trop strict :
+ * c’est ce qui produisait des SERP vides alors que Wikipédia avait répondu.
+ * `subjects` = entités comprises (toute longueur de requête).
+ */
+export function isRetrievedHitAdmissible(
+  r: {
+    domain: string;
+    url: string;
+    title: string;
+    snippet: string;
+    sourceType?: string;
+    keywords?: string[];
+  },
+  query: string,
+  subjects: readonly string[] = [],
+): boolean {
+  const text = `${r.title} ${r.snippet} ${r.url}`;
+  if (FIRST_PARTY_HOST.test(`${r.domain} ${r.url}`)) {
+    return (
+      topBrandScore(query) >= 60 ||
+      relevanceAgainstSubjects(`${r.title} ${r.snippet}`, query, subjects) >= 12 ||
+      r.domain === "ayebi" ||
+      r.url.startsWith("/ayebi/")
+    );
+  }
+  if (r.sourceType === "wiki" || r.domain.includes("wikipedia.org")) return true;
+  if (r.keywords?.includes("retrieved:upstream")) {
+    return (
+      relevanceAgainstSubjects(text, query, subjects) >= 8 ||
+      r.sourceType === "news"
+    );
+  }
+  return (
+    relevanceAgainstSubjects(text, query, subjects) >= 20 ||
+    isResultRelevant(r, query)
+  );
 }
 
 export function isRelevantText(text: string, query: string, minScore = 22): boolean {
@@ -410,15 +513,17 @@ export function isResultRelevant(
     title: string;
     snippet: string;
     sourceType?: string;
+    keywords?: string[];
   },
   query: string,
 ): boolean {
-  if (/\b(jemsa|tala|sombateka|omega|ayeba|devalpha)\b/i.test(`${r.title} ${r.domain} ${r.url}`)) {
-    return topBrandScore(query) >= 80 || isRelevantText(`${r.title} ${r.snippet}`, query, 15);
+  if (FIRST_PARTY_HOST.test(`${r.domain} ${r.url}`)) {
+    return topBrandScore(query) >= 60 || isRelevantText(`${r.title} ${r.snippet}`, query, 12);
   }
-  if (r.domain.includes("wikipedia.org")) {
-    return isRelevantText(`${r.title} ${r.snippet}`, query, 18);
-  }
+  // Wikipédia déjà ramenée par le retrieval — le ranking ordonne, il ne vide pas.
+  if (r.sourceType === "wiki" || r.domain.includes("wikipedia.org")) return true;
+  // Hits amont (Bing, DDG, Mojeek…) marqués à l’ingestion.
+  if (r.keywords?.includes("retrieved:upstream")) return true;
   if (navigationalSiteForQuery(query) && r.domain.includes(navigationalSiteForQuery(query)!.domain)) {
     return true;
   }

@@ -9,6 +9,7 @@ import { AyebiStatsBar } from "@/components/ayebi/AyebiStatsBar";
 import { AyebiProtectionBadge } from "@/components/ayebi/AyebiProtectionBadge";
 import { AyebiGallery } from "@/components/ayebi/AyebiGallery";
 import { AyebiNavbox } from "@/components/ayebi/AyebiNavbox";
+import { AyebiStubBanner } from "@/components/ayebi/AyebiStubBanner";
 import {
   buildTOC,
   extractReferences,
@@ -60,6 +61,7 @@ export function AyebiArticleView({
     contributorCount: number;
     createdByName: string;
     createdAt: string;
+    qualityScore?: { quality: string; stub: boolean; chars: number; sections: number; refs: number };
   } | null;
 }) {
   const [flagOpen, setFlagOpen] = useState(false);
@@ -75,8 +77,9 @@ export function AyebiArticleView({
   const toc = buildTOC(sections);
   const refs = article.references?.length ? article.references : extractReferences(sections);
   const interwiki = interwikiLinks(article.title);
-  const quality = article.quality ?? (meta?.stub || article.stub ? "ébauche" : "standard");
-  const qualityCfg = QUALITY_CONFIG[quality];
+  const quality = article.quality ?? meta?.qualityScore?.quality ?? (meta?.stub || article.stub ? "ébauche" : "standard");
+  const qualityCfg = QUALITY_CONFIG[quality as keyof typeof QUALITY_CONFIG] ?? QUALITY_CONFIG.standard;
+  const isStub = Boolean(meta?.stub || article.stub || meta?.qualityScore?.stub || quality === "ébauche");
   const gallery = article.gallery ?? [];
 
   async function changeProtection(p: PageProtection) {
@@ -163,20 +166,28 @@ export function AyebiArticleView({
             </div>
           )}
 
-          {/* ── Bandeau qualité ── */}
-          {quality !== "standard" && (
-            <div
-              className="mb-4 flex items-center gap-3 rounded-xl border px-4 py-3"
-              style={{ borderColor: qualityCfg.border, background: qualityCfg.bg }}
-            >
-              <span className="text-sm font-medium" style={{ color: qualityCfg.color }}>{qualityCfg.label}</span>
-              {quality === "ébauche" && (
-                <span className="text-xs text-[var(--muted)]">
-                  Cet article est incomplet. <Link href={`/ayebi/${article.slug}/modifier`} className="text-[var(--accent)] hover:underline">Contribuez à son amélioration.</Link>
-                </span>
-              )}
-            </div>
-          )}
+          {/* ── Bandeau qualité + stub (scoreArticleQuality) ── */}
+          <div
+            className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border px-4 py-3"
+            style={{ borderColor: qualityCfg.border, background: qualityCfg.bg }}
+          >
+            <span className="text-sm font-medium" style={{ color: qualityCfg.color }}>{qualityCfg.label}</span>
+            {meta?.qualityScore ? (
+              <span className="text-[10px] text-[var(--faint)]">
+                {meta.qualityScore.chars} car. · {meta.qualityScore.sections} sect. · {meta.qualityScore.refs} réf.
+              </span>
+            ) : null}
+            {isStub && (
+              <span className="text-xs text-[var(--muted)]">
+                Ébauche —{" "}
+                <Link href={`/ayebi/${article.slug}/modifier`} className="text-[var(--accent)] hover:underline">
+                  contribuez à son amélioration
+                </Link>
+                .
+              </span>
+            )}
+          </div>
+          {isStub ? <AyebiStubBanner slug={article.slug} /> : null}
 
           {/* ── Badges protection ── */}
           <div className="mb-3 flex flex-wrap gap-2">

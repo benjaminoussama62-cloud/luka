@@ -8,7 +8,19 @@
 import { randomUUID } from "node:crypto";
 import { getDb } from "@/lib/storage/database";
 import { enqueueUrl } from "@/lib/crawler/global-crawler";
-import type { StudioSite } from "./types";
+import type { RadarInspectResult, StudioSite } from "./types";
+
+/** Champs live persistés (sous-ensemble de RadarLiveResult). */
+type LivePersist = {
+  status: number;
+  indexable: boolean;
+  noindex: boolean;
+  latencyMs: number;
+  fetchedAt: string;
+  canonical: string | null;
+  metaDescription: string | null;
+  error?: string;
+};
 
 const n = (v: unknown) => (typeof v === "number" ? v : Number(v) || 0);
 const sinceDays = (d: number) => new Date(Date.now() - d * 86400000).toISOString();
@@ -55,14 +67,179 @@ export function radarPerformanceTotals(domain: string, days = 28) {
   };
 }
 
-export type RadarDimension = "query" | "url" | "country" | "device";
+/**
+ * Comparaison type GSC : période actuelle vs période précédente de même durée.
+ * deltas en valeur absolue + % (null si base à 0).
+ */
+export function radarPerformanceCompare(domain: string, days = 28) {
+  const current = radarPerformanceTotals(domain, days);
+  const db = getDb();
+  const endPrev = sinceDays(days).slice(0, 10);
+  const startPrev = sinceDays(days * 2).slice(0, 10);
+  const r = db
+    .prepare(
+      `SELECT SUM(impressions) as impressions, SUM(clicks) as clicks,
+              SUM(position_sum) as pos_sum, SUM(position_count) as pos_count
+       FROM radar_daily WHERE domain = ? AND day >= ? AND day < ?`,
+    )
+    .get(domain, startPrev, endPrev) as any;
+  const impressions = n(r?.impressions);
+  const clicks = n(r?.clicks);
+  const previous = {
+    impressions,
+    clicks,
+    ctr: impressions > 0 ? Math.round((clicks / impressions) * 1000) / 10 : 0,
+    position: n(r?.pos_count) > 0 ? Math.round((n(r?.pos_sum) / n(r?.pos_count)) * 10) / 10 : null,
+  };
+  const pct = (cur: number, prev: number) =>
+    prev === 0 ? (cur > 0 ? 100 : null) : Math.round(((cur - prev) / prev) * 1000) / 10;
+  return {
+    days,
+    current,
+    previous,
+    delta: {
+      clicks: current.clicks - previous.clicks,
+      clicksPct: pct(current.clicks, previous.clicks),
+      impressions: current.impressions - previous.impressions,
+      impressionsPct: pct(current.impressions, previous.impressions),
+      ctr: Math.round((current.ctr - previous.ctr) * 10) / 10,
+      position:
+        current.position != null && previous.position != null
+          ? Math.round((current.position - previous.position) * 10) / 10
+          : null,
+    },
+  };
+}
 
-export function radarBreakdown(domain: string, dim: RadarDimension, days = 28, limit = 50) {
+export type RadarPerfFilters = { query?: string; url?: string };
+
+/** Export CSV Search Analytics (requêtes, pages ou croisement page×requête). */
+export function radarPerformanceCsv(
+  domain: string,
+  dim: RadarDimension,
+  days = 28,
+  filters?: RadarPerfFilters,
+): string {
+  if (dim === "page_query") {
+    const rows = radarPageQueryCross(domain, days, 500, filters);
+    const header = "query,page,clicks,impressions,ctr,position";
+    const lines = rows.map(
+      (r) =>
+        `"${String(r.query).replace(/"/g, '""')}","${String(r.url).replace(/"/g, '""')}",${r.clicks},${r.impressions},${r.ctr},${r.position ?? ""}`,
+    );
+    return [header, ...lines].join("\n");
+  }
+  const rows = radarBreakdown(domain, dim, days, 500, filters);
+  const header = "label,clicks,impressions,ctr,position";
+  const lines = rows.map(
+    (r) =>
+      `"${String(r.label).replace(/"/g, '""')}",${r.clicks},${r.impressions},${r.ctr},${r.position ?? ""}`,
+  );
+  return [header, ...lines].join("\n");
+}
+
+export type RadarDimension = "query" | "url" | "country" | "device" | "page_query";
+
+function mapAggRow(r: any) {
+  return {
+    label: r.label as string,
+    impressions: n(r.impressions),
+    clicks: n(r.clicks),
+    ctr: n(r.impressions) > 0 ? Math.round((n(r.clicks) / n(r.impressions)) * 1000) / 10 : 0,
+    position: n(r.pos_count) > 0 ? Math.round((n(r.pos_sum) / n(r.pos_count)) * 10) / 10 : null,
+  };
+}
+
+/**
+ * Croisement page × requête (radar_daily a query+url dans la PK).
+ * Filtres optionnels pour zoomer sur une requête ou une page.
+ */
+export function radarPageQueryCross(
+  domain: string,
+  days = 28,
+  limit = 50,
+  filters?: RadarPerfFilters,
+) {
+  const db = getDb();
+  const since = sinceDays(days).slice(0, 10);
+  const clauses = ["domain = ?", "day >= ?", "query != ''", "url != ''"];
+  const params: unknown[] = [domain, since];
+  if (filters?.query?.trim()) {
+    clauses.push("query LIKE ?");
+    params.push(`%${filters.query.trim()}%`);
+  }
+  if (filters?.url?.trim()) {
+    clauses.push("url LIKE ?");
+    params.push(`%${filters.url.trim()}%`);
+  }
+  params.push(limit);
+  return (db
+    .prepare(
+      `SELECT query, url,
+              SUM(impressions) as impressions,
+              SUM(clicks) as clicks,
+              SUM(position_sum) as pos_sum,
+              SUM(position_count) as pos_count
+       FROM radar_daily
+       WHERE ${clauses.join(" AND ")}
+       GROUP BY query, url
+       ORDER BY clicks DESC, impressions DESC
+       LIMIT ?`,
+    )
+    .all(...params) as any[]).map((r: any) => ({
+      query: r.query as string,
+      url: r.url as string,
+      impressions: n(r.impressions),
+      clicks: n(r.clicks),
+      ctr: n(r.impressions) > 0 ? Math.round((n(r.clicks) / n(r.impressions)) * 1000) / 10 : 0,
+      position: n(r.pos_count) > 0 ? Math.round((n(r.pos_sum) / n(r.pos_count)) * 10) / 10 : null,
+    }));
+}
+
+export function radarBreakdown(
+  domain: string,
+  dim: RadarDimension,
+  days = 28,
+  limit = 50,
+  filters?: RadarPerfFilters,
+) {
   const db = getDb();
   const since = sinceDays(days);
 
+  if (dim === "page_query") {
+    return radarPageQueryCross(domain, days, limit, filters).map((r) => ({
+      label: `${r.query} · ${r.url}`,
+      impressions: r.impressions,
+      clicks: r.clicks,
+      ctr: r.ctr,
+      position: r.position,
+      query: r.query,
+      url: r.url,
+    }));
+  }
+
   if (dim === "query" || dim === "url") {
     const col = dim === "query" ? "query" : "url";
+    const clauses = [`domain = ?`, `day >= ?`, `${col} != ''`];
+    const params: unknown[] = [domain, since.slice(0, 10)];
+    // Filtre croisé : restreindre l'autre dimension si fournie
+    if (dim === "query" && filters?.url?.trim()) {
+      clauses.push("url LIKE ?");
+      params.push(`%${filters.url.trim()}%`);
+    }
+    if (dim === "url" && filters?.query?.trim()) {
+      clauses.push("query LIKE ?");
+      params.push(`%${filters.query.trim()}%`);
+    }
+    if (dim === "query" && filters?.query?.trim()) {
+      clauses.push("query LIKE ?");
+      params.push(`%${filters.query.trim()}%`);
+    }
+    if (dim === "url" && filters?.url?.trim()) {
+      clauses.push("url LIKE ?");
+      params.push(`%${filters.url.trim()}%`);
+    }
+    params.push(limit);
     return (db
       .prepare(
         `SELECT ${col} as label,
@@ -71,18 +248,12 @@ export function radarBreakdown(domain: string, dim: RadarDimension, days = 28, l
                 SUM(position_sum) as pos_sum,
                 SUM(position_count) as pos_count
          FROM radar_daily
-         WHERE domain = ? AND day >= ? AND ${col} != ''
+         WHERE ${clauses.join(" AND ")}
          GROUP BY ${col}
          ORDER BY clicks DESC, impressions DESC
          LIMIT ?`,
       )
-      .all(domain, since.slice(0, 10), limit) as any[]).map((r: any) => ({
-        label: r.label,
-        impressions: n(r.impressions),
-        clicks: n(r.clicks),
-        ctr: n(r.impressions) > 0 ? Math.round((n(r.clicks) / n(r.impressions)) * 1000) / 10 : 0,
-        position: n(r.pos_count) > 0 ? Math.round((n(r.pos_sum) / n(r.pos_count)) * 10) / 10 : null,
-      }));
+      .all(...params) as any[]).map(mapAggRow);
   }
 
   // country / device come from raw signals (recorded at search time)
@@ -206,13 +377,177 @@ export function radarCoverage(site: StudioSite) {
     submitted: submitted.map((s) => ({
       url: s.url, source: s.source, submittedAt: s.submitted_at, indexed: n(s.indexed) === 1,
     })),
+    indexRequests: radarIndexRequestHistory(site.id, 50),
     indexedSetSize: indexedSet.size,
   };
+}
+
+/**
+ * Demande d'indexation type GSC — enqueueUrl réel + journal radar_index_requests.
+ * URLs hors domaine rejetées. Max 100 par appel.
+ */
+export function radarRequestIndexing(
+  site: StudioSite,
+  urls: string[],
+  reason = "request_indexing",
+): { queued: number; rejected: string[]; requests: Array<{ url: string; status: string }> } {
+  if (site.status !== "verified") {
+    throw Object.assign(new Error("Vérifiez d’abord la propriété du site"), { status: 403 });
+  }
+  const db = getDb();
+  const now = new Date().toISOString();
+  const rejected: string[] = [];
+  const requests: Array<{ url: string; status: string }> = [];
+  let queued = 0;
+  const seen = new Set<string>();
+
+  for (const raw of urls.slice(0, 100)) {
+    let url = String(raw || "").trim();
+    if (!url) continue;
+    if (!/^https?:\/\//i.test(url)) url = `https://${url}`;
+    try {
+      const parsed = new URL(url);
+      url = parsed.toString();
+      if (seen.has(url)) continue;
+      seen.add(url);
+      const host = parsed.hostname.replace(/^www\./, "");
+      if (host !== site.domain && !host.endsWith(`.${site.domain}`)) {
+        rejected.push(url);
+        requests.push({ url, status: "rejected_domain" });
+        continue;
+      }
+      enqueueUrl(url, 95);
+      const queue = db.prepare(`SELECT status, priority FROM crawl_queue WHERE url = ?`).get(url) as
+        | { status: string; priority: number }
+        | undefined;
+      if (queue) {
+        db.prepare(`UPDATE crawl_queue SET priority = ?, status = ? WHERE url = ?`).run(
+          Math.max(queue.priority || 0, 95),
+          queue.status === "failed" ? "pending" : queue.status,
+          url,
+        );
+      }
+      db.prepare(
+        `INSERT INTO studio_site_urls (site_id, url, source, submitted_at)
+         VALUES (?, ?, 'request_indexing', ?) ON CONFLICT(site_id, url) DO NOTHING`,
+      ).run(site.id, url, now);
+      db.prepare(
+        `INSERT INTO radar_index_requests (id, site_id, url, status, reason, requested_at, queue_status)
+         VALUES (?, ?, ?, 'queued', ?, ?, ?)`,
+      ).run(randomUUID(), site.id, url, reason, now, queue?.status || "pending");
+      queued++;
+      requests.push({ url, status: "queued" });
+    } catch {
+      rejected.push(raw);
+      requests.push({ url: raw, status: "invalid" });
+    }
+  }
+
+  return { queued, rejected, requests };
+}
+
+export function radarIndexRequestHistory(siteId: string, limit = 50) {
+  try {
+    return (getDb()
+      .prepare(
+        `SELECT id, url, status, reason, requested_at, queue_status
+         FROM radar_index_requests
+         WHERE site_id = ?
+         ORDER BY requested_at DESC LIMIT ?`,
+      )
+      .all(siteId, limit) as any[]).map((r) => ({
+      id: r.id as string,
+      url: r.url as string,
+      status: r.status as string,
+      reason: (r.reason as string) || "request_indexing",
+      requestedAt: r.requested_at as string,
+      createdAt: r.requested_at as string,
+      queueStatus: (r.queue_status as string) || null,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Alertes anomalies Search Analytics (chute > 30 % vs période précédente).
+ */
+export function radarAnomalyAlerts(domain: string, days = 28) {
+  const cmp = radarPerformanceCompare(domain, days);
+  const alerts: Array<{ id: string; severity: "info" | "warn" | "critical"; title: string; detail: string }> = [];
+  if (cmp.delta.clicksPct != null && cmp.delta.clicksPct <= -30 && cmp.previous.clicks >= 5) {
+    alerts.push({
+      id: "clicks-drop",
+      severity: "critical",
+      title: "Chute des clics",
+      detail: `${cmp.delta.clicksPct}% de clics vs les ${days} j précédents (${cmp.previous.clicks} → ${cmp.current.clicks}).`,
+    });
+  }
+  if (
+    cmp.delta.impressionsPct != null &&
+    cmp.delta.impressionsPct <= -30 &&
+    cmp.previous.impressions >= 20
+  ) {
+    alerts.push({
+      id: "imps-drop",
+      severity: "warn",
+      title: "Chute des impressions",
+      detail: `${cmp.delta.impressionsPct}% d'impressions vs période précédente (${cmp.previous.impressions} → ${cmp.current.impressions}).`,
+    });
+  }
+  if (cmp.delta.position != null && cmp.delta.position >= 3 && cmp.previous.position != null) {
+    alerts.push({
+      id: "pos-drop",
+      severity: "warn",
+      title: "Position moyenne en baisse",
+      detail: `Position ${cmp.previous.position} → ${cmp.current.position} (+${cmp.delta.position}).`,
+    });
+  }
+  return { compare: cmp, alerts };
 }
 
 /* ---------------- Inspections (historique) ---------------- */
 
 export function radarInspectionHistory(siteId: string, limit = 50) {
+  try {
+    const events = getDb()
+      .prepare(
+        `SELECT id, url, kind, indexed, title, crawled_at, in_queue, queue_status,
+                live_status, live_indexable, live_noindex, live_latency_ms, live_error,
+                clicks_30d, impressions_30d, created_at
+         FROM radar_inspection_events
+         WHERE site_id = ?
+         ORDER BY created_at DESC LIMIT ?`,
+      )
+      .all(siteId, limit) as any[];
+    if (events.length) {
+      return events.map((e) => ({
+        id: e.id,
+        url: e.url,
+        kind: e.kind,
+        indexed: n(e.indexed),
+        title: e.title,
+        crawled_at: e.crawled_at,
+        in_queue: n(e.in_queue),
+        queue_status: e.queue_status,
+        seo_score: null as number | null,
+        word_count: 0,
+        internal_links: 0,
+        external_links: 0,
+        last_updated: e.created_at,
+        live_status: e.live_status,
+        live_indexable: e.live_indexable,
+        live_noindex: e.live_noindex,
+        live_latency_ms: e.live_latency_ms,
+        live_error: e.live_error,
+        clicks_30d: n(e.clicks_30d),
+        impressions_30d: n(e.impressions_30d),
+      }));
+    }
+  } catch {
+    /* table absente — repli snapshot */
+  }
+
   return getDb()
     .prepare(
       `SELECT url, indexed, title, crawled_at, in_queue, queue_status,
@@ -222,6 +557,89 @@ export function radarInspectionHistory(siteId: string, limit = 50) {
        ORDER BY last_updated DESC LIMIT ?`,
     )
     .all(siteId, limit) as any[];
+}
+
+/** Persiste inspection index + éventuel test live (snapshot + journal). */
+export function persistRadarInspection(
+  siteId: string,
+  inspection: RadarInspectResult,
+  live?: LivePersist | null,
+) {
+  const db = getDb();
+  const now = new Date().toISOString();
+  const kind = live ? "live" : "index";
+
+  db.prepare(
+    `INSERT INTO radar_url_inspection (
+       id, site_id, url, indexed, title, snippet, domain, crawled_at,
+       in_queue, queue_status, canonical_url, meta_description,
+       internal_links, external_links, word_count, last_updated,
+       live_status, live_indexable, live_noindex, live_latency_ms, live_fetched_at, last_kind
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(site_id, url) DO UPDATE SET
+       indexed = excluded.indexed,
+       title = excluded.title,
+       snippet = excluded.snippet,
+       domain = excluded.domain,
+       crawled_at = excluded.crawled_at,
+       in_queue = excluded.in_queue,
+       queue_status = excluded.queue_status,
+       canonical_url = COALESCE(excluded.canonical_url, radar_url_inspection.canonical_url),
+       meta_description = COALESCE(excluded.meta_description, radar_url_inspection.meta_description),
+       last_updated = excluded.last_updated,
+       live_status = COALESCE(excluded.live_status, radar_url_inspection.live_status),
+       live_indexable = COALESCE(excluded.live_indexable, radar_url_inspection.live_indexable),
+       live_noindex = COALESCE(excluded.live_noindex, radar_url_inspection.live_noindex),
+       live_latency_ms = COALESCE(excluded.live_latency_ms, radar_url_inspection.live_latency_ms),
+       live_fetched_at = COALESCE(excluded.live_fetched_at, radar_url_inspection.live_fetched_at),
+       last_kind = excluded.last_kind`,
+  ).run(
+    randomUUID(),
+    siteId,
+    inspection.url,
+    inspection.indexed ? 1 : 0,
+    inspection.title,
+    inspection.snippet,
+    inspection.domain,
+    inspection.crawledAt,
+    inspection.inQueue ? 1 : 0,
+    inspection.queueStatus,
+    live?.canonical ?? null,
+    live?.metaDescription ?? null,
+    now,
+    live?.status ?? null,
+    live ? (live.indexable ? 1 : 0) : null,
+    live ? (live.noindex ? 1 : 0) : null,
+    live?.latencyMs ?? null,
+    live?.fetchedAt ?? null,
+    kind,
+  );
+
+  db.prepare(
+    `INSERT INTO radar_inspection_events (
+       id, site_id, url, kind, indexed, title, crawled_at, in_queue, queue_status,
+       live_status, live_indexable, live_noindex, live_latency_ms, live_error,
+       clicks_30d, impressions_30d, created_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    randomUUID(),
+    siteId,
+    inspection.url,
+    kind,
+    inspection.indexed ? 1 : 0,
+    inspection.title,
+    inspection.crawledAt,
+    inspection.inQueue ? 1 : 0,
+    inspection.queueStatus,
+    live?.status ?? null,
+    live ? (live.indexable ? 1 : 0) : null,
+    live ? (live.noindex ? 1 : 0) : null,
+    live?.latencyMs ?? null,
+    live?.error ?? null,
+    inspection.clicks30d,
+    inspection.impressions30d,
+    now,
+  );
 }
 
 /* ---------------- Sitemaps ---------------- */

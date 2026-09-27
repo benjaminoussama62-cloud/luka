@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireStudioSite, studioError } from "@/lib/studio/http";
 import { inspectUrl, inspectUrlLive, submitUrlForCrawl } from "@/lib/studio/radar";
+import { persistRadarInspection } from "@/lib/studio/radar-console";
 
 type Ctx = { params: Promise<{ siteId: string }> };
 
@@ -17,11 +18,11 @@ export async function POST(req: Request, ctx: Ctx) {
     if (body.enqueue) {
       enqueued = submitUrlForCrawl(owned.site, url, 88);
     }
-    // Test en direct : fetch HTTP réel de la page (status, noindex, canonical…)
     let live = null;
     if (body.live) {
       live = await inspectUrlLive(owned.site, url);
     }
+    persistRadarInspection(owned.site.id, inspection, live);
     return NextResponse.json({ inspection, enqueued, live });
   } catch (e) {
     return studioError(e);

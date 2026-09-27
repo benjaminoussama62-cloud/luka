@@ -126,6 +126,11 @@ export function DevKeysClient() {
               + Créer une clé
             </button>
           )}
+          {!canManage && (
+            <span className="dev-console-muted text-xs">
+              Lecture seule — seuls le propriétaire et les éditeurs créent des clés
+            </span>
+          )}
         </div>
 
         {creating && (

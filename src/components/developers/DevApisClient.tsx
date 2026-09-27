@@ -171,7 +171,15 @@ export function DevApisClient() {
                   onClick={() => {
                     setTesting(api);
                     setResult(null);
-                    setParams({ q: "", limit: "10" });
+                    const defaults: Record<string, string> = {};
+                    for (const p of api.params) {
+                      if (p.name === "limit") defaults.limit = "10";
+                      else if (p.name === "days") defaults.days = "28";
+                      else if (p.name === "dim") defaults.dim = "query";
+                      else if (p.name === "strategy") defaults.strategy = "mobile";
+                      else defaults[p.name] = "";
+                    }
+                    setParams(defaults);
                   }}
                 >
                   Tester

@@ -27,7 +27,12 @@ export function isAllowedOmegaReturn(raw: string) {
     const u = new URL(raw);
     if (u.protocol !== "http:" && u.protocol !== "https:") return false;
     const path = u.pathname.replace(/\/$/, "") || "/";
-    if (path !== "/ayeba/callback" && path !== "/auth/google/callback") return false;
+    const allowedPaths = new Set([
+      "/ayeba/callback",
+      "/ayeba/callback.html",
+      "/auth/google/callback",
+    ]);
+    if (!allowedPaths.has(path)) return false;
     return hostAllowed(u.hostname);
   } catch {
     return false;

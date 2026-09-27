@@ -9,6 +9,7 @@ type TagRule = {
 export async function GET(req: Request) {
   const params = new URL(req.url).searchParams;
   const key = params.get("k") || params.get("key") || "";
+  const debug = params.get("debug") === "1" || params.get("debug") === "true";
   if (!key) {
     return new NextResponse("// missing key", {
       status: 400,
@@ -24,7 +25,7 @@ export async function GET(req: Request) {
     });
   }
 
-  // Active tag-manager rules are baked into the script (cached 5 min).
+  // Active tag-manager rules are baked into the script (cached 5 min; no-cache in debug).
   let rules: TagRule[] = [];
   try {
     rules = getDb()
@@ -35,23 +36,46 @@ export async function GET(req: Request) {
       .all(site.siteId) as TagRule[];
   } catch { /* table may not exist yet */ }
 
-  const collectUrl = `${new URL(req.url).origin}/api/studio/trace/collect`;
+  const origin = new URL(req.url).origin;
+  const collectUrl = `${origin}/api/studio/trace/collect`;
 
   const js = `(function(){
   var k=${JSON.stringify(key)};
   var RULES=${JSON.stringify(rules)};
   var URL=${JSON.stringify(collectUrl)};
+  var DEBUG=${debug ? "true" : "false"};
   var sid="";
   try{sid=localStorage.getItem("ayeba_trace")||"";}catch(e){}
   if(!sid){sid=Math.random().toString(36).slice(2)+Date.now().toString(36);try{localStorage.setItem("ayeba_trace",sid);}catch(e){}}
+  // Persist ayb_click from landing URL for later conversion attribution
+  try{
+    var _qp=new URLSearchParams(location.search);
+    var _ayb=_qp.get("ayb_click");
+    if(_ayb)sessionStorage.setItem("ayeba_ayb_click",_ayb);
+  }catch(e){}
   var start=Date.now(),maxScroll=0,sentScroll={};
+  function aybClick(){
+    try{return sessionStorage.getItem("ayeba_ayb_click")||"";}catch(e){return "";}
+  }
   function send(p){
     p.k=k;p.sessionId=sid;p.path=location.pathname+location.search;
     p.referrer=document.referrer||"";p.title=document.title||"";
     p.screenResolution=screen.width+"x"+screen.height;
     p.language=navigator.language||"";p.timezone="";
     try{p.timezone=Intl.DateTimeFormat().resolvedOptions().timeZone||"";}catch(e){}
+    var ac=aybClick();
+    if(ac){p.data=Object.assign({},p.data||{},{ayb_click:ac});}
+    if(DEBUG){p.debug=true;}
     var body=JSON.stringify(p);
+    if(DEBUG){
+      try{console.log("%c[Ayeba Trace]","color:#0a7;font-weight:bold",p.eventType||"pageview",p);}catch(e){}
+      // Optional debug beacon: same collect endpoint with debug flag (already set)
+      try{fetch(URL,{method:"POST",headers:{"Content-Type":"application/json"},body:body,keepalive:true,credentials:"omit"})
+        .then(function(r){return r.json().catch(function(){return {};});})
+        .then(function(j){try{console.log("%c[Ayeba Trace] réponse","color:#0a7",j);}catch(e){}});
+      }catch(e){}
+      return;
+    }
     if(navigator.sendBeacon){navigator.sendBeacon(URL,new Blob([body],{type:"application/json"}));}
     else{fetch(URL,{method:"POST",headers:{"Content-Type":"application/json"},body:body,keepalive:true,credentials:"omit"}).catch(function(){});}
   }
@@ -66,6 +90,7 @@ export async function GET(req: Request) {
     var max=h.scrollHeight-h.clientHeight;
     return max<=0?100:Math.min(100,Math.round((window.scrollY/max)*100));
   }
+  if(DEBUG){try{console.info("%c[Ayeba Trace] mode aperçu activé","color:#0a7;font-weight:bold","session="+sid);}catch(e){}}
   // --- Pageview ---
   send({eventType:"pageview"});
   // --- Scroll depth (always tracked; tag rules can target thresholds) ---
@@ -92,12 +117,14 @@ export async function GET(req: Request) {
       try{if(el.closest&&el.closest(r.trigger_value))send({eventType:"click",data:{tag:r.name,selector:r.trigger_value}});}catch(x){}
     });
   },true);}
-  // --- Custom event API: ayebaTrack("signup",{plan:"pro"}) ---
+  // --- Custom event API: ayebaTrack("purchase",{value:50}) ---
+  // Without a matching tag rule, the event name becomes event_type (GA4-like).
   var eventRules=RULES.filter(function(r){return r.trigger_type==="event_name";});
   window.ayebaTrack=function(name,data){
     var fired=eventRules.filter(function(r){return r.trigger_value===name;});
-    var type=fired.length?fired[0].tag_type:"event";
-    send({eventType:type==="event"?"event":type,data:Object.assign({name:name},data||{})});
+    var type=fired.length?fired[0].tag_type:(name||"event");
+    send({eventType:type,title:name,data:Object.assign({name:name},data||{})});
+    if(DEBUG){try{console.log("%c[Ayeba Trace] ayebaTrack","color:#0a7",name,data);}catch(e){}}
   };
   // --- Engagement ping on exit ---
   function bye(){
@@ -113,7 +140,7 @@ export async function GET(req: Request) {
   return new NextResponse(js, {
     headers: {
       "Content-Type": "application/javascript; charset=utf-8",
-      "Cache-Control": "public, max-age=300",
+      "Cache-Control": debug ? "no-store" : "public, max-age=300",
       "Access-Control-Allow-Origin": "*",
     },
   });

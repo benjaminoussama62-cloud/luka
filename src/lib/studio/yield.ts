@@ -97,7 +97,14 @@ export function recordYieldImpression(siteId: string, placementId: string) {
     .run(day, siteId, placementId);
 }
 
-export function recordYieldClick(siteId: string, placementId: string, revenueCdf = 12) {
+/**
+ * Enregistre un clic Yield éditeur.
+ * `revenueCdf` = part éditeur réelle (CDF) — jamais de montant fictif.
+ * Appelé depuis le serveur d'annonces avec publisher_revenue de l'enchère.
+ */
+export function recordYieldClick(siteId: string, placementId: string, revenueCdf: number) {
+  if (!siteId || !placementId) return;
+  const amount = Math.max(0, Number(revenueCdf) || 0);
   const day = new Date().toISOString().slice(0, 10);
   getDb()
     .prepare(
@@ -106,5 +113,76 @@ export function recordYieldClick(siteId: string, placementId: string, revenueCdf
        ON CONFLICT(day, site_id, placement_id)
        DO UPDATE SET clicks = clicks + 1, revenue_cdf = revenue_cdf + ?`,
     )
-    .run(day, siteId, placementId, revenueCdf, revenueCdf);
+    .run(day, siteId, placementId, amount, amount);
+}
+
+/**
+ * Bridge Trace → Yield : une conversion Trace liée à un clic pub (ayb_click).
+ * Fenêtre d'attribution 7 jours. Idempotent par (click_id, conversion_type).
+ */
+export function recordConversionFromTrace(input: {
+  clickId: string;
+  conversionType?: string;
+  value?: number;
+  currency?: string;
+}): { ok: true; conversionId: string } | { ok: false; reason: string } {
+  const clickId = input.clickId.trim();
+  if (!clickId) return { ok: false, reason: "click_id manquant" };
+  const db = getDb();
+  const click = db
+    .prepare(
+      `SELECT id, campaign_id, creative_id, publisher_site_id, timestamp
+       FROM clicks WHERE id = ? AND is_valid = 1`,
+    )
+    .get(clickId) as
+    | {
+        id: string;
+        campaign_id: string;
+        creative_id: string;
+        publisher_site_id: string;
+        timestamp: string;
+      }
+    | undefined;
+  if (!click) return { ok: false, reason: "clic introuvable" };
+
+  const ageMs = Date.now() - new Date(click.timestamp).getTime();
+  if (ageMs > 7 * 86400000) return { ok: false, reason: "hors fenêtre d'attribution (7j)" };
+
+  const conversionType = (input.conversionType || "purchase").slice(0, 64);
+  const existing = db
+    .prepare(
+      `SELECT id FROM conversions WHERE click_id = ? AND conversion_type = ? LIMIT 1`,
+    )
+    .get(clickId, conversionType) as { id: string } | undefined;
+  if (existing) return { ok: true, conversionId: existing.id };
+
+  const id = `conv_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+  const value = Math.max(0, Number(input.value) || 0);
+  db.prepare(
+    `INSERT INTO conversions (
+      id, click_id, campaign_id, creative_id, publisher_site_id,
+      timestamp, user_id, conversion_type, value, currency, is_valid
+    ) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, 1)`,
+  ).run(
+    id,
+    click.id,
+    click.campaign_id,
+    click.creative_id,
+    click.publisher_site_id,
+    new Date().toISOString(),
+    conversionType,
+    value,
+    (input.currency || "CDF").slice(0, 8),
+  );
+
+  // Incrémente le compteur campagne si la colonne existe.
+  try {
+    db.prepare(
+      `UPDATE ad_campaigns SET conversions = COALESCE(conversions, 0) + 1 WHERE id = ?`,
+    ).run(click.campaign_id);
+  } catch {
+    /* schema variant */
+  }
+
+  return { ok: true, conversionId: id };
 }

@@ -115,7 +115,7 @@ export class TraceEnterpriseV2 {
     referrer?: string;
     userAgent: string;
     ip: string;
-    eventType: "scroll" | "click" | "conversion" | "engagement" | "event" | "custom";
+    eventType: string;
     title?: string;
     durationMs?: number;
     scrollDepth?: number;
@@ -155,7 +155,7 @@ export class TraceEnterpriseV2 {
       eventId,
       session.id,
       input.siteId,
-      input.eventType,
+      input.eventType.slice(0, 64) || "event",
       this.extractPath(input.pageUrl),
       input.title || this.extractTitle(input.pageUrl),
       input.referrer || "",

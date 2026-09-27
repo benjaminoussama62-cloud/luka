@@ -37,6 +37,7 @@ export default function TraceTagsPage() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [copied, setCopied] = useState(false);
+  const [copiedDebug, setCopiedDebug] = useState(false);
 
   const load = useCallback(async () => {
     if (!siteId) return;
@@ -50,8 +51,12 @@ export default function TraceTagsPage() {
   useEffect(() => { if (ready && !user) router.replace(`/ayebi/connexion?redirect=/studio/app/${siteId}/trace/tags`); }, [ready, user, router, siteId]);
   useEffect(() => { if (user) void load(); }, [user, load]);
 
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
   const snippet = traceKey
-    ? `<script async src="${typeof window !== "undefined" ? window.location.origin : ""}/api/studio/trace/script?k=${traceKey}"></script>`
+    ? `<script async src="${origin}/api/studio/trace/script?k=${traceKey}"></script>`
+    : "";
+  const debugSnippet = traceKey
+    ? `<script async src="${origin}/api/studio/trace/script?k=${traceKey}&debug=1"></script>`
     : "";
 
   const create = async () => {
@@ -100,6 +105,39 @@ export default function TraceTagsPage() {
               onClick={async () => { await navigator.clipboard.writeText(snippet); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
             >
               {copied ? "Copié" : "Copier"}
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section className="mt-10">
+        <SectionTitle title="Aperçu / débogage (preview)" />
+        <div className="ayeba-panel mt-4 space-y-3 p-5">
+          <p className="text-sm text-[var(--muted)]">
+            Pour prévisualiser les balises comme GTM Preview : chargez le script avec{" "}
+            <code className="text-[var(--ink)]">debug=1</code>. Chaque événement est journalisé dans la console
+            du navigateur (<code className="text-[var(--ink)]">[Ayeba Trace]</code>) et envoyé au collecteur
+            avec un beacon de débogage (réponse JSON visible).
+          </p>
+          <ol className="list-decimal space-y-1 pl-5 text-sm text-[var(--muted)]">
+            <li>Remplacez temporairement le snippet de prod par la version debug ci-dessous.</li>
+            <li>Ouvrez les DevTools → Console, puis naviguez / cliquez sur votre site.</li>
+            <li>Vérifiez <code className="text-[var(--ink)]">ayebaTrack(&quot;purchase&quot;, {"{ value: 10 }"})</code> et les balises.</li>
+            <li>Remettez le snippet sans <code className="text-[var(--ink)]">debug=1</code> en production.</li>
+          </ol>
+          <div className="mt-2 flex items-center gap-3">
+            <code className="ayeba-panel-soft block flex-1 overflow-x-auto p-3 text-xs text-[var(--ink)]">{debugSnippet}</code>
+            <button
+              type="button"
+              className="ayeba-ghost shrink-0 px-3 py-2 text-xs"
+              disabled={!debugSnippet}
+              onClick={async () => {
+                await navigator.clipboard.writeText(debugSnippet);
+                setCopiedDebug(true);
+                setTimeout(() => setCopiedDebug(false), 1500);
+              }}
+            >
+              {copiedDebug ? "Copié" : "Copier"}
             </button>
           </div>
         </div>

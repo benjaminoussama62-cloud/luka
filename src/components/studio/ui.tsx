@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import type { ReactNode } from "react";
 
 /* ---------- Module sub-navigation (Search Console style) ---------- */
 
@@ -52,19 +53,27 @@ export function SectionTitle({ kicker, title, aside }: { kicker?: string; title:
   );
 }
 
-export function Metric({ label, value, hint }: { label: string; value: string; hint?: string }) {
+export function Metric({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: string;
+  hint?: ReactNode;
+}) {
   return (
     <div className="ayeba-panel px-4 py-4">
       <p className="text-[10px] uppercase tracking-[0.14em] text-[var(--faint)]">{label}</p>
       <p className="mt-1 font-[family-name:var(--font-brand)] text-2xl tracking-[-0.03em] text-[var(--ink)]">
         {value}
       </p>
-      {hint ? <p className="mt-1 text-[11px] text-[var(--muted)]">{hint}</p> : null}
+      {hint ? <div className="mt-1 text-[11px] text-[var(--muted)]">{hint}</div> : null}
     </div>
   );
 }
 
-export function MetricGrid({ children }: { children: React.ReactNode }) {
+export function MetricGrid({ children }: { children: ReactNode }) {
   return <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">{children}</section>;
 }
 

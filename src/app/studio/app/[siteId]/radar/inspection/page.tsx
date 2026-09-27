@@ -10,9 +10,23 @@ import type { RadarLiveResult } from "@/lib/studio/radar";
 import type { RadarInspectResult, StudioSite } from "@/lib/studio/types";
 
 type InspectionRow = {
-  url: string; indexed: number; title: string | null; crawled_at: string | null;
-  in_queue: number; queue_status: string | null; seo_score: number | null;
-  word_count: number; internal_links: number; external_links: number; last_updated: string;
+  url: string;
+  indexed: number;
+  title: string | null;
+  crawled_at: string | null;
+  in_queue: number;
+  queue_status: string | null;
+  seo_score: number | null;
+  word_count: number;
+  internal_links: number;
+  external_links: number;
+  last_updated: string;
+  kind?: string;
+  live_status?: number | null;
+  live_indexable?: number | null;
+  live_latency_ms?: number | null;
+  clicks_30d?: number;
+  impressions_30d?: number;
 };
 
 export default function RadarInspectionPage() {
@@ -71,6 +85,7 @@ export default function RadarInspectionPage() {
       if (!res.ok) throw new Error(d.error || "Test impossible");
       setResult(d.inspection || null);
       setLive(d.live || null);
+      void load();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Erreur");
     } finally { setLiveBusy(false); }
@@ -191,16 +206,21 @@ export default function RadarInspectionPage() {
         <SectionTitle title="Historique des inspections" />
         <div className="mt-4">
           <DataTable
-            columns={["URL", "Indexée", "Dernier crawl", "File", "Score SEO", "Liens int./ext."]}
+            columns={["Date", "URL", "Type", "Indexée", "Live", "Clics 30j", "File"]}
             rows={history.map((h) => [
-              <span key="u" className="block max-w-[280px] truncate" title={h.url}>{h.url}</span>,
+              (h.last_updated || "").slice(0, 19).replace("T", " ") || "—",
+              <span key="u" className="block max-w-[240px] truncate" title={h.url}>
+                {h.url}
+              </span>,
+              h.kind === "live" ? "Test live" : "Index",
               h.indexed ? "Oui" : "Non",
-              h.crawled_at?.slice(0, 10) || "—",
+              h.live_status != null
+                ? `${h.live_status}${h.live_indexable ? " · indexable" : ""}${h.live_latency_ms != null ? ` · ${h.live_latency_ms}ms` : ""}`
+                : "—",
+              h.clicks_30d != null ? String(h.clicks_30d) : "—",
               h.queue_status || "—",
-              h.seo_score != null ? String(Math.round(h.seo_score)) : "—",
-              `${h.internal_links}/${h.external_links}`,
             ])}
-            empty="Aucune inspection enregistrée"
+            empty="Aucune inspection enregistrée — lancez une inspection ou un test en direct"
           />
         </div>
       </section>

@@ -3,6 +3,8 @@ export const YIELD_NAV = [
   { slug: "campagnes", label: "Campagnes" },
   { slug: "annonces", label: "Annonces" },
   { slug: "mots-cles", label: "Mots-clés" },
+  { slug: "termes-recherche", label: "Termes de recherche" },
+  { slug: "roas", label: "ROAS" },
   { slug: "audiences", label: "Audiences" },
   { slug: "facturation", label: "Facturation" },
 ];

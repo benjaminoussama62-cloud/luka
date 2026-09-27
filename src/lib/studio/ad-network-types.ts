@@ -243,6 +243,8 @@ export type AdRequest = {
     keywords?: string[];
     categories?: string[];
     content?: string;
+    /** User search query when the ad is served on search results. */
+    query?: string;
   };
   targeting: {
     geo?: {

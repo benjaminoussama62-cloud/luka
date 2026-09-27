@@ -40,7 +40,13 @@ export function AyebiHistoriqueClient({
   }
 
   async function restore(rev: number) {
-    if (!confirm(`Restaurer la révision ${rev} ?`)) return;
+    if (
+      !confirm(
+        `Restaurer la révision ${rev} ?\n\nLe contenu actuel sera remplacé. Une nouvelle révision « Restauration rev. ${rev} » sera créée dans l'historique.`,
+      )
+    ) {
+      return;
+    }
     setRestoring(true);
     const res = await fetch(`/api/ayebi/articles/${slug}/historique`, {
       method: "POST",
@@ -51,6 +57,9 @@ export function AyebiHistoriqueClient({
     if (res.ok) {
       router.push(`/ayebi/${slug}`);
       router.refresh();
+    } else {
+      const data = (await res.json().catch(() => null)) as { error?: string } | null;
+      alert(data?.error || "Échec de la restauration.");
     }
   }
 

@@ -31,11 +31,11 @@ export const HOME_SHORTCUTS: HomeShortcut[] = [
     tint: "#14b8a6",
   },
   {
-    id: "devalpha1",
-    name: "DevAlpha",
-    href: process.env.NEXT_PUBLIC_SHORTCUT_DEVALPHA1 || "https://devalpha1.com",
-    logo: "/brand/shortcuts/devalpha1.svg",
-    tint: "#f43f5e",
+    id: "ayebi",
+    name: "Ayebi",
+    href: process.env.NEXT_PUBLIC_SHORTCUT_AYEBI || "/ayebi",
+    logo: "/brand/ayeba-mark.svg",
+    tint: "#22d3ee",
   },
   {
     id: "tala",

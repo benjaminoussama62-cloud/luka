@@ -72,6 +72,45 @@ export function DevMembersClient() {
       </div>
 
       <section className="ayeba-panel p-5">
+        <h3 className="mb-1">Rôles IAM</h3>
+        <p className="dev-console-muted mb-3 text-xs">
+          Les permissions sont appliquées côté serveur — un lecteur ne peut pas créer de clé ni activer une API.
+        </p>
+        <table className="dcw-table">
+          <thead>
+            <tr>
+              <th>Action</th>
+              <th>Propriétaire</th>
+              <th>Éditeur</th>
+              <th>Lecteur</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Consulter métriques / journaux</td>
+              <td>✓</td><td>✓</td><td>✓</td>
+            </tr>
+            <tr>
+              <td>Activer / désactiver des APIs</td>
+              <td>✓</td><td>✓</td><td>—</td>
+            </tr>
+            <tr>
+              <td>Créer / révoquer des clés API</td>
+              <td>✓</td><td>✓</td><td>—</td>
+            </tr>
+            <tr>
+              <td>Inviter / retirer des membres</td>
+              <td>✓</td><td>—</td><td>—</td>
+            </tr>
+            <tr>
+              <td>Supprimer le projet</td>
+              <td>✓</td><td>—</td><td>—</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section className="ayeba-panel p-5">
         <h3 className="mb-1">Propriétaire</h3>
         <p className="dev-console-muted mb-4">
           Vous{isOwner ? "" : " (via un membre de l'équipe)"} — contrôle total : membres, clés,

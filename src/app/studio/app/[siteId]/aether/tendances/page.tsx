@@ -13,6 +13,8 @@ type Trends = {
   rising: Array<{ query: string; current: number; previous: number; growth: number }>;
   global: Array<{ query: string; searches: number; growth: number }>;
   querySeries: Array<{ day: string; searches: number; impressions: number }>;
+  related: Array<{ query: string; impressions: number; searches: number; score: number }>;
+  countries: Array<{ country: string; impressions: number; clicks: number; share: number }>;
   query: string;
   site: StudioSite;
 };
@@ -84,6 +86,58 @@ export default function AetherTendancesPage() {
       {activeQuery && !data.querySeries.length ? (
         <p className="mt-6 text-sm text-[var(--muted)]">Aucune recherche enregistrée pour « {activeQuery} » sur la période.</p>
       ) : null}
+
+      <section className="mt-10 grid gap-10 lg:grid-cols-2">
+        <div>
+          <SectionTitle
+            title={activeQuery ? `Requêtes liées à « ${activeQuery} »` : "Requêtes liées (votre site)"}
+          />
+          <div className="mt-4">
+            <DataTable
+              columns={["Requête", "Impressions site", "Recherches Ayeba"]}
+              rows={(data.related || []).map((r) => [
+                <button
+                  key="q"
+                  type="button"
+                  className="font-medium text-[var(--ink)] hover:underline"
+                  onClick={() => {
+                    setQueryInput(r.query);
+                    setActiveQuery(r.query);
+                  }}
+                >
+                  {r.query}
+                </button>,
+                String(r.impressions),
+                String(r.searches),
+              ])}
+              empty="Pas assez de signaux pour des requêtes liées"
+            />
+          </div>
+        </div>
+        <div>
+          <SectionTitle
+            title={
+              activeQuery
+                ? `Répartition pays · « ${activeQuery} »`
+                : "Répartition par pays"
+            }
+          />
+          <div className="mt-4">
+            <DataTable
+              columns={["Pays", "Impressions", "Clics", "Part"]}
+              rows={(data.countries || []).map((c) => [
+                <span key="c" className="font-medium text-[var(--ink)]">
+                  {c.country}
+                </span>,
+                String(c.impressions),
+                String(c.clicks),
+                `${c.share}%`,
+              ])}
+              empty="Aucun signal pays — les impressions Radar avec country alimentent ce tableau"
+            />
+          </div>
+        </div>
+      </section>
 
       <section className="mt-10 grid gap-10 lg:grid-cols-2">
         <div>

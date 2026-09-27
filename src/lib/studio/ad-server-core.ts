@@ -6,6 +6,7 @@
 import { getDb } from "@/lib/storage/database";
 import { hmacSha256, signingSecret } from "@/lib/security/sign";
 import { adTrackingSignature } from "@/lib/ads/tracking-sign";
+import { recordYieldClick, recordYieldImpression } from "@/lib/studio/yield";
 import type {
   AdRequest,
   AdResponse,
@@ -951,6 +952,72 @@ export class AdServer {
   }
 
   /**
+   * Resolve search query + matched campaign keywords from the ad request context.
+   */
+  private resolveSearchMatch(
+    campaignId: string,
+    contextRaw: string | null | undefined,
+  ): { matchedQuery: string; matchedKeywords: string[] } {
+    let keywords: string[] = [];
+    let query = "";
+    try {
+      const ctx = contextRaw ? (JSON.parse(contextRaw) as {
+        keywords?: string[];
+        query?: string;
+      }) : {};
+      keywords = Array.isArray(ctx.keywords)
+        ? ctx.keywords.map((k) => String(k).trim().toLowerCase()).filter(Boolean).slice(0, 20)
+        : [];
+      query = typeof ctx.query === "string" ? ctx.query.trim().toLowerCase() : "";
+    } catch {
+      /* ignore */
+    }
+    if (!query && keywords.length) query = keywords[0];
+
+    const campaignKws = getDb()
+      .prepare(
+        `SELECT keyword FROM campaign_keywords
+         WHERE campaign_id = ? AND status = 'enabled'`,
+      )
+      .all(campaignId) as Array<{ keyword: string }>;
+
+    const matched: string[] = [];
+    const haystack = [query, ...keywords].filter(Boolean);
+    for (const row of campaignKws) {
+      const kw = String(row.keyword || "").toLowerCase();
+      if (!kw) continue;
+      if (haystack.some((h) => h === kw || h.includes(kw) || kw.includes(h))) {
+        matched.push(kw);
+      }
+    }
+    // Persist context keywords even without campaign_keywords rows
+    if (!matched.length && keywords.length) matched.push(...keywords.slice(0, 5));
+
+    return { matchedQuery: query.slice(0, 200), matchedKeywords: matched.slice(0, 10) };
+  }
+
+  private bumpKeywordStats(campaignId: string, matchedKeywords: string[], kind: "impression" | "click", cost = 0) {
+    if (!matchedKeywords.length) return;
+    const db = getDb();
+    const now = new Date().toISOString();
+    for (const kw of matchedKeywords) {
+      if (kind === "impression") {
+        db.prepare(
+          `UPDATE campaign_keywords
+           SET impressions = impressions + 1, updated_at = ?
+           WHERE campaign_id = ? AND keyword = ? AND status = 'enabled'`,
+        ).run(now, campaignId, kw);
+      } else {
+        db.prepare(
+          `UPDATE campaign_keywords
+           SET clicks = clicks + 1, cost = cost + ?, updated_at = ?
+           WHERE campaign_id = ? AND keyword = ? AND status = 'enabled'`,
+        ).run(cost, now, campaignId, kw);
+      }
+    }
+  }
+
+  /**
    * Record a verified beacon (impression / viewthrough / click).
    * The HTTP layer MUST verify the HMAC signature before calling.
    * Returns the click landing URL when applicable.
@@ -974,6 +1041,7 @@ export class AdServer {
           user_agent: string;
           page_url: string;
           response: string;
+          context: string | null;
         }
       | undefined;
     if (!adReq) return {};
@@ -996,6 +1064,8 @@ export class AdServer {
       .get(adReq.placement_id) as { site_id: string } | undefined;
     const publisherSiteId = placement?.site_id || "";
     const now = new Date().toISOString();
+    const { matchedQuery, matchedKeywords } = this.resolveSearchMatch(campaignId, adReq.context);
+    const matchedKeywordsJson = JSON.stringify(matchedKeywords);
 
     if (type === "impression" || type === "viewthrough") {
       // One billable impression per request+creative — idempotent.
@@ -1007,8 +1077,9 @@ export class AdServer {
         `INSERT INTO impressions (
           id, request_id, campaign_id, creative_id, publisher_site_id,
           placement_id, timestamp, user_id, session_id, ip_hash,
-          user_agent, page_url, revenue, publisher_revenue
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          user_agent, page_url, revenue, publisher_revenue,
+          matched_query, matched_keywords
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(
         this.generateId(),
         requestId,
@@ -1024,14 +1095,24 @@ export class AdServer {
         adReq.page_url,
         winningPrice,
         winningPrice * 0.7,
+        matchedQuery,
+        matchedKeywordsJson,
       );
+      if (matchedQuery || matchedKeywords.length) {
+        this.bumpKeywordStats(campaignId, matchedKeywords, "impression");
+      }
+      if (publisherSiteId && adReq.placement_id) {
+        recordYieldImpression(publisherSiteId, adReq.placement_id);
+      }
       return {};
     }
 
     // click — attach to the recorded impression when present
     const impression = db
-      .prepare("SELECT id FROM impressions WHERE request_id = ? AND creative_id = ?")
-      .get(requestId, creativeId) as { id: string } | undefined;
+      .prepare("SELECT id, matched_query, matched_keywords FROM impressions WHERE request_id = ? AND creative_id = ?")
+      .get(requestId, creativeId) as
+      | { id: string; matched_query?: string; matched_keywords?: string }
+      | undefined;
 
     // Basic click dedupe: same request+creative within 5 minutes.
     const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
@@ -1043,14 +1124,31 @@ export class AdServer {
       .get(requestId, creativeId, fiveMinAgo) as { id: string } | undefined;
     if (dupe) return { landingUrl };
 
+    const clickId = this.generateId();
+    // Attribution Trace→Yield : le landing porte ayb_click pour lier la conversion.
+    let attributedLanding = landingUrl;
+    try {
+      if (landingUrl) {
+        const u = new URL(landingUrl);
+        u.searchParams.set("ayb_click", clickId);
+        attributedLanding = u.toString();
+      }
+    } catch {
+      attributedLanding = landingUrl;
+    }
+
+    const clickQuery = (impression?.matched_query || matchedQuery || "").slice(0, 200);
+    const clickKeywordsJson = impression?.matched_keywords || matchedKeywordsJson;
+
     db.prepare(
       `INSERT INTO clicks (
         id, impression_id, request_id, campaign_id, creative_id,
         publisher_site_id, placement_id, timestamp, user_id, session_id,
-        ip_hash, user_agent, page_url, landing_url, cost, publisher_revenue
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ip_hash, user_agent, page_url, landing_url, cost, publisher_revenue,
+        matched_query, matched_keywords
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
-      this.generateId(),
+      clickId,
       impression?.id || `orphan-${requestId}`,
       requestId,
       campaignId,
@@ -1063,11 +1161,28 @@ export class AdServer {
       this.hashIp(req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || ""),
       req.headers.get("user-agent") || adReq.user_agent,
       adReq.page_url,
-      landingUrl,
+      attributedLanding,
       winningPrice,
       winningPrice * 0.7,
+      clickQuery,
+      clickKeywordsJson,
     );
-    return { landingUrl };
+
+    if (clickQuery || matchedKeywords.length) {
+      let kws = matchedKeywords;
+      try {
+        const parsed = JSON.parse(clickKeywordsJson);
+        if (Array.isArray(parsed)) kws = parsed.map(String);
+      } catch { /* keep */ }
+      this.bumpKeywordStats(campaignId, kws, "click", winningPrice);
+    }
+
+    // Stats Yield éditeur — revenu = part éditeur réelle (70 % de l'enchère).
+    if (publisherSiteId && adReq.placement_id) {
+      recordYieldClick(publisherSiteId, adReq.placement_id, winningPrice * 0.7);
+    }
+
+    return { landingUrl: attributedLanding };
   }
 
   /**

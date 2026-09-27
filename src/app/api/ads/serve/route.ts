@@ -25,6 +25,8 @@ export async function POST(req: Request) {
     pageUrl?: string;
     keywords?: string[];
     categories?: string[];
+    /** Search query that triggered the ad request (search terms report). */
+    query?: string;
     sessionId?: string;
     userId?: string;
     geo?: { country?: string; region?: string; city?: string };
@@ -102,6 +104,7 @@ export async function POST(req: Request) {
     context: {
       keywords: body.keywords?.slice(0, 20),
       categories: body.categories?.slice(0, 10),
+      query: typeof body.query === "string" ? body.query.trim().slice(0, 200) : undefined,
     },
     targeting: {
       geo: body.geo?.country

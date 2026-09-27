@@ -351,3 +351,108 @@ export function yieldReport(advertiserId: string, days = 30) {
     ctr: n(r.impressions) > 0 ? Math.round((n(r.clicks) / n(r.impressions)) * 1000) / 10 : 0,
   }));
 }
+
+/**
+ * Search terms report — real impressions/clicks/cost/conversions keyed by matched_query.
+ */
+export function searchTermsReport(advertiserId: string, days = 30, limit = 100) {
+  const db = getDb();
+  const since = sinceDays(days);
+  const rows = db
+    .prepare(
+      `SELECT
+         LOWER(TRIM(i.matched_query)) as query,
+         COUNT(*) as impressions
+       FROM impressions i
+       JOIN campaigns c ON c.id = i.campaign_id
+       WHERE c.advertiser_id = ?
+         AND i.timestamp >= ?
+         AND TRIM(COALESCE(i.matched_query, '')) != ''
+       GROUP BY LOWER(TRIM(i.matched_query))
+       ORDER BY impressions DESC
+       LIMIT ?`,
+    )
+    .all(advertiserId, since, limit) as any[];
+
+  return rows.map((r) => {
+    const q = String(r.query || "");
+    const clickRow = db
+      .prepare(
+        `SELECT COUNT(*) as clicks, COALESCE(SUM(k.cost), 0) as cost
+         FROM clicks k
+         JOIN campaigns c ON c.id = k.campaign_id
+         WHERE c.advertiser_id = ?
+           AND k.timestamp >= ?
+           AND LOWER(TRIM(COALESCE(k.matched_query, ''))) = ?`,
+      )
+      .get(advertiserId, since, q) as any;
+    const convRow = db
+      .prepare(
+        `SELECT COUNT(*) as conversions
+         FROM conversions cv
+         JOIN clicks k ON k.id = cv.click_id
+         JOIN campaigns c ON c.id = k.campaign_id
+         WHERE c.advertiser_id = ?
+           AND cv.timestamp >= ?
+           AND LOWER(TRIM(COALESCE(k.matched_query, ''))) = ?`,
+      )
+      .get(advertiserId, since, q) as any;
+    const imps = n(r.impressions);
+    const clks = n(clickRow?.clicks);
+    return {
+      query: q,
+      impressions: imps,
+      clicks: clks,
+      cost: Math.round(n(clickRow?.cost) * 100) / 100,
+      conversions: n(convRow?.conversions),
+      ctr: imps > 0 ? Math.round((clks / imps) * 1000) / 10 : 0,
+    };
+  });
+}
+
+/**
+ * Campaign ROAS from conversions.value linked to clicks.cost (real tables).
+ */
+export function campaignRoasReport(advertiserId: string, days = 30) {
+  const db = getDb();
+  const since = sinceDays(days);
+  const rows = db
+    .prepare(
+      `SELECT
+         c.id as campaign_id,
+         c.name as campaign_name,
+         c.status,
+         (SELECT COUNT(*) FROM impressions i WHERE i.campaign_id = c.id AND i.timestamp >= ?) as impressions,
+         (SELECT COUNT(*) FROM clicks k WHERE k.campaign_id = c.id AND k.timestamp >= ?) as clicks,
+         (SELECT COALESCE(SUM(k.cost), 0) FROM clicks k WHERE k.campaign_id = c.id AND k.timestamp >= ?) as cost,
+         (SELECT COUNT(*) FROM conversions cv
+          JOIN clicks k ON k.id = cv.click_id
+          WHERE k.campaign_id = c.id AND cv.timestamp >= ? AND cv.is_valid = 1) as conversions,
+         (SELECT COALESCE(SUM(cv.value), 0) FROM conversions cv
+          JOIN clicks k ON k.id = cv.click_id
+          WHERE k.campaign_id = c.id AND cv.timestamp >= ? AND cv.is_valid = 1) as conversion_value
+       FROM campaigns c
+       WHERE c.advertiser_id = ?
+       ORDER BY cost DESC`,
+    )
+    .all(since, since, since, since, since, advertiserId) as any[];
+
+  return rows.map((r) => {
+    const cost = n(r.cost);
+    const revenue = n(r.conversion_value);
+    const imps = n(r.impressions);
+    const clks = n(r.clicks);
+    return {
+      campaignId: r.campaign_id,
+      campaignName: r.campaign_name,
+      status: r.status,
+      impressions: imps,
+      clicks: clks,
+      cost: Math.round(cost * 100) / 100,
+      conversions: n(r.conversions),
+      conversionValue: Math.round(revenue * 100) / 100,
+      roas: cost > 0 ? Math.round((revenue / cost) * 100) / 100 : null,
+      ctr: imps > 0 ? Math.round((clks / imps) * 1000) / 10 : 0,
+    };
+  });
+}

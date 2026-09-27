@@ -20,15 +20,20 @@ import { getDbMode } from "./storage/database";
 import { searchAyebiAsync, searchIndexAsync } from "./storage/turso-async";
 import {
   ayebiPanelMinScore,
+  FIRST_PARTY_HOST,
   isCongoHint,
   isRawHitRelevant,
+  isRetrievedHitAdmissible,
+  meaningfulTokens,
   normalizeQueryText,
-  isResultRelevant,
   isStrongAyebiMatch,
   isStrongBrandQuery,
   navigationalSiteForQuery,
   rdcRankingBoost,
+  relevanceAgainstSubjects,
   relevanceScore,
+  retrievalSubjects,
+  tokenMatchesInHay,
   topBrandScore,
 } from "./search-relevance";
 import {
@@ -171,10 +176,6 @@ function isRelevantToQuery(hit: RawHit, query: string): boolean {
   return isRawHitRelevant(hit, query);
 }
 
-function isRelevantResult(r: SearchResult, query: string): boolean {
-  return isResultRelevant(r, query);
-}
-
 function credibilityFor(domain: string): number {
   const high = [
     "wikipedia.org",
@@ -247,7 +248,16 @@ function toResult(hit: RawHit, i: number, query: string): SearchResult {
     suspectedAiSpam: spammy,
     congoRelevant: congo,
     region: congo ? "rdc" : domain.endsWith(".cd") ? "rdc" : "global",
-    keywords: query.toLowerCase().split(/\s+/),
+    keywords: [
+      ...query.toLowerCase().split(/\s+/).filter(Boolean),
+      ...(hit.source === "wikipedia" ||
+      hit.source === "duckduckgo" ||
+      hit.source === "bing" ||
+      hit.source === "mojeek" ||
+      hit.source === "ddg-html"
+        ? ["retrieved:upstream"]
+        : []),
+    ],
     trust: {
       credibility: spammy ? 28 : credibilityFor(publisherHost || (domain.includes(".") ? domain : rawDomain)),
       clickbaitRisk: spammy ? 90 : 12,
@@ -258,21 +268,23 @@ function toResult(hit: RawHit, i: number, query: string): SearchResult {
   };
 }
 
+/** Recherche Wikipédia full-text (ranking réel) — pas opensearch préfixe. */
 async function fetchWikipedia(query: string, lang: "fr" | "en"): Promise<RawHit[]> {
   try {
-    const open = await fetch(
-      `https://${lang}.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(query)}&limit=8&namespace=0&format=json&origin=*`,
+    const res = await fetch(
+      `https://${lang}.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&srlimit=8&srprop=snippet&format=json&origin=*`,
       { signal: AbortSignal.timeout(UPSTREAM_MS), next: { revalidate: 0 } },
     );
-    if (!open.ok) return [];
-    const data = (await open.json()) as [string, string[], string[], string[]];
-    const titles = data[1] ?? [];
-    const descs = data[2] ?? [];
-    const urls = data[3] ?? [];
-    return titles.map((title, i) => ({
-      title: `${title} — Wikipédia`,
-      url: urls[i],
-      snippet: descs[i] || `Article Wikipédia (${lang}) sur ${title}.`,
+    if (!res.ok) return [];
+    const data = (await res.json()) as {
+      query?: { search?: Array<{ title: string; snippet?: string; pageid?: number }> };
+    };
+    const pages = data.query?.search ?? [];
+    if (!pages.length) return [];
+    return pages.map((p) => ({
+      title: `${p.title} — Wikipédia`,
+      url: `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(p.title.replace(/ /g, "_"))}`,
+      snippet: cleanSnippet(p.snippet || `Article Wikipédia (${lang}) sur ${p.title}.`),
       source: "wikipedia",
     }));
   } catch {
@@ -280,39 +292,114 @@ async function fetchWikipedia(query: string, lang: "fr" | "en"): Promise<RawHit[
   }
 }
 
-async function fetchWikiSummary(query: string): Promise<KnowledgePanel | undefined> {
+/** Fusion multi-requêtes : entité comprise + variantes — toute longueur. */
+async function fetchWikipediaMulti(
+  queries: string[],
+  lang: "fr" | "en",
+): Promise<RawHit[]> {
+  const uniq = [...new Set(queries.map((q) => q.trim()).filter((q) => q.length >= 1))].slice(0, 3);
+  if (!uniq.length) return [];
+  if (uniq.length === 1) return fetchWikipedia(uniq[0], lang);
+  const lists = await Promise.all(uniq.map((q) => fetchWikipedia(q, lang)));
+  const seen = new Set<string>();
+  const out: RawHit[] = [];
+  for (const list of lists) {
+    for (const hit of list) {
+      const key = hit.url.split("#")[0];
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      out.push(hit);
+      if (out.length >= 10) return out;
+    }
+  }
+  return out;
+}
+
+type WikiRestSummary = {
+  type?: string;
+  title?: string;
+  extract?: string;
+  description?: string;
+  content_urls?: { desktop?: { page?: string } };
+  thumbnail?: { source?: string };
+};
+
+function isDisambiguationSummary(data: WikiRestSummary): boolean {
+  if (data.type === "disambiguation") return true;
+  const desc = `${data.description ?? ""} ${data.extract ?? ""}`;
+  return /homonymie|disambiguation|topics referred to by the same|peut désigner|may refer to/i.test(desc);
+}
+
+async function wikiRestSummary(lang: "fr" | "en", title: string): Promise<WikiRestSummary | null> {
+  try {
+    const res = await fetch(
+      `https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title.replace(/ /g, "_"))}`,
+      { signal: AbortSignal.timeout(UPSTREAM_FAST_MS), next: { revalidate: 0 } },
+    );
+    if (!res.ok) return null;
+    return (await res.json()) as WikiRestSummary;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Knowledge panel Wikipédia : résolution générique.
+ * Homonymie → on score tous les candidats du search full-text et on
+ * prend le meilleur (pas le 1er de la liste) — même logique pour toute
+ * requête, courte ou longue.
+ */
+async function fetchWikiSummary(queries: string | string[]): Promise<KnowledgePanel | undefined> {
+  const list = (Array.isArray(queries) ? queries : [queries])
+    .map((q) => q.trim())
+    .filter((q) => q.length >= 1);
+  const tried = new Set<string>();
   for (const lang of ["fr", "en"] as const) {
-    try {
-      const res = await fetch(
-        `https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(query)}`,
-        { signal: AbortSignal.timeout(UPSTREAM_FAST_MS), next: { revalidate: 0 } },
-      );
-      if (!res.ok) continue;
-      const data = (await res.json()) as {
-        title?: string;
-        extract?: string;
-        description?: string;
-        content_urls?: { desktop?: { page?: string } };
-        thumbnail?: { source?: string };
-      };
-      if (!data.extract) continue;
-      return {
-        title: data.title ?? query,
-        subtitle: data.description ?? `Wikipédia (${lang})`,
-        summary: data.extract,
-        facts: [
-          { label: "Source", value: `Wikipédia ${lang.toUpperCase()}` },
-          { label: "Type", value: "Encyclopédie" },
-          {
-            label: "Lien",
-            value: data.content_urls?.desktop?.page ?? `https://${lang}.wikipedia.org`,
-          },
-        ],
-        sources: [`${lang}.wikipedia.org`],
-        image: data.thumbnail?.source,
-      };
-    } catch {
-      /* try next */
+    for (const query of list) {
+      const key = `${lang}:${normalizeQueryText(query)}`;
+      if (tried.has(key)) continue;
+      tried.add(key);
+      try {
+        let data = await wikiRestSummary(lang, query);
+        if (!data?.extract || isDisambiguationSummary(data)) {
+          const ranked = await fetchWikipedia(query, lang);
+          let best: { data: WikiRestSummary; score: number } | null = null;
+          for (const hit of ranked.slice(0, 8)) {
+            const title = hit.title.replace(/\s—\sWikipédia$/i, "").trim();
+            if (!title) continue;
+            const cand = await wikiRestSummary(lang, title);
+            if (!cand?.extract || isDisambiguationSummary(cand)) continue;
+            let score = relevanceAgainstSubjects(
+              `${cand.title} ${cand.description ?? ""} ${cand.extract}`,
+              query,
+              list,
+            );
+            // Bonus : l'extrait ouvre sur le terme recherché (« Ye is an… »).
+            const head = normalizeQueryText(cand.extract).slice(0, 48);
+            if (tokenMatchesInHay(normalizeQueryText(query), head)) score += 40;
+            if (!best || score > best.score) best = { data: cand, score };
+          }
+          data = best && best.score >= 8 ? best.data : null;
+        }
+        if (!data?.extract || isDisambiguationSummary(data)) continue;
+        return {
+          title: data.title ?? query,
+          subtitle: data.description ?? `Wikipédia (${lang})`,
+          summary: data.extract,
+          facts: [
+            { label: "Source", value: `Wikipédia ${lang.toUpperCase()}` },
+            { label: "Type", value: "Encyclopédie" },
+            {
+              label: "Lien",
+              value: data.content_urls?.desktop?.page ?? `https://${lang}.wikipedia.org`,
+            },
+          ],
+          sources: [`${lang}.wikipedia.org`],
+          image: data.thumbnail?.source,
+        };
+      } catch {
+        /* try next */
+      }
     }
   }
   return undefined;
@@ -567,6 +654,7 @@ function rankAndFilter(
   results: SearchResult[],
   query: string,
   opts: FetchOpts,
+  subjects: readonly string[] = [],
 ): SearchResult[] {
   const q = query.toLowerCase();
 
@@ -578,9 +666,17 @@ function rankAndFilter(
     })
     .map((r) => {
       let score = r.trust.credibility;
-      const rel = relevanceScore(`${r.title} ${r.snippet}`, query);
+      const text = `${r.title} ${r.snippet}`;
+      const rel = relevanceAgainstSubjects(text, query, subjects);
       score += rel;
       if (r.title.toLowerCase().includes(q)) score += 24;
+      // Titre aligné sur l'entité comprise (phrase longue → sujet court).
+      for (const s of subjects) {
+        if (s.length >= 2 && r.title.toLowerCase().includes(s.toLowerCase())) {
+          score += 28;
+          break;
+        }
+      }
       score += rdcRankingBoost(r, query, opts.sliders.locality, rel);
       if (r.sourceType === "academic") score += opts.sliders.audience * 0.2;
       if (r.sourceType === "wiki" || r.sourceType === "gov") score += opts.sliders.authority * 0.15;
@@ -588,13 +684,13 @@ function rankAndFilter(
       const prior = r.rankScore ?? 0;
       if (prior > 80) score += prior;
       const brandScore = topBrandScore(query);
-      if (
-        brandScore >= 150 &&
-        /\b(jemsa\.net|to-tala\.com|sombatekaonline|omega-web\.org|devalpha1\.com|ayeba\.app)\b/i.test(
-          r.domain,
-        )
-      ) {
-        score += 180;
+      const firstParty = FIRST_PARTY_HOST.test(`${r.domain} ${r.url}`);
+      if (firstParty) {
+        // Boost first-party dès que le contenu matche la requête / l'entité —
+        // pas seulement quand la requête est le nom de marque.
+        if (brandScore >= 150) score += 180;
+        else if (rel >= 12 || brandScore >= 60) score += 120;
+        else if (r.domain === "ayebi" || r.url.startsWith("/ayebi/")) score += 40;
       } else if (
         (r.congoRelevant || r.domain.endsWith(".cd")) &&
         rel >= 28
@@ -974,7 +1070,12 @@ async function liveSearchCore(
     } else if (
       (understanding.intent === "question" ||
         understanding.intent === "definition" ||
-        understanding.intent === "location") &&
+        understanding.intent === "location" ||
+        // Phrase longue / mots-clés factuels sans « ? » : le modèle a isolé
+        // entité + attribut → même pipeline question (compréhension, pas regex).
+        (understanding.intent === "general" &&
+          Boolean(understanding.entity) &&
+          Boolean(understanding.attrKey))) &&
       understanding.entity
     ) {
       intent = {
@@ -1015,7 +1116,33 @@ async function liveSearchCore(
       suggested = understanding.corrected;
     }
   }
-  const webQ = upstreamQuery(understanding?.corrected ?? q, intent);
+  const baseUpstream = upstreamQuery(understanding?.corrected ?? q, intent);
+  // Sujet canonique de la compréhension — sert au wiki / médias / ranking
+  // pour TOUTE requête (courte ou longue phrase), pas seulement les « ? ».
+  const entityQ =
+    understanding?.entity?.trim() ||
+    (intent.kind === "question" ? intent.wikiQuery || intent.subject : "") ||
+    "";
+  const entityEn =
+    understanding?.entityEn?.trim() ||
+    (intent.kind === "question" ? intent.entityEn?.trim() || "" : "") ||
+    "";
+  const subjects = retrievalSubjects({
+    query: q,
+    entity: entityQ,
+    entityEn,
+    corrected: understanding?.corrected,
+    wikiQuery: intent.kind === "question" ? intent.wikiQuery : entityQ,
+  });
+  // Retrieval principal : si la requête est une phrase (beaucoup de tokens)
+  // et qu'une entité est comprise, on cherche l'entité — pas les mots-outils.
+  const longPhrase = meaningfulTokens(q, 2).length >= 3;
+  const webQ =
+    entityQ && longPhrase && normalizeQueryText(baseUpstream) !== normalizeQueryText(entityQ)
+      ? entityQ
+      : baseUpstream;
+  // Entité d'abord, puis variantes — order fixe le ranking wiki merge.
+  const wikiQueries = [...new Set([entityQ, entityEn, webQ, baseUpstream].filter((s) => s.length >= 1))];
   const administrativeQuestion =
     /\b(quartier|quartiers|commune|communes|district|districts|subdivision|subdivisions)\b/i.test(q);
   const qIntent = intent.kind === "question" ? intent : undefined;
@@ -1035,9 +1162,14 @@ async function liveSearchCore(
   const capitalFact = knownCapitalAnswer(intent);
 
   // Apps sœurs + index maison — sync, immédiat.
-  const sisterHits = searchSisterApps(q);
+  // Cherche aussi sur l'entité comprise (phrase longue → sujet).
+  const sisterQuery = entityQ || webQ || q;
+  const sisterHits = [
+    ...searchSisterApps(q),
+    ...(sisterQuery !== q ? searchSisterApps(sisterQuery) : []),
+  ].filter((h, i, arr) => arr.findIndex((x) => x.url === h.url) === i);
   const houseHits = searchLocalIndex(q);
-  const brandStrong = isStrongBrandQuery(q);
+  const brandStrong = isStrongBrandQuery(q) || (entityQ ? isStrongBrandQuery(entityQ) : false);
   const sisterFastPath = brandStrong && sisterHits.length > 0;
   const skipWebForMath = intent.kind === "math";
   const navSite = intent.kind === "navigational" ? intent.site : navigationalSiteForQuery(q);
@@ -1238,10 +1370,10 @@ async function liveSearchCore(
     Promise.all([
       offline || sisterFastPath || skipWebForMath
         ? Promise.resolve([] as RawHit[])
-        : settled(fetchWikipedia(webQ, "fr"), [], upstreamMs),
+        : settled(fetchWikipediaMulti(wikiQueries, "fr"), [], upstreamMs),
       offline || sisterFastPath || skipWebForMath
         ? Promise.resolve([] as RawHit[])
-        : settled(fetchWikipedia(webQ, "en"), [], upstreamMs),
+        : settled(fetchWikipediaMulti(wikiQueries, "en"), [], upstreamMs),
       offline || sisterFastPath || skipWebForMath
         ? Promise.resolve([] as RawHit[])
         : settled(fetchDuckDuckGo(webQ), [], upstreamMs),
@@ -1259,7 +1391,11 @@ async function liveSearchCore(
         : settled(fetchNewsRss(webQ), [], upstreamMs),
       offline || sisterFastPath || navSite || factualIntent
         ? Promise.resolve(undefined)
-        : settled(fetchWikiSummary(webQ), undefined, Math.min(UPSTREAM_FAST_MS, msLeft())),
+        : settled(
+            fetchWikiSummary(wikiQueries),
+            undefined,
+            Math.min(UPSTREAM_FAST_MS, msLeft()),
+          ),
       offline
         ? Promise.resolve([] as MediaResult[])
         : settled(searchImagesNative(mediaQ), [], Math.min(2400, msLeft())),
@@ -1390,8 +1526,22 @@ async function liveSearchCore(
       const base = toResult(h, i, q);
       const local = localDocs.find((d) => d.url === h.url);
       if (local) {
-        const sisterBoost =
-          sisterHits.some((s) => s.url === h.url) && brandStrong ? 320 : 0;
+        const isSister = sisterHits.some((s) => s.url === h.url);
+        const firstParty =
+          isSister || FIRST_PARTY_HOST.test(`${local.domain ?? ""} ${h.url}`);
+        // First-party : boost dès que le hit matche requête ou entité comprise.
+        const contentRel = relevanceAgainstSubjects(
+          `${local.title} ${local.snippet ?? ""}`,
+          q,
+          subjects,
+        );
+        const sisterBoost = firstParty
+          ? brandStrong
+            ? 320
+            : contentRel >= 12
+              ? 220
+              : 80
+          : 0;
         return {
           ...base,
           trust: {
@@ -1415,10 +1565,11 @@ async function liveSearchCore(
     }),
     q,
     opts,
+    subjects,
   )
     .filter(
       (r) =>
-        isRelevantResult(r, q) ||
+        isRetrievedHitAdmissible(r, q, subjects) ||
         (factualIntent && /fr\.wikipedia\.org\/wiki\/Kinshasa(?:#|$)/.test(r.url)) ||
         (!factualIntent && (r.sourceType === "news" || r.url.includes("duckduckgo.com"))),
     )
@@ -1449,6 +1600,7 @@ async function liveSearchCore(
       ],
       q,
       opts,
+      subjects,
     );
   }
 
@@ -1506,6 +1658,7 @@ async function liveSearchCore(
     news.map((h, i) => toResult(h, 1000 + i, q)).map((r) => ({ ...r, sourceType: "news" as const })),
     q,
     opts,
+    subjects,
   );
 
   // Images réelles uniquement — jamais de favicons déguisés en images.
@@ -1546,7 +1699,7 @@ async function liveSearchCore(
           if (
             kg &&
             titleMatchesQuery(kg.entity.label) &&
-            relevanceScore(`${kg.entity.label} ${kg.entity.summary}`, q) >= 45
+            relevanceAgainstSubjects(`${kg.entity.label} ${kg.entity.summary}`, q, subjects) >= 45
           ) {
             return {
               title: kg.entity.label,
@@ -1567,7 +1720,9 @@ async function liveSearchCore(
           }
           return undefined;
         })()) ??
-    (knowledge && !factualIntent && relevanceScore(`${knowledge.title} ${knowledge.summary}`, q) >= 35
+    (knowledge &&
+    !factualIntent &&
+    relevanceAgainstSubjects(`${knowledge.title} ${knowledge.summary}`, q, subjects) >= 35
       ? knowledge
       : undefined);
 
@@ -1577,7 +1732,7 @@ async function liveSearchCore(
     ayebiPanel &&
     knowledge &&
     !factualIntent &&
-    relevanceScore(`${knowledge.title} ${knowledge.summary}`, q) >= 35
+    relevanceAgainstSubjects(`${knowledge.title} ${knowledge.summary}`, q, subjects) >= 35
   ) {
     // Ayebi et Wikipedia restent deux encyclopédies distinctes — pas un seul panneau mixte.
     knowledgePanel = ayebiPanel;
@@ -1607,8 +1762,8 @@ async function liveSearchCore(
     (r) =>
       r.domain !== "ayebi" &&
       !r.url.startsWith("/ayebi/") &&
-      isRelevantResult(r, q) &&
-      relevanceScore(`${r.title} ${r.snippet}`, q) >= 28,
+      isRetrievedHitAdmissible(r, q, subjects) &&
+      relevanceAgainstSubjects(`${r.title} ${r.snippet}`, q, subjects) >= 28,
   );
 
   const questionSnippet: FeaturedSnippet | undefined =
@@ -1648,7 +1803,12 @@ async function liveSearchCore(
           url: navSite.url,
           domain: navSite.domain,
         }
-      : knowledgePanel && relevanceScore(`${knowledgePanel.title} ${knowledgePanel.summary}`, q) >= ayebiPanelMinScore(q)
+      : knowledgePanel &&
+          relevanceAgainstSubjects(
+            `${knowledgePanel.title} ${knowledgePanel.summary}`,
+            q,
+            subjects,
+          ) >= ayebiPanelMinScore(q)
         ? {
             title: knowledgePanel.title,
             text: knowledgePanel.summary.slice(0, 420),
@@ -1667,7 +1827,7 @@ async function liveSearchCore(
               url: topWeb.url,
               domain: topWeb.domain,
             }
-          : results[0] && isRelevantResult(results[0], q)
+          : results[0] && isRetrievedHitAdmissible(results[0], q, subjects)
             ? {
                 title: results[0].title,
                 text: results[0].snippet,

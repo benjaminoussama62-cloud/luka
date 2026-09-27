@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Chip, DailyChart, EmptyState, useProject } from "@/components/developers/DevShell";
+import { Chip, DailyChart, EmptyState, QuotaGauge, useProject } from "@/components/developers/DevShell";
 
 type Usage = {
   totals: { calls: number; errors: number; avgLatencyMs: number };
@@ -11,6 +11,23 @@ type Usage = {
   byEndpoint: { endpoint: string; calls: number }[];
   byKey: { name: string | null; key_prefix: string | null; calls: number }[];
   byStatus: { code: number; calls: number }[];
+  quotas?: {
+    keyId: string;
+    name: string;
+    keyPrefix: string;
+    scopes: string[];
+    quotaPerDay: number;
+    usedToday: number;
+    remaining: number;
+  }[];
+  apis?: {
+    id: string;
+    name: string;
+    endpoint: string;
+    status: string;
+    quotaDefault: number;
+    calls: number;
+  }[];
 };
 
 const RANGES = [7, 30, 90];
@@ -46,6 +63,7 @@ export function DevUsageClient() {
   const t = usage?.totals;
   const successRate =
     t && t.calls > 0 ? Math.round(((t.calls - t.errors) / t.calls) * 1000) / 10 : null;
+  const maxApiCalls = Math.max(1, ...(usage?.apis?.map((a) => a.calls) ?? [1]));
 
   return (
     <div className="dcw-stack">
@@ -54,7 +72,7 @@ export function DevUsageClient() {
           <h2 className="dcw-title">Utilisation — {current.name}</h2>
           <p className="dev-console-muted">
             Mesurée sur les appels réels <code className="dev-console-code">/api/v1/*</code> et
-            l&rsquo;explorateur.
+            l&rsquo;explorateur (<code className="dev-console-code">developer_api_logs</code>).
           </p>
         </div>
         <div className="dcw-seg">
@@ -103,6 +121,70 @@ export function DevUsageClient() {
           <EmptyState title="Aucun trafic sur la période" hint="—" />
         )}
       </section>
+
+      {/* Quotas par clé — données réelles du jour */}
+      {usage?.quotas && usage.quotas.length > 0 && (
+        <section className="ayeba-panel p-5">
+          <h3 className="mb-1">Quotas du jour — par clé</h3>
+          <p className="dev-console-muted mb-4 text-xs">
+            Consommation 24 h vs <code className="dev-console-code">quota_per_day</code> de chaque clé active.
+          </p>
+          <ul className="dcw-list">
+            {usage.quotas.map((q) => (
+              <li key={q.keyId} className="dcw-list-row">
+                <div>
+                  <p className="dcw-list-name">{q.name}</p>
+                  <code className="dev-console-code">{q.keyPrefix}…</code>
+                  <div className="dcw-chips mt-1">
+                    {q.scopes.map((s) => (
+                      <Chip key={s} tone="blue">{s}</Chip>
+                    ))}
+                  </div>
+                </div>
+                <QuotaGauge used={q.usedToday} quota={q.quotaPerDay} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {/* Utilisation par API du catalogue */}
+      {usage?.apis && usage.apis.length > 0 && (
+        <section className="ayeba-panel p-5">
+          <h3 className="mb-1">Utilisation par API</h3>
+          <p className="dev-console-muted mb-4 text-xs">
+            Appels réels sur {days} j · quota catalogue indiqué pour référence.
+          </p>
+          <div className="dcw-api-usage">
+            {usage.apis.map((a) => {
+              const pct = Math.round((a.calls / maxApiCalls) * 100);
+              return (
+                <div key={a.id} className="dcw-api-usage-row">
+                  <div className="dcw-api-usage-meta">
+                    <span className="font-medium">{a.name}</span>
+                    <code className="dev-console-code">{a.endpoint}</code>
+                    <Chip tone={a.status === "ga" ? "green" : "blue"}>
+                      {a.status === "ga" ? "GA" : "Bêta"}
+                    </Chip>
+                  </div>
+                  <div className="dcw-api-usage-bar-wrap">
+                    <div className="dcw-quota-track">
+                      <div
+                        className="dcw-quota-fill dcw-quota-green"
+                        style={{ width: `${Math.max(a.calls > 0 ? 4 : 0, pct)}%` }}
+                      />
+                    </div>
+                    <span className="dcw-quota-label">
+                      {a.calls.toLocaleString("fr")} appels · quota défaut{" "}
+                      {a.quotaDefault.toLocaleString("fr")}/j
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       <div className="dcw-grid-2">
         <section className="ayeba-panel p-5">

@@ -45,7 +45,7 @@ export type ApiLogEntry = {
 };
 
 export { API_SCOPES } from "@/lib/developers/catalog";
-import { API_SCOPES } from "@/lib/developers/catalog";
+import { API_CATALOG, API_SCOPES } from "@/lib/developers/catalog";
 
 /* ------------------------------------------------------------------ */
 /* Projects                                                            */
@@ -353,6 +353,7 @@ export function createApiKey(
   const scopes = (input.scopes?.length ? input.scopes : ["search"]).filter((s) =>
     API_SCOPES.some((a) => a.id === s),
   );
+  const finalScopes = scopes.length ? scopes : ["search"];
   db.prepare(
     `INSERT INTO developer_api_keys
      (id, project_id, owner_user_id, name, key_prefix, key_hash, api_scopes, restrictions_json, quota_per_day, status, created_at)
@@ -364,11 +365,17 @@ export function createApiKey(
     input.name.trim(),
     secret.slice(0, 17),
     createHash("sha256").update(secret).digest("hex"),
-    JSON.stringify(scopes.length ? scopes : ["search"]),
+    JSON.stringify(finalScopes),
     JSON.stringify(input.restrictions || {}),
     Math.max(1, Math.min(1_000_000, input.quotaPerDay || 1000)),
     new Date().toISOString(),
   );
+  // Activer automatiquement les APIs correspondant aux portées de la clé
+  // (sinon validateApiKey refuse tant que la bibliothèque n'est pas ouverte).
+  for (const scope of finalScopes) {
+    const catalogId = API_CATALOG.find((a) => a.scope === scope)?.id;
+    if (catalogId) setApiEnabled(projectId, catalogId, true, ownerUserId);
+  }
   const row = db.prepare("SELECT * FROM developer_api_keys WHERE id = ?").get(id) as KeyRow;
   return { key: toKey(row), secret };
 }
@@ -489,6 +496,17 @@ export function validateApiKey(
   if (!scopes.includes(requiredScope)) {
     finish(row.id, row.project_id, 403, started);
     return { ok: false, status: 403, error: `Cette clé n'a pas la portée "${requiredScope}"` };
+  }
+
+  // API library — l'API doit être activée sur le projet (comme Cloud Console).
+  const catalogId = API_CATALOG.find((a) => a.scope === requiredScope)?.id;
+  if (catalogId && !listEnabledApis(row.project_id).includes(catalogId)) {
+    finish(row.id, row.project_id, 403, started);
+    return {
+      ok: false,
+      status: 403,
+      error: `Activez d'abord cette API dans la bibliothèque du projet (${catalogId})`,
+    };
   }
 
   if (restrictions.referrers?.length) {
@@ -633,6 +651,55 @@ export function getUsageForProject(projectId: string, days: number) {
     byEndpoint,
     byKey,
     byStatus,
+    /** Quotas type Cloud Console : usage 24 h vs quota_per_day des clés actives. */
+    quotas: (() => {
+      const keys = db
+        .prepare(
+          `SELECT id, name, key_prefix, api_scopes, quota_per_day FROM developer_api_keys
+           WHERE project_id = ? AND status = 'active'`,
+        )
+        .all(projectId) as {
+        id: string;
+        name: string;
+        key_prefix: string;
+        api_scopes: string;
+        quota_per_day: number;
+      }[];
+      const since24 = new Date(Date.now() - 86400_000).toISOString();
+      return keys.map((k) => {
+        const used = db
+          .prepare(
+            `SELECT COUNT(*) as c FROM developer_api_logs
+             WHERE key_id = ? AND created_at >= ?`,
+          )
+          .get(k.id, since24) as { c: number };
+        let scopes: string[] = [];
+        try {
+          scopes = JSON.parse(k.api_scopes) as string[];
+        } catch {
+          /* */
+        }
+        return {
+          keyId: k.id,
+          name: k.name,
+          keyPrefix: k.key_prefix,
+          scopes,
+          quotaPerDay: k.quota_per_day,
+          usedToday: used?.c ?? 0,
+          remaining: Math.max(0, k.quota_per_day - (used?.c ?? 0)),
+        };
+      });
+    })(),
+    apis: API_CATALOG.map((a) => ({
+      id: a.id,
+      name: a.name,
+      endpoint: a.endpoint,
+      status: a.status,
+      quotaDefault: a.quotaDefault,
+      calls: byEndpoint
+        .filter((e) => e.endpoint === a.id || e.endpoint.endsWith(a.id) || e.endpoint.includes(a.id))
+        .reduce((s, e) => s + e.calls, 0),
+    })),
   };
 }
 
