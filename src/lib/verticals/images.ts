@@ -66,9 +66,10 @@ function mediaTokens(query: string): string[] {
 }
 
 /**
- * Le titre doit partager un token significatif avec la requête — sinon les
- * agrégateurs renvoient leurs scans de domaine public (« Flore d'Auvergne »
- * pour « messi »). Aucun token pertinent dans la requête → pas de filtre.
+ * Le titre doit partager les tokens significatifs avec la requête.
+ * 1 token → OR (au moins ce token).
+ * 2+ tokens → AND majoritaire (≥ ceil(n*0.6)), sinon « somba » matche
+ * « valle dei tata somba » et « teka » matche « teka-teka-song ».
  */
 export function mediaRelevant(title: string, tokens: string[]): boolean {
   if (!tokens.length) return true;
@@ -76,7 +77,71 @@ export function mediaRelevant(title: string, tokens: string[]): boolean {
     .toLowerCase()
     .normalize("NFD")
     .replace(/\p{M}/gu, "");
-  return tokens.some((tok) => t.includes(tok));
+  const compact = tokens.join("");
+  if (compact.length >= 6 && t.replace(/\s+/g, "").includes(compact)) return true;
+  const hits = tokens.filter((tok) => t.includes(tok)).length;
+  if (tokens.length === 1) return hits >= 1;
+  const need = Math.max(2, Math.ceil(tokens.length * 0.6));
+  return hits >= need;
+}
+
+/** Bing Images — miniatures CDN stables (contrairement à Flickr hotlink). */
+export async function fetchBingImages(query: string): Promise<MediaResult[]> {
+  try {
+    const res = await fetch(
+      `https://www.bing.com/images/search?q=${encodeURIComponent(query)}&form=HDRSC2&first=1`,
+      {
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+          "Accept-Language": "fr-FR,fr;q=0.9,en;q=0.7",
+        },
+        signal: AbortSignal.timeout(3200),
+        next: { revalidate: 0 },
+      },
+    );
+    if (!res.ok) return [];
+    const html = await res.text();
+    const tokens = mediaTokens(query);
+    const out: MediaResult[] = [];
+    const seen = new Set<string>();
+    // Métadonnées m="..." encodées HTML sur chaque tuile.
+    for (const m of html.matchAll(/\bm="(\{[^"]+\})"/g)) {
+      if (out.length >= 24) break;
+      try {
+        const raw = m[1]
+          .replace(/&quot;/g, '"')
+          .replace(/&amp;/g, "&")
+          .replace(/&#39;/g, "'");
+        const meta = JSON.parse(raw) as {
+          murl?: string;
+          turl?: string;
+          t?: string;
+          purl?: string;
+        };
+        const thumb = meta.turl || "";
+        const page = meta.purl || meta.murl || "";
+        if (!thumb.startsWith("http") || !page.startsWith("http")) continue;
+        if (seen.has(thumb)) continue;
+        const title = (meta.t || query).replace(/<[^>]+>/g, "").trim();
+        if (!mediaRelevant(title, tokens)) continue;
+        seen.add(thumb);
+        out.push({
+          id: `bing-img-${out.length}`,
+          title: title.slice(0, 120) || query,
+          url: page,
+          thumb,
+          source: "Bing Images",
+          type: "image",
+        });
+      } catch {
+        /* tuile illisible */
+      }
+    }
+    return out;
+  } catch {
+    return [];
+  }
 }
 
 export async function fetchOpenverse(query: string): Promise<MediaResult[]> {
@@ -195,7 +260,8 @@ export async function fetchCommonsImages(query: string): Promise<MediaResult[]> 
 }
 
 export async function searchImagesNative(query: string): Promise<MediaResult[]> {
-  const [openverse, commons, indexed, crawl] = await Promise.all([
+  const [bing, openverse, commons, indexed, crawl] = await Promise.all([
+    fetchBingImages(query),
     fetchOpenverse(query),
     fetchCommonsImages(query),
     Promise.resolve(searchImages(query, 16)),
@@ -204,9 +270,16 @@ export async function searchImagesNative(query: string): Promise<MediaResult[]> 
 
   const seen = new Set<string>();
   const merged: MediaResult[] = [];
-  for (const item of [...openverse, ...commons, ...indexed, ...crawl]) {
-    const key = item.url.split("#")[0];
-    if (!key || seen.has(key) || !item.thumb.startsWith("http")) continue;
+  // Bing / Commons d'abord : thumbs HTTPS fiables. Flickr Openverse souvent cassé.
+  for (const item of [...bing, ...commons, ...openverse, ...indexed, ...crawl]) {
+    const key = item.thumb.split("?")[0] || item.url.split("#")[0];
+    if (!key || seen.has(key) || !/^https:\/\//i.test(item.thumb)) continue;
+    // Hotlink Flickr / staticflickr souvent bloqué dans le navigateur.
+    if (/flickr\.com|staticflickr\.com/i.test(item.thumb) && !bing.length) {
+      /* garder seulement si rien d'autre */
+    } else if (/flickr\.com|staticflickr\.com/i.test(item.thumb)) {
+      continue;
+    }
     seen.add(key);
     merged.push(item);
     if (merged.length >= 36) break;

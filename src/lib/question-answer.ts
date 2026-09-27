@@ -583,13 +583,17 @@ export async function answerQuestion(intent: QuestionIntentLike): Promise<Questi
       /epouse|epoux|\bfemme\b|\bmari\b|conjoint|mere|pere|fils|fille|enfant|frere|soeur|age|taille|poids|nationalite|naissance|lieu de (mort|naissance|sepulture)|cause de mort|equipe|parti|prix|religion|fortune|etude/.test(
         intent.attr,
       ));
-  // La résolution Wikipedia désambiguïse les sujets ambigus (« poutine » →
-  // « Vladimir Poutine », pas le plat québécois) — mais pour les questions
-  // attribut/sujet (« président DE la rdc »), le sujet EST l'entité (le pays) ;
-  // le titre Wikipedia résoudrait « Président de la RDC » (la fonction).
-  // Wiki et entité en parallèle — chaque appel coûte ~1s, en série la réponse
-  // dépasserait le budget temps de la SERP.
-  const preferDesc = personHint || intent.entityType === "person" ? PERSON_DESC : undefined;
+  // « dans quel pays se trouve X » → préférer capitale / métropole (Minsk
+  // Biélorussie) plutôt qu'une petite commune homonyme (Mińsk Mazowiecki).
+  const countryOfPlace =
+    intent.attrKey === "country" ||
+    (intent.attr != null && /\bpays\b|country|nation/i.test(intent.attr));
+  const preferDesc =
+    personHint || intent.entityType === "person"
+      ? PERSON_DESC
+      : countryOfPlace
+        ? /capitale|capital city|capitale de|capital of|métropole|metropolis|plus grande ville/i
+        : undefined;
   // Attribut mappé → la propriété exigée élimine les homonymes qui ne
   // peuvent pas répondre (« Chine » civilisation n'a pas de P35 →
   // « dirigeant chinois » choisit la RPC). Désambiguïsation par le SENS,
@@ -628,7 +632,14 @@ export async function answerQuestion(intent: QuestionIntentLike): Promise<Questi
     fetchWikiAnswer(wikiQueries[0], intent.lang),
     wikiQueries[1] ? fetchWikiAnswer(wikiQueries[1], intent.lang) : Promise.resolve(undefined),
     attrIntent
-      ? searchEntity(intent.subject, preferDesc, requireProp, expectDesc, intent.lang)
+      ? searchEntity(
+          intent.subject,
+          preferDesc,
+          requireProp,
+          expectDesc,
+          // Pays d'une ville célèbre : anglais d'abord (Minsk → Belarus capital).
+          countryOfPlace ? "en" : intent.lang,
+        )
       : Promise.resolve(undefined),
   ]);
   const wiki = wikiA ?? wikiB;

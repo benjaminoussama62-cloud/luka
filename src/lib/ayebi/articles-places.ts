@@ -2,6 +2,33 @@ import { ayebi } from "./types";
 
 export const PLACE_ARTICLES = [
   ayebi("kinshasa", "Kinshasa", "Capitale · mégalopole du Congo", "lieu", "Plus grande ville francophone d'Afrique. Capitale politique et économique de la RDC, face à Brazzaville sur le fleuve Congo.", ["Plus de quinze millions d'habitants dans l'agglomération.", "Gombe, Limete, Matete et la bande fleuve structurent la vie urbaine."], [{ label: "Province", value: "Kinshasa" }, { label: "Fleuve", value: "Congo" }], ["kinshasa", "capitale", "kinois", "ville"]),
+  ayebi(
+    "lemba",
+    "Lemba",
+    "Commune de Kinshasa · campus UNIKIN",
+    "lieu",
+    "Lemba est une commune de la ville-province de Kinshasa, en République démocratique du Congo. Elle abrite notamment le campus de l'Université de Kinshasa (UNIKIN) et des quartiers résidentiels densément peuplés.",
+    [
+      "Lemba fait partie des 24 communes de Kinshasa. Ce n'est pas une commune française : l'homonyme Lembach (Bas-Rhin) est en Alsace.",
+      "Le plateau de Lemba accueille l'Université de Kinshasa, héritière de Lovanium, ainsi que des marchés et axes de transport vers le sud de la capitale.",
+    ],
+    [
+      { label: "Type", value: "Commune de Kinshasa" },
+      { label: "Province", value: "Kinshasa · RDC" },
+      { label: "Repère", value: "UNIKIN · Lovanium" },
+    ],
+    ["lemba", "commune", "kinshasa", "unikin", "quartier", "rdc"],
+  ),
+  ayebi(
+    "gombe-commune",
+    "Gombe",
+    "Commune de Kinshasa · centre des affaires",
+    "lieu",
+    "Gombe est la commune administrative et d'affaires de Kinshasa : ministères, banques, ambassades et boulevard du 30 Juin.",
+    ["Centre politique et économique de la capitale congolaise.", "À ne pas confondre avec d'autres lieux portant le même nom hors RDC."],
+    [{ label: "Type", value: "Commune de Kinshasa" }, { label: "Province", value: "Kinshasa · RDC" }],
+    ["gombe", "commune", "kinshasa", "affaires", "rdc"],
+  ),
   ayebi("lubumbashi", "Lubumbashi", "Capitale du Haut-Katanga · mining hub", "lieu", "Deuxième ville de la RDC. Pôle minier, universitaire et logistique du sud-est, capitale historique du Katanga.", ["Lubumbashi concentre raffineries, universités et le stade TP Mazembe.", "La ville est porte d'entrée commerciale vers la Zambie et l'Afrique australe."], [{ label: "Province", value: "Haut-Katanga" }, { label: "Population", value: "~3 millions" }], ["lubumbashi", "katanga", "ville", "mines"]),
   ayebi("goma", "Goma", "Capitale du Nord-Kivu · bord du lac Kivu", "lieu", "Ville dynamique de l'Est, proche du volcan Nyiragongo. Centre humanitaire, commercial et touristique du Kivu.", ["Goma vit au rythme du lac, des ONG et du commerce transfrontalier.", "Les éruptions volcaniques et l'insécurité structurent son histoire récente."], [{ label: "Province", value: "Nord-Kivu" }, { label: "Volcan", value: "Nyiragongo" }], ["goma", "kivu", "nyiragongo", "est"]),
   ayebi("bukavu", "Bukavu", "Capitale du Sud-Kivu · collines du Kivu", "lieu", "Ville lacustre au relief escarpé. Centre administratif, universitaire et artisanal du Sud-Kivu.", ["Bukavu accueille l'Université catholique et l'hôpital Panzi.", "Son port lacustre relie le Sud-Kivu au reste de la région."], [{ label: "Province", value: "Sud-Kivu" }, { label: "Lac", value: "Kivu" }], ["bukavu", "kivu", "sud-kivu"]),

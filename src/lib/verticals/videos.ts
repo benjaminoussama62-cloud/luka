@@ -91,8 +91,26 @@ export async function fetchPipedVideos(query: string): Promise<MediaResult[]> {
         }>;
       };
       const out: MediaResult[] = [];
+      const tokens = query
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/\p{M}/gu, "")
+        .split(/[^a-z0-9]+/)
+        .filter((t) => t.length >= 3);
+      const relevant = (title: string) => {
+        const t = title
+          .toLowerCase()
+          .normalize("NFD")
+          .replace(/\p{M}/gu, "");
+        if (!tokens.length) return true;
+        const compact = tokens.join("");
+        if (compact.length >= 6 && t.replace(/\s+/g, "").includes(compact)) return true;
+        const hits = tokens.filter((tok) => t.includes(tok)).length;
+        if (tokens.length === 1) return hits >= 1;
+        return hits >= Math.max(2, Math.ceil(tokens.length * 0.6));
+      };
       for (const v of data.items ?? []) {
-        if (!v.url || !v.title) continue;
+        if (!v.url || !v.title || !relevant(v.title)) continue;
         const id = Buffer.from(v.url).toString("base64url").slice(0, 32);
         const item: MediaResult = {
           id,
@@ -149,10 +167,17 @@ export async function fetchDailymotionVideos(query: string): Promise<MediaResult
     // le titre — sinon Dailymotion renvoie ses vidéos du moment, hors-sujet.
     const strip = (s: string) =>
       s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
-    const tokens = strip(query).split(/[^a-z0-9]+/).filter((t) => t.length >= 3);
+    const tokens = strip(query)
+      .split(/[^a-z0-9]+/)
+      .filter((t) => t.length >= 3);
     const relevant = (title: string) => {
       const t = strip(title);
-      return tokens.some((tok) => t.includes(tok));
+      if (!tokens.length) return true;
+      const compact = tokens.join("");
+      if (compact.length >= 6 && t.replace(/\s+/g, "").includes(compact)) return true;
+      const hits = tokens.filter((tok) => t.includes(tok)).length;
+      if (tokens.length === 1) return hits >= 1;
+      return hits >= Math.max(2, Math.ceil(tokens.length * 0.6));
     };
     const out: MediaResult[] = [];
     for (const v of data.list ?? []) {

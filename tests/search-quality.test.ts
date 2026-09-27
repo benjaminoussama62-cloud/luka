@@ -178,7 +178,7 @@ describe("parseSearchIntent — interrogatif n'importe où dans la phrase", () =
 });
 
 describe("mediaRelevant — filtre anti hors-sujet (images)", () => {
-  const messiTokens = ["messi", "but", "carriere"];
+  const messiTokens = ["messi"];
   it("rejette les scans de domaine public sans rapport", () => {
     expect(mediaRelevant("Flore d'Auvergne — planche botanique", messiTokens)).toBe(false);
     expect(mediaRelevant("Cours de médecine pratique (1890)", messiTokens)).toBe(false);
@@ -186,6 +186,13 @@ describe("mediaRelevant — filtre anti hors-sujet (images)", () => {
   it("garde les images sur le sujet", () => {
     expect(mediaRelevant("Lionel Messi en 2018", messiTokens)).toBe(true);
     expect(mediaRelevant("Messi célèbre un but", messiTokens)).toBe(true);
+  });
+  it("exige une majorité de tokens pour les requêtes multi-mots", () => {
+    const toks = ["somba", "teka"];
+    expect(mediaRelevant("valle dei tata somba", toks)).toBe(false);
+    expect(mediaRelevant("teka-teka-song", toks)).toBe(false);
+    expect(mediaRelevant("Somba Teka marketplace RDC", toks)).toBe(true);
+    expect(mediaRelevant("sombateka online", toks)).toBe(true);
   });
 });
 
@@ -270,5 +277,19 @@ describe("compréhension → pertinence (toute longueur de requête)", () => {
     expect(isRetrievedHitAdmissible(r, "réseau social étudiants kinshasa", ["Jemsa"])).toBe(
       true,
     );
+  });
+});
+
+describe("matchKinshasaCommune", () => {
+  it("résout Lemba comme commune de Kinshasa", async () => {
+    const { matchKinshasaCommune } = await import("@/lib/kinshasa-communes");
+    const hit = matchKinshasaCommune("lemba est un commune ou q");
+    expect(hit?.title).toBe("Lemba");
+    expect(hit?.wikiQuery).toContain("Kinshasa");
+  });
+
+  it("ignore le contexte France explicite", async () => {
+    const { matchKinshasaCommune } = await import("@/lib/kinshasa-communes");
+    expect(matchKinshasaCommune("lembach bas-rhin france")).toBeNull();
   });
 });

@@ -136,7 +136,9 @@ Règles strictes:
 - « combien de provinces/régions/départements… » → attrKey="subdivisions_count", qtype="howmany".
 - « dans quel pays/continent/région se trouve X » → entity=X, attrKey="country"|"continent"|"location".
 - « c'est quoi X » / « what is X » → intent="definition", entity=X, entityType="concept" (le concept générique, jamais un sous-type).
-- Si la requête est une simple série de mots-clés, intent="general" et entity=sujet principal.`;
+- Si la requête est une simple série de mots-clés, intent="general" et entity=sujet principal.
+- Requête service/commerce local (« maison de retraite à Kinshasa », « hôpital à Goma », « pharmacie Limete ») → intent="general" (PAS question), entity="" ou le service+lieu, attrKey="". Ne jamais réduire à la seule ville.
+- « Lemba / Gombe / Limete est une commune » (RDC) → entity=nom de la commune, entityType="place", intent="question", attrKey="location". Priorité Kinshasa RDC, pas les homonymes européens.`;
 
 function parse(raw: string): Understanding | null {
   try {

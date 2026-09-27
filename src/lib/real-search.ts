@@ -44,6 +44,7 @@ import {
   parseSearchIntent,
   upstreamQuery,
 } from "./query-intent";
+import { matchKinshasaCommune } from "./kinshasa-communes";
 import type {
   AlgorithmSliders,
   CommunityPost,
@@ -703,6 +704,13 @@ function rankAndFilter(
           : -40;
       }
       score -= geoMismatchPenalty(`${r.title} ${r.snippet} ${r.domain}`, query);
+      // Commune Kinshasa demandée → pénaliser l'homonyme français (Lembach…).
+      if (
+        /\b(lemba|gombe|limete|matete|masina|ndjili|ngaliema)\b/i.test(query) &&
+        /\b(alsace|bas[- ]rhin|france|strasbourg|lorraine)\b/i.test(`${r.title} ${r.snippet} ${r.domain}`)
+      ) {
+        score -= 220;
+      }
       return { ...r, rankScore: Math.round(Math.max(0, score)) };
     })
     .sort((a, b) => (b.rankScore ?? 0) - (a.rankScore ?? 0));
@@ -1116,10 +1124,21 @@ async function liveSearchCore(
       suggested = understanding.corrected;
     }
   }
+  // Service / commerce local : ne jamais réduire à la ville seule
+  // (« maison de retraite à Kinshasa » ≠ panneau Kinshasa + 0 résultat).
+  const localServiceQuery =
+    /\b(maison\s+de\s+retraite|ehpad|h[oô]pital|clinique|pharmacie|restaurant|h[oô]tel|supermarch|[ée]cole\b|universit|banque|garage|coiffeur|salon\s+de)\b/i.test(
+      q,
+    );
+  if (localServiceQuery && intent.kind === "question") {
+    intent = { kind: "general" };
+  }
+  const kinCommune = matchKinshasaCommune(q);
   const baseUpstream = upstreamQuery(understanding?.corrected ?? q, intent);
   // Sujet canonique de la compréhension — sert au wiki / médias / ranking
   // pour TOUTE requête (courte ou longue phrase), pas seulement les « ? ».
-  const entityQ =
+  let entityQ =
+    kinCommune?.title ||
     understanding?.entity?.trim() ||
     (intent.kind === "question" ? intent.wikiQuery || intent.subject : "") ||
     "";
@@ -1127,6 +1146,28 @@ async function liveSearchCore(
     understanding?.entityEn?.trim() ||
     (intent.kind === "question" ? intent.entityEn?.trim() || "" : "") ||
     "";
+  if (kinCommune && intent.kind === "question") {
+    intent = {
+      ...intent,
+      subject: kinCommune.title,
+      wikiQuery: kinCommune.wikiQuery,
+      entityType: "place",
+      attr: intent.attr ?? "commune",
+      attrKey: intent.attrKey || "location",
+    };
+  } else if (kinCommune && intent.kind === "general") {
+    // « lemba est un commune ou q » mal classé → question locale RDC.
+    intent = {
+      kind: "question",
+      qtype: "which",
+      subject: kinCommune.title,
+      wikiQuery: kinCommune.wikiQuery,
+      attr: "commune",
+      attrKey: "location",
+      entityType: "place",
+    };
+    entityQ = kinCommune.title;
+  }
   const subjects = retrievalSubjects({
     query: q,
     entity: entityQ,
@@ -1134,22 +1175,34 @@ async function liveSearchCore(
     corrected: understanding?.corrected,
     wikiQuery: intent.kind === "question" ? intent.wikiQuery : entityQ,
   });
-  // Retrieval principal : si la requête est une phrase (beaucoup de tokens)
-  // et qu'une entité est comprise, on cherche l'entité — pas les mots-outils.
-  const longPhrase = meaningfulTokens(q, 2).length >= 3;
-  const webQ =
-    entityQ && longPhrase && normalizeQueryText(baseUpstream) !== normalizeQueryText(entityQ)
-      ? entityQ
-      : baseUpstream;
+  // WEB = requête complète toujours. Remplacer par l'entité seule
+  // (« Kinshasa ») vidait les SERP locales / commerciales.
+  const webQ = baseUpstream;
   // Entité d'abord, puis variantes — order fixe le ranking wiki merge.
-  const wikiQueries = [...new Set([entityQ, entityEn, webQ, baseUpstream].filter((s) => s.length >= 1))];
+  const wikiQueries = [
+    ...new Set(
+      [
+        kinCommune?.wikiQuery,
+        entityQ,
+        entityEn,
+        webQ,
+        baseUpstream,
+      ].filter((s): s is string => Boolean(s && s.length >= 1)),
+    ),
+  ];
   const administrativeQuestion =
     /\b(quartier|quartiers|commune|communes|district|districts|subdivision|subdivisions)\b/i.test(q);
   const qIntent = intent.kind === "question" ? intent : undefined;
-  // Médias (images, vidéos, cartes) : le SUJET résolu, pas la phrase brute.
-  // « messi a combien de buts » cherche des images de « messi », pas des
-  // scans de manuscrits qui matchent les mots-outils de la question.
-  const mediaQ = qIntent ? qIntent.subject : understanding?.entity || webQ;
+  // Médias : sujet pour questions factuelles ; requête complète sinon
+  // (« man city releguer », « maison de retraite kinshasa »).
+  const mediaQ =
+    qIntent && !localServiceQuery
+      ? qIntent.subject
+      : localServiceQuery
+        ? webQ
+        : understanding?.intent === "definition" && entityQ
+          ? entityQ
+          : webQ;
   // Factual = on peut produire une réponse locale fiable (capitale connue, géo/admin
   // Kinshasa documentées, calcul). Un mot comme « commune » seul ne qualifie PAS —
   // sinon tout résultat web serait jeté (bug « aucun résultat direct »).
@@ -1170,7 +1223,9 @@ async function liveSearchCore(
   ].filter((h, i, arr) => arr.findIndex((x) => x.url === h.url) === i);
   const houseHits = searchLocalIndex(q);
   const brandStrong = isStrongBrandQuery(q) || (entityQ ? isStrongBrandQuery(entityQ) : false);
-  const sisterFastPath = brandStrong && sisterHits.length > 0;
+  // Marque sœur = boost en tête, JAMAIS coupure du web. Couper Bing/DDG/FTS
+  // pour « somba teka » produisait une SERP à 2 liens vs des pages chez Google.
+  const sisterBrandHit = brandStrong && sisterHits.length > 0;
   const skipWebForMath = intent.kind === "math";
   const navSite = intent.kind === "navigational" ? intent.site : navigationalSiteForQuery(q);
   const navHit: RawHit[] = navSite
@@ -1183,8 +1238,18 @@ async function liveSearchCore(
         },
       ]
     : [];
-  const curatedFactHits: RawHit[] =
-    intent.kind === "geography"
+  const curatedFactHits: RawHit[] = [
+    ...(kinCommune
+      ? [
+          {
+            title: `${kinCommune.title} — commune de Kinshasa`,
+            url: kinCommune.wikiUrl,
+            snippet: kinCommune.snippet,
+            source: "verified-fact",
+          },
+        ]
+      : []),
+    ...(intent.kind === "geography"
       ? [
           {
             title: "Kinshasa — géographie et dimensions",
@@ -1204,11 +1269,12 @@ async function liveSearchCore(
               source: "verified-fact",
             },
           ]
-        : [];
+        : []),
+  ];
 
   const cacheKey = `serpfts:${q}:${opts.sliders.locality}:${opts.sliders.authority}`;
   let rankedFts: Awaited<ReturnType<typeof rankHits>> = [];
-  if (!sisterFastPath && !offline) {
+  if (!offline) {
     await timed(opts.timings, "fts", async () => {
       try {
         if (!turso) {
@@ -1254,7 +1320,7 @@ async function liveSearchCore(
 
   if (offline) {
     crawlHits = [];
-  } else if (turso && !sisterFastPath) {
+  } else if (turso) {
     try {
       const asyncAyebi = await Promise.race([
         searchAyebiAsync(q, 5),
@@ -1284,7 +1350,7 @@ async function liveSearchCore(
       /* keep sync hits */
     }
     crawlHits = [];
-  } else if (!sisterFastPath) {
+  } else {
     const [liveHits, crawl] = await Promise.all([
       searchAyebiArticlesLive(q, 5),
       Promise.resolve().then(() => {
@@ -1331,6 +1397,9 @@ async function liveSearchCore(
       .filter((t) => t.length > 2 && !/^(le|la|les|des|du|de|et|en|au|aux|sur|par|pour|avec|sans|dans|the|of|and|for)$/.test(t))
       .every((t) => hayPanel.includes(t));
   if (ayebiPanel && !titleMatchesQuery(ayebiPanel.title)) ayebiPanel = undefined;
+  // Service local : pas de panneau encyclopédie ville (« Kinshasa ») qui
+  // remplace les résultats commerces / établissements.
+  if (localServiceQuery) ayebiPanel = undefined;
 
   const ftsDocs = rankedFts.map((h) => ({
     id: h.docId,
@@ -1349,7 +1418,7 @@ async function liveSearchCore(
     sisterHits.length + houseHits.length + ftsDocs.length + ayebiHits.length + crawlHits.length;
   void localCount;
   // Toujours interroger le web — priorité RDC = boost au classement, pas couper Internet.
-  const upstreamMs = Math.min(sisterFastPath ? UPSTREAM_FAST_MS : UPSTREAM_MS, msLeft());
+  const upstreamMs = Math.min(UPSTREAM_MS, msLeft());
 
   const [
     wikiFr,
@@ -1368,28 +1437,28 @@ async function liveSearchCore(
     questionAnswer,
   ] = await timed(opts.timings, "upstream", () =>
     Promise.all([
-      offline || sisterFastPath || skipWebForMath
+      offline || skipWebForMath
         ? Promise.resolve([] as RawHit[])
         : settled(fetchWikipediaMulti(wikiQueries, "fr"), [], upstreamMs),
-      offline || sisterFastPath || skipWebForMath
+      offline || skipWebForMath
         ? Promise.resolve([] as RawHit[])
         : settled(fetchWikipediaMulti(wikiQueries, "en"), [], upstreamMs),
-      offline || sisterFastPath || skipWebForMath
+      offline || skipWebForMath
         ? Promise.resolve([] as RawHit[])
         : settled(fetchDuckDuckGo(webQ), [], upstreamMs),
-      offline || sisterFastPath || skipWebForMath || msLeft() < 900
+      offline || skipWebForMath || msLeft() < 900
         ? Promise.resolve([] as RawHit[])
         : settled(fetchDuckDuckGoHtml(webQ), [], upstreamMs),
-      offline || sisterFastPath || skipWebForMath
+      offline || skipWebForMath
         ? Promise.resolve([] as RawHit[])
         : settled(fetchBing(webQ), [], upstreamMs),
-      offline || sisterFastPath || skipWebForMath || msLeft() < 700
+      offline || skipWebForMath || msLeft() < 700
         ? Promise.resolve([] as RawHit[])
         : settled(fetchMojeek(webQ), [], upstreamMs),
-      offline || sisterFastPath
+      offline
         ? Promise.resolve([] as RawHit[])
         : settled(fetchNewsRss(webQ), [], upstreamMs),
-      offline || sisterFastPath || navSite || factualIntent
+      offline || navSite || factualIntent
         ? Promise.resolve(undefined)
         : settled(
             fetchWikiSummary(wikiQueries),
@@ -1409,15 +1478,13 @@ async function liveSearchCore(
             [],
             Math.min(UPSTREAM_FAST_MS, msLeft()),
           ),
-      offline || sisterFastPath
+      offline
         ? Promise.resolve([] as CommunityPost[])
         : settled(searchCommunity(webQ), [], Math.min(2000, msLeft())),
-      sisterFastPath
-        ? Promise.resolve([])
-        : settled(resolveInstantAnswers(q), [], offline ? 150 : upstreamMs),
+      settled(resolveInstantAnswers(q), [], offline ? 150 : upstreamMs),
       // Réponse de question — Knowledge Graph : entité Wikidata + revendication
       // structurée (« président » → valeur réelle) + extrait Wikipedia en contexte.
-      offline || sisterFastPath || !qIntent
+      offline || !qIntent
         ? Promise.resolve(undefined)
         : settled(
             answerQuestion(qIntent),
@@ -1692,7 +1759,7 @@ async function liveSearchCore(
 
   const panel =
     (!navSite && !factualIntent ? ayebiPanel : undefined) ??
-    (sisterFastPath || navSite || factualIntent || qIntent
+    (sisterBrandHit || navSite || factualIntent || qIntent
       ? undefined
       : (() => {
           const kg = panelFromQuery(q);
