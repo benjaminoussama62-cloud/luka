@@ -27,6 +27,16 @@ desktop/**/node_modules/
 .DS_Store
 *.pem
 
+# Android signing — NEVER commit keystores or release bundles
+*.keystore
+*.jks
+*.aab
+*.apk
+
+# Mobile secrets
+mobile/**/local.properties
+mobile/**/.env*
+
 # debug
 npm-debug.log*
 yarn-debug.log*
