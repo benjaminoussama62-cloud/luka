@@ -8,6 +8,7 @@ import {
 import { applyEnterpriseSchema } from "@/lib/studio/enterprise-schema";
 import { applyAdminSchema } from "@/lib/admin/admin-schema";
 import { applyMailSchema } from "@/lib/mail/mail-schema";
+import { applyMoneySchema } from "@/lib/money/money-schema";
 
 /** Minimal surface shared by better-sqlite3 and libsql sync drivers. */
 export type AyebaDatabase = {
@@ -841,6 +842,7 @@ function migrate(db: AyebaDatabase) {
     applyEnterpriseSchema,
     applyAdminSchema,
     applyMailSchema,
+    applyMoneySchema,
     seedFounderAdmin,
   ]) {
     try {

@@ -4,7 +4,7 @@
  * provider reports itself as unconfigured and callers must fail loudly.
  */
 
-export type PaymentProviderName = "stripe" | "cinetpay" | "flutterwave";
+export type PaymentProviderName = "stripe" | "cinetpay" | "flutterwave" | "flash";
 
 export type ChargeInput = {
   /** Internal transaction id (transactions.id) — used as provider reference. */

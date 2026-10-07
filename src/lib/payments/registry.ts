@@ -5,12 +5,13 @@
  */
 
 import { cinetpayProvider } from "./cinetpay";
+import { flashProvider } from "./flash";
 import { flutterwaveProvider } from "./flutterwave";
 import { stripeProvider } from "./stripe";
 import type { PaymentProvider, PaymentProviderName } from "./types";
 import { PaymentFailedError, PaymentNotConfiguredError } from "./types";
 
-const ALL: PaymentProvider[] = [stripeProvider, cinetpayProvider, flutterwaveProvider];
+const ALL: PaymentProvider[] = [stripeProvider, cinetpayProvider, flutterwaveProvider, flashProvider];
 
 export function getProvider(name: PaymentProviderName): PaymentProvider {
   const p = ALL.find((x) => x.name === name);
@@ -35,8 +36,8 @@ export function providerForMethod(method: string): PaymentProvider {
   const candidates: PaymentProvider[] =
     m === "credit_card" || m === "card" || m === "stripe"
       ? [stripeProvider, flutterwaveProvider]
-      : m === "mobile_money" || m === "cinetpay"
-        ? [cinetpayProvider, flutterwaveProvider]
+      : m === "mobile_money" || m === "cinetpay" || m === "flash"
+        ? [flashProvider, cinetpayProvider, flutterwaveProvider]
         : m === "bank_transfer" || m === "flutterwave"
           ? [flutterwaveProvider]
           : [];
@@ -79,5 +80,6 @@ export function paymentsStatus() {
     stripe: stripeProvider.isConfigured(),
     cinetpay: cinetpayProvider.isConfigured(),
     flutterwave: flutterwaveProvider.isConfigured(),
+    flash: flashProvider.isConfigured(),
   };
 }

@@ -32,6 +32,7 @@
   ],
   "exclude": [
     "node_modules",
+    "mobile",
     "src/lib/admin",
     "src/lib/services/real-ml-prediction.ts",
     "src/lib/studio/ad-server-core.ts",
