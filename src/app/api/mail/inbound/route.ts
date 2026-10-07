@@ -60,7 +60,7 @@ export async function POST(req: Request) {
       .replace(/&quot;/g, '"')
       .trim();
 
-  const result = receiveExternalMail({
+  const result = await receiveExternalMail({
     from: body.from,
     fromName: body.fromName,
     to,

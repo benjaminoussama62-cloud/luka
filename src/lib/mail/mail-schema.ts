@@ -60,6 +60,45 @@ CREATE TABLE IF NOT EXISTS mail_messages (
 CREATE INDEX IF NOT EXISTS idx_mail_msg_box ON mail_messages(account_id, folder, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_mail_msg_thread ON mail_messages(account_id, thread_id);
 CREATE INDEX IF NOT EXISTS idx_mail_msg_unread ON mail_messages(account_id, folder, is_read);
+
+CREATE TABLE IF NOT EXISTS mail_vault_challenges (
+  id TEXT PRIMARY KEY,
+  account_id TEXT NOT NULL,
+  nonce TEXT NOT NULL,
+  expires_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_mail_vault_ch ON mail_vault_challenges(account_id, expires_at);
+
+CREATE TABLE IF NOT EXISTS mail_upload_blobs (
+  id TEXT PRIMARY KEY,
+  account_id TEXT NOT NULL,
+  byte_size INTEGER NOT NULL,
+  sha256 TEXT NOT NULL,
+  file_iv TEXT NOT NULL,
+  name_iv TEXT NOT NULL,
+  name_ct TEXT NOT NULL,
+  data BLOB NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_mail_upload_acc ON mail_upload_blobs(account_id, created_at);
+
+CREATE TABLE IF NOT EXISTS mail_attachments (
+  id TEXT PRIMARY KEY,
+  message_id TEXT NOT NULL,
+  account_id TEXT NOT NULL,
+  name_iv TEXT NOT NULL,
+  name_ct TEXT NOT NULL,
+  file_iv TEXT NOT NULL,
+  byte_size INTEGER NOT NULL,
+  sha256 TEXT NOT NULL,
+  data BLOB NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_mail_att_msg ON mail_attachments(message_id);
+CREATE INDEX IF NOT EXISTS idx_mail_att_acc ON mail_attachments(account_id, id);
 `;
 
 // Colonnes ajoutées après coup — ALTER idempotent via try/catch.
@@ -72,6 +111,13 @@ const MIGRATIONS = [
   "ALTER TABLE mail_verifications ADD COLUMN recovery_email TEXT NOT NULL DEFAULT ''",
   "ALTER TABLE mail_accounts ADD COLUMN avatar TEXT NOT NULL DEFAULT ''",
   "ALTER TABLE mail_accounts ADD COLUMN signature TEXT NOT NULL DEFAULT ''",
+  "ALTER TABLE mail_accounts ADD COLUMN vault_ecdh_pub TEXT NOT NULL DEFAULT ''",
+  "ALTER TABLE mail_accounts ADD COLUMN vault_ecdsa_pub TEXT NOT NULL DEFAULT ''",
+  "ALTER TABLE mail_accounts ADD COLUMN vault_priv_wrap TEXT NOT NULL DEFAULT ''",
+  "ALTER TABLE mail_accounts ADD COLUMN vault_recovery_wrap TEXT NOT NULL DEFAULT ''",
+  "ALTER TABLE mail_accounts ADD COLUMN vault_fp TEXT NOT NULL DEFAULT ''",
+  "ALTER TABLE mail_messages ADD COLUMN enc INTEGER NOT NULL DEFAULT 0",
+  "ALTER TABLE mail_messages ADD COLUMN wraps TEXT NOT NULL DEFAULT ''",
 ];
 
 export function applyMailSchema(db: AyebaDatabase) {

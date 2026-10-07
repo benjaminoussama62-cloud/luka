@@ -13,7 +13,7 @@ export default function MailPrivacyPage() {
     <LegalDocumentShell
       title="Confidentialité — Ayeba Mail"
       subtitle="Cette notice décrit les traitements propres au service de messagerie Ayeba Mail (application Android et interface web). Elle complète la politique de confidentialité générale d’Ayeba, qui prévaut pour tout point non couvert ici."
-      updated="Dernière mise à jour · 26 septembre 2026"
+      updated="Dernière mise à jour · 1 octobre 2026"
     >
       <LegalSection title="1. Périmètre">
         <p>
@@ -45,41 +45,56 @@ export default function MailPrivacyPage() {
         </p>
       </LegalSection>
 
-      <LegalSection title="3. Messages et dossiers">
+      <LegalSection title="3. Messages, coffre et pièces jointes">
         <p>
-          Ayeba Mail stocke les messages de votre boîte — expéditeur, destinataires, objet, contenu,
-          dossier (réception, envoyés, brouillons, corbeille) et états (lu, suivi) — pour vous les
-          délivrer et vous permettre de les consulter, organiser, rechercher et supprimer.
+          Ayeba Mail stocke les messages de votre boîte — expéditeur, destinataires, dossier
+          (réception, envoyés, brouillons, archives, corbeille) et états (lu, suivi) — pour vous
+          les délivrer et vous permettre de les consulter, organiser et supprimer.
         </p>
         <p>
-          Les objets et contenus des messages sont stockés sous forme chiffrée (AES-256-GCM) dans
-          l’infrastructure d’hébergement. Les métadonnées nécessaires au fonctionnement —
-          adresses des correspondants, dossiers, dates, tailles — restent lisibles par le système,
-          car elles servent au classement et à l’affichage.
+          Une fois le coffre activé, l’objet, le texte et les pièces jointes échangés avec une
+          adresse ayeba.app sont chiffrés sur votre appareil (AES-256-GCM). La clé du message est
+          enveloppée avec la clé publique du destinataire (ECDH P-256). Ayeba conserve le chiffré
+          et ne dispose pas de la phrase secrète ni de la clé privée. Les métadonnées nécessaires
+          au routage — adresses, dossier, date, taille — restent lisibles par le système.
+        </p>
+        <p>
+          Un message reçu depuis l’extérieur (Gmail, Outlook, etc.) arrive en clair sur le
+          protocole de messagerie. Il est scellé dans votre coffre dès la réception. Les messages
+          écrits avant l’activation du coffre sont scellés au moment où vous le créez.
+        </p>
+        <p>
+          La phrase secrète et la clé de récupération ne sont pas connues d’Ayeba. Sans l’une
+          d’elles, le contenu chiffré de bout en bout ne peut pas être rétabli.
         </p>
       </LegalSection>
 
       <LegalSection title="4. Envoi vers des adresses externes">
         <p>
-          Lorsque vous écrivez à une adresse extérieure à ayeba.app, le message quitte
-          l’infrastructure d’Ayeba via les protocoles de messagerie standard (SMTP). Il est alors
+          Lorsque vous écrivez à une adresse extérieure à ayeba.app, vous confirmez que le message
+          quitte le coffre. Il est alors remis en clair via les protocoles de messagerie standard
+          (SMTP), y compris les pièces jointes, pour que le destinataire puisse le lire. Il est
           traité par les serveurs du destinataire, sur lesquels Ayeba n’a aucun contrôle.
         </p>
         <p>
-          Les messages échangés entre adresses ayeba.app restent au sein de l’infrastructure
-          d’Ayeba.
+          Votre copie dans « Envoyés » reste chiffrée dans le coffre. Les messages échangés entre
+          adresses ayeba.app ne sortent pas du chiffrement de bout en bout.
         </p>
       </LegalSection>
 
       <LegalSection title="5. Ce que nous ne faisons pas">
         <p>
-          Le contenu de vos messages n’est pas lu, analysé ni utilisé à des fins publicitaires. Il
-          n’alimente aucun profil commercial et n’est pas cédé à des tiers à des fins de marketing.
+          Le contenu de vos messages n’est pas lu pour de la publicité, n’alimente aucun profil
+          commercial et n’est pas cédé à des tiers à des fins de marketing. Le texte chiffré de
+          bout en bout n’est pas déchiffré par Ayeba.
         </p>
         <p>
-          Des traitements automatisés peuvent s’appliquer uniquement pour la sécurité et
-          l’intégrité du service : anti-abus, limitation de spam, détection de comportements
-          techniques anormaux.
+          Si vous demandez une traduction, le texte déjà déchiffré sur votre appareil est envoyé
+          au service de langue, uniquement pour cette demande.
+        </p>
+        <p>
+          Des traitements automatisés peuvent s’appliquer pour la sécurité et l’intégrité du
+          service : anti-abus, limitation d’envoi, détection de comportements techniques anormaux.
         </p>
       </LegalSection>
 

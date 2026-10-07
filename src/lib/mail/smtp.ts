@@ -52,6 +52,7 @@ export async function sendExternalMail(opts: {
   subject: string;
   text: string;
   replyTo?: string;
+  attachments?: { filename: string; content: Buffer; contentType: string }[];
 }): Promise<ExternalSendResult> {
   const t = getTransporter();
   if (!t) return { ok: false, error: "Relais SMTP non configuré" };
@@ -63,6 +64,11 @@ export async function sendExternalMail(opts: {
       subject: opts.subject,
       text: opts.text,
       replyTo: opts.replyTo || opts.from,
+      attachments: opts.attachments?.map((a) => ({
+        filename: a.filename,
+        content: a.content,
+        contentType: a.contentType,
+      })),
       headers: {
         "X-Mailer": "Ayeba Mail",
         "X-Ayeba-From": opts.from,

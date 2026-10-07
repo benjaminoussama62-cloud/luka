@@ -102,9 +102,9 @@ describe("sendMail — externe", () => {
 });
 
 describe("receiveExternalMail — réception inbound", () => {
-  it("livre aux comptes internes, ignore le reste", () => {
+  it("livre aux comptes internes, ignore le reste", async () => {
     const a = seedAccount("frank");
-    const r = receiveExternalMail({
+    const r = await receiveExternalMail({
       from: "ami@gmail.com",
       fromName: "Ami",
       to: [a.email, "inconnu@ayeba.app", "x@autre.cd"],

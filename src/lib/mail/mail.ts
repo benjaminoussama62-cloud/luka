@@ -8,6 +8,14 @@ import crypto from "crypto";
 import { getDb } from "@/lib/storage/database";
 import { applyMailSchema } from "@/lib/mail/mail-schema";
 import { decryptText, encryptText, hashCode } from "@/lib/mail/mail-crypto";
+import {
+  MAX_ATTACHMENTS,
+  MAX_CIPHER_BYTES,
+  type CipherPack,
+  type KeyWrap,
+  type PassWrap,
+  sealText,
+} from "@/lib/mail/e2ee";
 
 export const MAIL_DOMAIN = "ayeba.app";
 export const MAILER_DAEMON = `mailer@${MAIL_DOMAIN}`;
@@ -73,6 +81,14 @@ export type MailProfile = {
   recoveryEmail: string;
 };
 
+export type MailAttachmentMeta = {
+  id: string;
+  byteSize: number;
+  fileIv: string;
+  nameIv: string;
+  nameCt: string;
+};
+
 export type MailMessage = {
   id: string;
   threadId: string;
@@ -86,6 +102,13 @@ export type MailMessage = {
   starred: boolean;
   kind: "mail" | "bounce" | "system";
   at: string;
+  /** 0 = chiffré au repos par le serveur. 1 = coffre de bout en bout. */
+  enc: 0 | 1;
+  sealedSubject?: CipherPack;
+  sealedBody?: CipherPack;
+  wrap?: KeyWrap;
+  attachmentCount: number;
+  attachments: MailAttachmentMeta[];
 };
 
 type MsgRow = {
@@ -102,6 +125,9 @@ type MsgRow = {
   is_starred: number;
   kind: string;
   created_at: string;
+  enc?: number;
+  wraps?: string;
+  att_count?: number;
 };
 
 const uid = () => crypto.randomBytes(12).toString("hex");
@@ -124,20 +150,47 @@ function toAccount(r: AccountRow): MailAccount {
   };
 }
 
-function toMessage(r: MsgRow): MailMessage {
-  return {
+function parsePack<T>(raw: string | undefined): T | undefined {
+  if (!raw) return undefined;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return undefined;
+  }
+}
+
+function toMessage(r: MsgRow, full: boolean): MailMessage {
+  const enc: 0 | 1 = r.enc === 1 ? 1 : 0;
+  const base = {
     id: r.id,
     threadId: r.thread_id,
     folder: r.folder,
     from: r.from_addr,
     fromName: r.from_name,
     to: JSON.parse(r.to_addrs || "[]") as string[],
-    subject: decryptText(r.subject_enc),
-    body: decryptText(r.body_enc),
     read: !!r.is_read,
     starred: !!r.is_starred,
     kind: (r.kind as MailMessage["kind"]) || "mail",
     at: r.created_at,
+    enc,
+    attachmentCount: Number(r.att_count || 0),
+    attachments: [] as MailAttachmentMeta[],
+  };
+  if (enc === 1) {
+    return {
+      ...base,
+      subject: "",
+      body: "",
+      sealedSubject: parsePack<CipherPack>(r.subject_enc),
+      sealedBody: full ? parsePack<CipherPack>(r.body_enc) : undefined,
+      wrap: parsePack<KeyWrap>(r.wraps),
+      attachments: full ? listAttachmentMeta(r.id) : [],
+    };
+  }
+  return {
+    ...base,
+    subject: decryptText(r.subject_enc),
+    body: full ? decryptText(r.body_enc) : decryptText(r.body_enc).replace(/\s+/g, " ").slice(0, 140),
   };
 }
 
@@ -380,7 +433,7 @@ export function completeMailVerification(
     fromName: "Équipe Ayeba",
     to: [email],
     subject: "Bienvenue sur Ayeba Mail",
-    body: `Votre adresse ${email} est active.\n\nAyeba Mail est pensé pour la confidentialité : vos messages sont chiffrés au repos et jamais analysés. Votre numéro de téléphone sécurise votre compte.\n\n— L'équipe Ayeba`,
+    body: `Votre adresse ${email} est active.\n\nActivez le coffre juste après cette étape : entre deux adresses @ayeba.app, le texte et les pièces jointes sont chiffrés sur votre appareil. Ayeba n'en reçoit que la forme chiffrée.\n\nCe message de bienvenue, lui, a été écrit avant l'ouverture du coffre. Il sera scellé dans votre coffre dès que vous l'aurez créé.\n\n— L'équipe Ayeba`,
     kind: "system",
     read: false,
   });
@@ -583,7 +636,7 @@ export async function sendExternalBatch(
  * par Cloudflare Email Routing ou équivalent). Livre une vraie copie en boîte
  * du compte @ayeba.app ciblé.
  */
-export function receiveExternalMail(opts: {
+export async function receiveExternalMail(opts: {
   from: string;
   fromName?: string;
   to: string[];
@@ -591,7 +644,7 @@ export function receiveExternalMail(opts: {
   body: string;
   html?: string;
   messageId?: string;
-}): { delivered: string[]; dropped: string[] } {
+}): Promise<{ delivered: string[]; dropped: string[] }> {
   const delivered: string[] = [];
   const dropped: string[] = [];
   const from = String(opts.from || "").slice(0, 200);
@@ -607,17 +660,34 @@ export function receiveExternalMail(opts: {
       dropped.push(addr);
       continue;
     }
-    insertMessage({
-      threadId,
-      accountId: acc.id,
-      folder: "inbox",
-      from,
-      fromName: String(opts.fromName || "").slice(0, 120),
-      to: [addr],
-      subject: subj,
-      body,
-      kind: "mail",
-    });
+    const pub = vaultPublicKey(acc.id);
+    if (pub) {
+      const sealed = await sealText(pub, subj, body);
+      insertSealed({
+        threadId,
+        accountId: acc.id,
+        folder: "inbox",
+        from,
+        fromName: String(opts.fromName || "").slice(0, 120),
+        to: [addr],
+        subjectCipher: sealed.subjectCipher,
+        bodyCipher: sealed.bodyCipher,
+        wrap: sealed.wrap,
+        kind: "mail",
+      });
+    } else {
+      insertMessage({
+        threadId,
+        accountId: acc.id,
+        folder: "inbox",
+        from,
+        fromName: String(opts.fromName || "").slice(0, 120),
+        to: [addr],
+        subject: subj,
+        body,
+        kind: "mail",
+      });
+    }
     delivered.push(addr);
   }
   return { delivered, dropped };
@@ -626,6 +696,23 @@ export function receiveExternalMail(opts: {
 // ── Lecture ────────────────────────────────────────────────────────────────
 
 const VALID_FOLDERS = new Set(["inbox", "sent", "drafts", "archive", "starred", "trash"]);
+
+const LIST_SQL = `SELECT m.*, (SELECT COUNT(*) FROM mail_attachments a WHERE a.message_id = m.id) AS att_count
+FROM mail_messages m`;
+
+function legacyMatches(r: MsgRow, needle: string): boolean {
+  if (r.enc === 1) return true;
+  const subject = decryptText(r.subject_enc).toLowerCase();
+  const body = decryptText(r.body_enc).toLowerCase();
+  const to = (JSON.parse(r.to_addrs || "[]") as string[]).join(" ").toLowerCase();
+  return (
+    subject.includes(needle) ||
+    body.includes(needle) ||
+    r.from_addr.toLowerCase().includes(needle) ||
+    (r.from_name || "").toLowerCase().includes(needle) ||
+    to.includes(needle)
+  );
+}
 
 export function listMessages(
   accountId: string,
@@ -637,41 +724,34 @@ export function listMessages(
     f === "starred"
       ? (db()
           .prepare(
-            "SELECT * FROM mail_messages WHERE account_id = ? AND is_starred = 1 AND folder != 'trash' ORDER BY created_at DESC LIMIT 200",
+            `${LIST_SQL} WHERE m.account_id = ? AND m.is_starred = 1 AND m.folder != 'trash' ORDER BY m.created_at DESC LIMIT 200`,
           )
           .all(accountId) as MsgRow[])
       : (db()
           .prepare(
-            "SELECT * FROM mail_messages WHERE account_id = ? AND folder = ? ORDER BY created_at DESC LIMIT 200",
+            `${LIST_SQL} WHERE m.account_id = ? AND m.folder = ? ORDER BY m.created_at DESC LIMIT 200`,
           )
           .all(accountId, f) as MsgRow[])
-  ).map(toMessage);
-
-  if (!q.trim()) return rows;
-  const needle = q.trim().toLowerCase();
-  return rows.filter(
-    (m) =>
-      m.subject.toLowerCase().includes(needle) ||
-      m.body.toLowerCase().includes(needle) ||
-      m.from.toLowerCase().includes(needle) ||
-      m.to.some((t) => t.toLowerCase().includes(needle)),
   );
+  const needle = q.trim().toLowerCase();
+  const filtered = needle ? rows.filter((r) => legacyMatches(r, needle)) : rows;
+  return filtered.map((r) => toMessage(r, false));
 }
 
 export function getThread(accountId: string, threadId: string): MailMessage[] {
   const rows = db()
     .prepare(
-      "SELECT * FROM mail_messages WHERE account_id = ? AND thread_id = ? ORDER BY created_at ASC",
+      `${LIST_SQL} WHERE m.account_id = ? AND m.thread_id = ? ORDER BY m.created_at ASC`,
     )
     .all(accountId, threadId) as MsgRow[];
-  return rows.map(toMessage);
+  return rows.map((r) => toMessage(r, true));
 }
 
 export function getMessage(accountId: string, id: string): MailMessage | null {
   const r = db()
-    .prepare("SELECT * FROM mail_messages WHERE account_id = ? AND id = ?")
+    .prepare(`${LIST_SQL} WHERE m.account_id = ? AND m.id = ?`)
     .get(accountId, id) as MsgRow | undefined;
-  return r ? toMessage(r) : null;
+  return r ? toMessage(r, true) : null;
 }
 
 export function markRead(accountId: string, id: string, read = true) {
@@ -697,6 +777,7 @@ export function deleteMessage(accountId: string, id: string) {
   const m = getMessage(accountId, id);
   if (!m) return;
   if (m.folder === "trash") {
+    db().prepare("DELETE FROM mail_attachments WHERE account_id = ? AND message_id = ?").run(accountId, id);
     db().prepare("DELETE FROM mail_messages WHERE account_id = ? AND id = ?").run(accountId, id);
   } else {
     moveToFolder(accountId, id, "trash");
@@ -773,4 +854,559 @@ export function unreadCount(accountId: string): number {
     )
     .get(accountId) as { c: number };
   return r.c;
+}
+
+// ── Coffre + pièces jointes ────────────────────────────────────────────────
+
+function asBuffer(v: unknown): Buffer {
+  if (Buffer.isBuffer(v)) return v;
+  if (v instanceof Uint8Array) return Buffer.from(v);
+  return Buffer.alloc(0);
+}
+
+function listAttachmentMeta(messageId: string): MailAttachmentMeta[] {
+  const rows = db()
+    .prepare(
+      "SELECT id, byte_size, file_iv, name_iv, name_ct FROM mail_attachments WHERE message_id = ? ORDER BY created_at ASC",
+    )
+    .all(messageId) as {
+    id: string;
+    byte_size: number;
+    file_iv: string;
+    name_iv: string;
+    name_ct: string;
+  }[];
+  return rows.map((r) => ({
+    id: r.id,
+    byteSize: Number(r.byte_size),
+    fileIv: r.file_iv,
+    nameIv: r.name_iv,
+    nameCt: r.name_ct,
+  }));
+}
+
+export type VaultRecord = {
+  ecdhPublic: string;
+  ecdsaPublic: string;
+  privWrap: PassWrap;
+  recoveryWrap: PassWrap;
+  fingerprint: string;
+};
+
+function parsePassWrap(raw: string): PassWrap | null {
+  const w = parsePack<PassWrap>(raw);
+  if (!w || typeof w.salt !== "string" || typeof w.iv !== "string" || typeof w.ct !== "string") return null;
+  if (!Number.isInteger(w.iterations) || w.iterations < 100_000 || w.iterations > 800_000) return null;
+  return w;
+}
+
+export function vaultPublicKey(accountId: string): string | null {
+  const r = db()
+    .prepare("SELECT vault_ecdh_pub AS pub FROM mail_accounts WHERE id = ?")
+    .get(accountId) as { pub?: string } | undefined;
+  const pub = r?.pub || "";
+  return pub.length > 40 ? pub : null;
+}
+
+export function getVaultRecord(accountId: string): VaultRecord | null {
+  const r = db()
+    .prepare(
+      "SELECT vault_ecdh_pub, vault_ecdsa_pub, vault_priv_wrap, vault_recovery_wrap, vault_fp FROM mail_accounts WHERE id = ?",
+    )
+    .get(accountId) as
+    | {
+        vault_ecdh_pub: string;
+        vault_ecdsa_pub: string;
+        vault_priv_wrap: string;
+        vault_recovery_wrap: string;
+        vault_fp: string;
+      }
+    | undefined;
+  if (!r?.vault_ecdh_pub) return null;
+  const privWrap = parsePassWrap(r.vault_priv_wrap);
+  const recoveryWrap = parsePassWrap(r.vault_recovery_wrap);
+  if (!privWrap || !recoveryWrap) return null;
+  return {
+    ecdhPublic: r.vault_ecdh_pub,
+    ecdsaPublic: r.vault_ecdsa_pub,
+    privWrap,
+    recoveryWrap,
+    fingerprint: r.vault_fp,
+  };
+}
+
+export function saveVault(
+  accountId: string,
+  v: VaultRecord,
+): { ok: true } | { error: string } {
+  const row = db()
+    .prepare("SELECT vault_ecdh_pub AS pub FROM mail_accounts WHERE id = ?")
+    .get(accountId) as { pub?: string } | undefined;
+  if (!row) return { error: "Compte introuvable." };
+  if (row.pub) return { error: "Le coffre existe déjà." };
+  db()
+    .prepare(
+      `UPDATE mail_accounts
+       SET vault_ecdh_pub = ?, vault_ecdsa_pub = ?, vault_priv_wrap = ?, vault_recovery_wrap = ?, vault_fp = ?
+       WHERE id = ? AND vault_ecdh_pub = ''`,
+    )
+    .run(
+      v.ecdhPublic,
+      v.ecdsaPublic,
+      JSON.stringify(v.privWrap),
+      JSON.stringify(v.recoveryWrap),
+      v.fingerprint,
+      accountId,
+    );
+  return { ok: true };
+}
+
+export function updateVaultWraps(
+  accountId: string,
+  patch: { privWrap?: PassWrap; recoveryWrap?: PassWrap },
+): { ok: true } | { error: string } {
+  if (!getVaultRecord(accountId)) return { error: "Coffre absent." };
+  if (patch.privWrap) {
+    db()
+      .prepare("UPDATE mail_accounts SET vault_priv_wrap = ? WHERE id = ?")
+      .run(JSON.stringify(patch.privWrap), accountId);
+  }
+  if (patch.recoveryWrap) {
+    db()
+      .prepare("UPDATE mail_accounts SET vault_recovery_wrap = ? WHERE id = ?")
+      .run(JSON.stringify(patch.recoveryWrap), accountId);
+  }
+  return { ok: true };
+}
+
+export function issueVaultChallenge(accountId: string): { nonce: string } {
+  const nonce = crypto.randomBytes(32).toString("base64url");
+  db()
+    .prepare("DELETE FROM mail_vault_challenges WHERE account_id = ? OR expires_at < ?")
+    .run(accountId, now());
+  db()
+    .prepare(
+      "INSERT INTO mail_vault_challenges (id, account_id, nonce, expires_at) VALUES (?, ?, ?, ?)",
+    )
+    .run(uid(), accountId, nonce, new Date(Date.now() + 120_000).toISOString());
+  return { nonce };
+}
+
+export function consumeVaultChallenge(accountId: string, nonce: string): boolean {
+  const row = db()
+    .prepare(
+      "SELECT id, expires_at FROM mail_vault_challenges WHERE account_id = ? AND nonce = ?",
+    )
+    .get(accountId, nonce) as { id: string; expires_at: string } | undefined;
+  if (!row) return false;
+  db().prepare("DELETE FROM mail_vault_challenges WHERE id = ?").run(row.id);
+  return row.expires_at >= now();
+}
+
+export type MailKeyStatus = "ok" | "no-vault" | "missing";
+
+export function lookupMailKeys(emails: string[]): { email: string; status: MailKeyStatus; ecdhPublic?: string }[] {
+  return emails.slice(0, 20).map((raw) => {
+    const email = raw.trim().toLowerCase();
+    if (!INTERNAL_RE.test(email)) return { email, status: "missing" as const };
+    const acc = getAccountByEmail(email);
+    if (!acc || acc.status !== "active") return { email, status: "missing" as const };
+    const pub = vaultPublicKey(acc.id);
+    if (!pub) return { email, status: "no-vault" as const };
+    return { email, status: "ok" as const, ecdhPublic: pub };
+  });
+}
+
+/** Scelle les messages encore lisibles par le serveur dans le coffre du compte. */
+export async function migrateLegacyToVault(accountId: string): Promise<number> {
+  const pub = vaultPublicKey(accountId);
+  if (!pub) return 0;
+  const rows = db()
+    .prepare(
+      "SELECT id, subject_enc, body_enc FROM mail_messages WHERE account_id = ? AND enc = 0",
+    )
+    .all(accountId) as { id: string; subject_enc: string; body_enc: string }[];
+  let n = 0;
+  for (const row of rows) {
+    const sealed = await sealText(pub, decryptText(row.subject_enc), decryptText(row.body_enc));
+    db()
+      .prepare(
+        `UPDATE mail_messages
+         SET enc = 1, subject_enc = ?, body_enc = ?, wraps = ?
+         WHERE id = ? AND account_id = ? AND enc = 0`,
+      )
+      .run(
+        JSON.stringify(sealed.subjectCipher),
+        JSON.stringify(sealed.bodyCipher),
+        JSON.stringify(sealed.wrap),
+        row.id,
+        accountId,
+      );
+    n++;
+  }
+  return n;
+}
+
+type UploadRow = {
+  id: string;
+  byte_size: number;
+  sha256: string;
+  file_iv: string;
+  name_iv: string;
+  name_ct: string;
+  data: unknown;
+};
+
+export function saveUploadBlob(
+  accountId: string,
+  opts: { bytes: Buffer; fileIv: string; nameIv: string; nameCt: string },
+): { id: string } | { error: string } {
+  if (opts.bytes.length < 16 || opts.bytes.length > MAX_CIPHER_BYTES) {
+    return { error: "Pièce jointe trop lourde — 3 Mo maximum." };
+  }
+  if (![opts.fileIv, opts.nameIv, opts.nameCt].every((s) => typeof s === "string" && s.length > 8 && s.length < 8000)) {
+    return { error: "En-tête de pièce jointe invalide." };
+  }
+  db()
+    .prepare("DELETE FROM mail_upload_blobs WHERE created_at < ?")
+    .run(new Date(Date.now() - 24 * 3600_000).toISOString());
+  const id = uid();
+  const sha = crypto.createHash("sha256").update(opts.bytes).digest("hex");
+  db()
+    .prepare(
+      `INSERT INTO mail_upload_blobs
+       (id, account_id, byte_size, sha256, file_iv, name_iv, name_ct, data, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(id, accountId, opts.bytes.length, sha, opts.fileIv, opts.nameIv, opts.nameCt, opts.bytes, now());
+  return { id };
+}
+
+function loadOwnedBlobs(accountId: string, ids: string[]): UploadRow[] | { error: string } {
+  if (ids.length > MAX_ATTACHMENTS) return { error: "3 pièces jointes maximum." };
+  if (new Set(ids).size !== ids.length) return { error: "Pièce jointe en double." };
+  const out: UploadRow[] = [];
+  for (const id of ids) {
+    if (!/^[a-f0-9]{24}$/.test(id)) return { error: "Pièce jointe invalide." };
+    const row = db()
+      .prepare("SELECT * FROM mail_upload_blobs WHERE id = ? AND account_id = ?")
+      .get(id, accountId) as UploadRow | undefined;
+    if (!row) return { error: "Pièce jointe expirée — joignez le fichier à nouveau." };
+    const bytes = asBuffer(row.data);
+    const sha = crypto.createHash("sha256").update(bytes).digest("hex");
+    if (sha !== row.sha256 || bytes.length !== Number(row.byte_size) || bytes.length > MAX_CIPHER_BYTES) {
+      return { error: "Pièce jointe altérée." };
+    }
+    out.push({ ...row, data: bytes });
+  }
+  return out;
+}
+
+function attachBlobs(messageId: string, accountId: string, blobs: UploadRow[]) {
+  const stmt = db().prepare(
+    `INSERT INTO mail_attachments
+     (id, message_id, account_id, name_iv, name_ct, file_iv, byte_size, sha256, data, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  );
+  for (const b of blobs) {
+    stmt.run(
+      uid(),
+      messageId,
+      accountId,
+      b.name_iv,
+      b.name_ct,
+      b.file_iv,
+      Number(b.byte_size),
+      b.sha256,
+      asBuffer(b.data),
+      now(),
+    );
+  }
+}
+
+function dropUploads(accountId: string, ids: string[]) {
+  const stmt = db().prepare("DELETE FROM mail_upload_blobs WHERE account_id = ? AND id = ?");
+  for (const id of ids) stmt.run(accountId, id);
+}
+
+export function readAttachment(
+  accountId: string,
+  id: string,
+): { bytes: Buffer; byteSize: number } | null {
+  if (!/^[a-f0-9]{24}$/.test(id)) return null;
+  const row = db()
+    .prepare(
+      "SELECT data, sha256, byte_size FROM mail_attachments WHERE id = ? AND account_id = ?",
+    )
+    .get(accountId, id) as { data: unknown; sha256: string; byte_size: number } | undefined;
+  if (!row) return null;
+  const bytes = asBuffer(row.data);
+  const sha = crypto.createHash("sha256").update(bytes).digest("hex");
+  if (sha !== row.sha256) return null;
+  return { bytes, byteSize: Number(row.byte_size) };
+}
+
+function insertSealed(m: {
+  threadId: string;
+  accountId: string;
+  folder: string;
+  from: string;
+  fromName?: string;
+  to: string[];
+  subjectCipher: CipherPack;
+  bodyCipher: CipherPack;
+  wrap: KeyWrap;
+  read?: boolean;
+  kind?: string;
+}): string {
+  const id = uid();
+  db()
+    .prepare(
+      `INSERT INTO mail_messages
+       (id, thread_id, account_id, folder, from_addr, from_name, to_addrs, subject_enc, body_enc, is_read, is_starred, kind, created_at, enc, wraps)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 1, ?)`,
+    )
+    .run(
+      id,
+      m.threadId,
+      m.accountId,
+      m.folder,
+      m.from,
+      m.fromName || "",
+      JSON.stringify(m.to),
+      JSON.stringify(m.subjectCipher),
+      JSON.stringify(m.bodyCipher),
+      m.read ? 1 : 0,
+      m.kind || "mail",
+      now(),
+      JSON.stringify(m.wrap),
+    );
+  return id;
+}
+
+function validCipher(p: CipherPack | undefined, max = 500_000): p is CipherPack {
+  return !!p && typeof p.iv === "string" && typeof p.ct === "string" && p.iv.length < 64 && p.ct.length > 0 && p.ct.length <= max;
+}
+
+function validWrap(w: KeyWrap | undefined): w is KeyWrap {
+  return !!w && [w.ek, w.iv, w.ct].every((s) => typeof s === "string" && s.length > 8 && s.length < 8000);
+}
+
+async function insertSealedNotice(
+  accountId: string,
+  email: string,
+  subject: string,
+  body: string,
+) {
+  const pub = vaultPublicKey(accountId);
+  if (!pub) {
+    insertMessage({
+      threadId: uid(),
+      accountId,
+      folder: "inbox",
+      from: MAILER_DAEMON,
+      fromName: "Ayeba Mail — Remise",
+      to: [email],
+      subject,
+      body,
+      kind: "bounce",
+    });
+    return;
+  }
+  const sealed = await sealText(pub, subject, body);
+  insertSealed({
+    threadId: uid(),
+    accountId,
+    folder: "inbox",
+    from: MAILER_DAEMON,
+    fromName: "Ayeba Mail — Remise",
+    to: [email],
+    subjectCipher: sealed.subjectCipher,
+    bodyCipher: sealed.bodyCipher,
+    wrap: sealed.wrap,
+    kind: "bounce",
+  });
+}
+
+export type SealedAttachmentIn = {
+  name: string;
+  mime: string;
+  data: Buffer;
+};
+
+export type SealedDelivery = {
+  draft?: boolean;
+  to: string[];
+  subjectCipher: CipherPack;
+  bodyCipher: CipherPack;
+  wraps: Record<string, KeyWrap>;
+  blobIds: string[];
+  externalAck?: boolean;
+  external?: { subject: string; body: string; files: SealedAttachmentIn[] } | null;
+};
+
+export async function deliverSealedMail(
+  sender: MailAccount,
+  input: SealedDelivery,
+): Promise<SendResult & { error?: string }> {
+  const empty = { ok: false, delivered: [] as string[], bounced: [] as { address: string; reason: string }[], externals: [] as string[] };
+  if (!vaultPublicKey(sender.id)) return { ...empty, error: "Activez le coffre avant d'envoyer." };
+  if (!validCipher(input.subjectCipher, 20_000) || !validCipher(input.bodyCipher)) {
+    return { ...empty, error: "Message chiffré invalide." };
+  }
+  const selfWrap = input.wraps[sender.email];
+  if (!validWrap(selfWrap)) return { ...empty, error: "Votre copie chiffrée est absente." };
+
+  const blobs = loadOwnedBlobs(sender.id, input.blobIds || []);
+  if ("error" in blobs) return { ...empty, error: blobs.error };
+
+  const threadId = uid();
+  const senderName = sender.displayName || sender.address;
+
+  if (input.draft) {
+    const id = insertSealed({
+      threadId,
+      accountId: sender.id,
+      folder: "drafts",
+      from: sender.email,
+      fromName: senderName,
+      to: input.to.map((t) => t.trim().toLowerCase()).filter(Boolean),
+      subjectCipher: input.subjectCipher,
+      bodyCipher: input.bodyCipher,
+      wrap: selfWrap,
+      read: true,
+    });
+    attachBlobs(id, sender.id, blobs);
+    dropUploads(sender.id, blobs.map((b) => b.id));
+    return { ok: true, delivered: [], bounced: [], externals: [] };
+  }
+
+  const delivered: string[] = [];
+  const bounced: { address: string; reason: string }[] = [];
+  const externals: string[] = [];
+  const cleanTo = [...new Set(input.to.map((t) => t.trim().toLowerCase()).filter(Boolean))];
+  if (!cleanTo.length) return { ...empty, error: "Destinataire requis." };
+  if (cleanTo.length > 20) return { ...empty, error: "Trop de destinataires." };
+
+  const internals: MailAccount[] = [];
+  for (const addr of cleanTo) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addr)) {
+      bounced.push({ address: addr, reason: "Adresse invalide" });
+      continue;
+    }
+    if (INTERNAL_RE.test(addr)) {
+      const acc = getAccountByEmail(addr);
+      if (!acc || acc.status !== "active") {
+        bounced.push({ address: addr, reason: "Ce compte Ayeba Mail n'existe pas" });
+      } else if (!vaultPublicKey(acc.id)) {
+        bounced.push({ address: addr, reason: "Ce correspondant n'a pas activé le coffre de bout en bout" });
+      } else if (!validWrap(input.wraps[addr])) {
+        bounced.push({ address: addr, reason: "Enveloppe de chiffrement manquante pour ce correspondant" });
+      } else {
+        internals.push(acc);
+      }
+    } else if (!smtpConfigured()) {
+      bounced.push({
+        address: addr,
+        reason: "Remise externe indisponible — relais SMTP non configuré sur le serveur",
+      });
+    } else if (!input.externalAck || !input.external) {
+      bounced.push({
+        address: addr,
+        reason: "Envoi externe refusé — le message quitte le coffre, la confirmation manque",
+      });
+    } else {
+      externals.push(addr);
+    }
+  }
+
+  const sentId = insertSealed({
+    threadId,
+    accountId: sender.id,
+    folder: "sent",
+    from: sender.email,
+    fromName: senderName,
+    to: cleanTo,
+    subjectCipher: input.subjectCipher,
+    bodyCipher: input.bodyCipher,
+    wrap: selfWrap,
+    read: true,
+  });
+  attachBlobs(sentId, sender.id, blobs);
+
+  for (const acc of internals) {
+    const id = insertSealed({
+      threadId,
+      accountId: acc.id,
+      folder: "inbox",
+      from: sender.email,
+      fromName: senderName,
+      to: cleanTo,
+      subjectCipher: input.subjectCipher,
+      bodyCipher: input.bodyCipher,
+      wrap: input.wraps[acc.email],
+    });
+    attachBlobs(id, acc.id, blobs);
+    delivered.push(acc.email);
+  }
+
+  if (externals.length && input.external) {
+    const { sendExternalMail } = await import("@/lib/mail/smtp");
+    const files = (input.external.files || []).slice(0, MAX_ATTACHMENTS);
+    const tooHeavy = files.some((f) => f.data.length > MAX_CIPHER_BYTES)
+      || files.reduce((n, f) => n + f.data.length, 0) > MAX_CIPHER_BYTES * MAX_ATTACHMENTS;
+    const attachments = tooHeavy
+      ? []
+      : files.map((f) => ({
+          filename: f.name.replace(/[\r\n"\\/]/g, "").slice(0, 120) || "piece-jointe",
+          content: f.data,
+          contentType: /^[\w.+-]+\/[\w.+-]+$/.test(f.mime) ? f.mime : "application/octet-stream",
+        }));
+    const subject = input.external.subject.trim().slice(0, 300) || "(sans objet)";
+    const text = input.external.body.slice(0, 50_000);
+    for (const addr of externals) {
+      if (tooHeavy) {
+        bounced.push({ address: addr, reason: "Pièce jointe externe trop lourde" });
+        await insertSealedNotice(
+          sender.id,
+          sender.email,
+          "Échec de remise",
+          `La pièce jointe dépasse la taille autorisée pour une adresse externe.\n\nDestinataire : ${addr}`,
+        );
+        continue;
+      }
+      const res = await sendExternalMail({
+        from: sender.email,
+        fromName: senderName,
+        to: addr,
+        subject,
+        text,
+        replyTo: sender.email,
+        attachments,
+      });
+      if (res.ok) delivered.push(addr);
+      else {
+        bounced.push({ address: addr, reason: res.error });
+        await insertSealedNotice(
+          sender.id,
+          sender.email,
+          `Échec de remise : ${subject}`,
+          `Votre message n'a pas pu être remis au destinataire externe.\n\nDestinataire : ${addr}\nRaison : ${res.error}.`,
+        );
+      }
+    }
+  }
+
+  for (const b of bounced) {
+    if (externals.includes(b.address) && input.external) continue;
+    await insertSealedNotice(
+      sender.id,
+      sender.email,
+      "Échec de remise",
+      `Un destinataire n'a pas reçu le message.\n\nDestinataire : ${b.address}\nRaison : ${b.reason}.`,
+    );
+  }
+
+  dropUploads(sender.id, blobs.map((b) => b.id));
+  return { ok: delivered.length > 0, delivered, bounced, externals: [] };
 }

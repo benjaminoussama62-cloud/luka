@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth";
+import { decryptBytes, decryptUtf8, openContentKey, type VaultSession } from "@/lib/mail/e2ee";
+import { sendSealedMessage } from "@/components/mail/send-sealed";
+import { SecurityPane, VaultCreate, VaultUnlock, type VaultInfo } from "@/components/mail/VaultScreens";
 
 type Msg = {
   id: string;
@@ -16,7 +19,15 @@ type Msg = {
   starred: boolean;
   kind: "mail" | "bounce" | "system";
   at: string;
+  enc?: 0 | 1;
+  sealedSubject?: { iv: string; ct: string };
+  sealedBody?: { iv: string; ct: string };
+  wrap?: { ek: string; iv: string; ct: string };
+  attachmentCount?: number;
+  attachments?: { id: string; byteSize: number; fileIv: string; nameIv: string; nameCt: string }[];
 };
+
+type OpenFile = { id: string; name: string; mime: string; iv: string; size: number };
 
 type Account = {
   email: string;
@@ -87,6 +98,11 @@ export function MailApp() {
   const [targetLang, setTargetLang] = useState("fr");
   const [profileOpen, setProfileOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [vaultInfo, setVaultInfo] = useState<VaultInfo | null | undefined>(undefined);
+  const [vault, setVault] = useState<VaultSession | null>(null);
+  const [subjects, setSubjects] = useState<Record<string, string>>({});
+  const [contentKey, setContentKey] = useState<CryptoKey | null>(null);
+  const [openFiles, setOpenFiles] = useState<OpenFile[]>([]);
   const profileRef = useRef<HTMLDivElement>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(null);
 
@@ -102,8 +118,19 @@ export function MailApp() {
       const data = (await res.json()) as { account?: Account | null; unread?: number };
       setAccount(data.account ?? null);
       setUnread(data.unread ?? 0);
+      if (!data.account) {
+        setVaultInfo(null);
+        setVault(null);
+        return;
+      }
+      const vaultRes = await fetch("/api/mail/vault");
+      const vaultData = (await vaultRes.json()) as { vault?: VaultInfo | null };
+      const info = vaultData.vault ?? null;
+      setVaultInfo(info);
+      setVault((cur) => (info && cur && cur.fingerprint === info.fingerprint ? cur : null));
     } catch {
       setAccount(null);
+      setVaultInfo(null);
     } finally {
       setLoading(false);
     }
@@ -129,6 +156,27 @@ export function MailApp() {
   }, [account, folder, q, loadMessages]);
 
   useEffect(() => {
+    if (!vault) return;
+    let cancel = false;
+    void (async () => {
+      const next: Record<string, string> = {};
+      for (const m of messages) {
+        if (m.enc !== 1 || !m.sealedSubject || !m.wrap) continue;
+        try {
+          const key = await openContentKey(vault, m.wrap);
+          next[m.id] = await decryptUtf8(key, m.sealedSubject);
+        } catch {
+          next[m.id] = "Illisible";
+        }
+      }
+      if (!cancel) setSubjects(next);
+    })();
+    return () => {
+      cancel = true;
+    };
+  }, [messages, vault]);
+
+  useEffect(() => {
     if (!profileOpen) return;
     const close = (e: MouseEvent) => {
       if (!profileRef.current?.contains(e.target as Node)) setProfileOpen(false);
@@ -148,8 +196,12 @@ export function MailApp() {
     setProfileOpen(false);
     await logout();
     setAccount(null);
+    setVault(null);
+    setVaultInfo(undefined);
     setMessages([]);
     setOpen(null);
+    setContentKey(null);
+    setOpenFiles([]);
     setGate("landing");
     void refreshSession();
   };
@@ -158,10 +210,66 @@ export function MailApp() {
     const res = await fetch(`/api/mail/messages/${id}`);
     if (!res.ok) return;
     const data = (await res.json()) as { message: Msg };
-    setOpen(data.message);
     setTranslation(null);
+    setContentKey(null);
+    setOpenFiles([]);
+    const message = data.message;
+    if (message.enc === 1) {
+      if (!vault || !message.wrap || !message.sealedSubject || !message.sealedBody) {
+        showToast("Ce message est dans le coffre — déverrouillez-le pour le lire.");
+        return;
+      }
+      try {
+        const key = await openContentKey(vault, message.wrap);
+        const subject = await decryptUtf8(key, message.sealedSubject);
+        const body = await decryptUtf8(key, message.sealedBody);
+        const files: OpenFile[] = [];
+        for (const a of message.attachments || []) {
+          try {
+            const meta = JSON.parse(await decryptUtf8(key, { iv: a.nameIv, ct: a.nameCt })) as { name?: string; mime?: string };
+            files.push({
+              id: a.id,
+              name: meta.name || "Pièce jointe",
+              mime: meta.mime || "application/octet-stream",
+              iv: a.fileIv,
+              size: a.byteSize,
+            });
+          } catch {
+            files.push({ id: a.id, name: "Pièce jointe", mime: "application/octet-stream", iv: a.fileIv, size: a.byteSize });
+          }
+        }
+        setContentKey(key);
+        setOpenFiles(files);
+        setOpen({ ...message, subject, body });
+      } catch {
+        showToast("Impossible de déchiffrer ce message.");
+        return;
+      }
+    } else {
+      setOpen(message);
+    }
     setMessages((ms) => ms.map((m) => (m.id === id ? { ...m, read: true } : m)));
     setUnread((u) => Math.max(0, u - 1));
+  };
+
+  const downloadFile = async (file: OpenFile) => {
+    if (!contentKey) return;
+    const res = await fetch(`/api/mail/attachments/${file.id}`);
+    if (!res.ok) {
+      showToast("Téléchargement impossible.");
+      return;
+    }
+    const cipher = new Uint8Array(await res.arrayBuffer());
+    const plain = await decryptBytes(contentKey, file.iv, cipher);
+    const copy = new ArrayBuffer(plain.byteLength);
+    new Uint8Array(copy).set(plain);
+    const blob = new Blob([copy], { type: file.mime || "application/octet-stream" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = file.name || "piece-jointe";
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const patch = async (id: string, body: Record<string, unknown>) => {
@@ -253,6 +361,38 @@ export function MailApp() {
     );
   }
 
+  if (vaultInfo === undefined) {
+    return (
+      <div className="mail-root">
+        <div className="mail-loading">AYEBA MAIL — COFFRE</div>
+      </div>
+    );
+  }
+
+  if (!vaultInfo) {
+    return (
+      <VaultCreate
+        onReady={(session) => {
+          setVault(session);
+          void loadAccount();
+        }}
+      />
+    );
+  }
+
+  if (!vault) {
+    return <VaultUnlock vault={vaultInfo} onReady={(session) => setVault(session)} />;
+  }
+
+  const needle = q.trim().toLowerCase();
+  const visible = messages.filter((m) => {
+    if (!needle || m.enc !== 1) return true;
+    const sub = subjects[m.id];
+    if (sub === undefined) return false;
+    const meta = `${m.from} ${m.fromName} ${m.to.join(" ")}`.toLowerCase();
+    return sub.toLowerCase().includes(needle) || meta.includes(needle);
+  });
+
   // ── Webmail ──
   return (
     <div className="mail-root">
@@ -265,7 +405,7 @@ export function MailApp() {
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Rechercher dans les messages…"
+            placeholder="Rechercher (objet, expéditeur)…"
           />
         </div>
         <div className="mail-profile" ref={profileRef}>
@@ -320,7 +460,7 @@ export function MailApp() {
                 </div>
               </div>
               <div className="mail-account-meta">
-                <span>Boîte chiffrée AES-256</span>
+                <span>Coffre de bout en bout</span>
                 <span>Membre depuis {new Date(account.createdAt).toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}</span>
               </div>
               <button
@@ -359,9 +499,9 @@ export function MailApp() {
             </button>
           ))}
           <div className="mail-rail-note">
-            <b>CHIFFRÉ AU REPOS</b>
+            <b>COFFRE BOUT EN BOUT</b>
             <br />
-            CONTENU JAMAIS ANALYSÉ
+            @AYEBA.APP ILLISIBLE PAR NOUS
             <br />
             COMPTE VÉRIFIÉ PAR SMS
           </div>
@@ -373,10 +513,10 @@ export function MailApp() {
               {FOLDERS.find((f) => f.id === folder)?.label.toUpperCase()}
             </span>
             <span className="mail-kicker" style={{ color: "var(--faint)" }}>
-              {messages.length}
+              {visible.length}
             </span>
           </div>
-          {messages.map((m) => (
+          {visible.map((m) => (
             <button
               key={m.id}
               className={`mail-item ${!m.read ? "unread" : ""} ${open?.id === m.id ? "active" : ""}`}
@@ -385,16 +525,22 @@ export function MailApp() {
               <div className="mail-item-top">
                 {!m.read && <i className="dot" />}
                 <span className="mail-item-from">{m.fromName || m.from}</span>
+                {m.enc === 1 && <span className="badge system">COFFRE</span>}
                 {m.kind === "bounce" && <span className="badge bounce">ÉCHEC</span>}
                 {m.kind === "system" && <span className="badge system">AYEBA</span>}
+                {(m.attachmentCount || 0) > 0 && <span className="badge system">PJ</span>}
                 {m.starred && <span className="star">★</span>}
                 <span className="mail-item-time">{fmtTime(m.at)}</span>
               </div>
-              <div className="mail-item-subject">{m.subject}</div>
-              <div className="mail-item-snippet">{m.body}</div>
+              <div className="mail-item-subject">{m.enc === 1 ? (subjects[m.id] || "Message chiffré…") : m.subject}</div>
+              <div className="mail-item-snippet">
+                {m.enc === 1
+                  ? (m.attachmentCount ? `${m.attachmentCount} pièce${m.attachmentCount > 1 ? "s" : ""} jointe${m.attachmentCount > 1 ? "s" : ""}` : "Chiffré de bout en bout")
+                  : m.body}
+              </div>
             </button>
           ))}
-          {messages.length === 0 && (
+          {visible.length === 0 && (
             <div style={{ padding: "40px 18px", color: "var(--faint)", fontSize: 13 }}>
               Aucun message ici.
             </div>
@@ -410,6 +556,11 @@ export function MailApp() {
           ) : (
             <>
               <h1>{open.subject}</h1>
+              <p className="mail-seal">
+                {open.enc === 1
+                  ? "Déchiffré sur cet appareil. Ayeba n’a pas le texte."
+                  : "Chiffré au repos sur les serveurs Ayeba — pas de bout en bout. Message système, échec de remise, ou reçu avant le coffre."}
+              </p>
               <div className="mail-reader-meta">
                 <div className="from">
                   {open.fromName || open.from}
@@ -442,6 +593,16 @@ export function MailApp() {
                 </div>
               </div>
               <div className="mail-reader-body">{open.body}</div>
+              {openFiles.length > 0 && (
+                <div className="mail-files">
+                  {openFiles.map((f) => (
+                    <button key={f.id} className="mail-file" onClick={() => void downloadFile(f)}>
+                      <b>{f.name}</b>
+                      <span>{Math.max(1, Math.round(f.size / 1024))} Ko · déchiffrer</span>
+                    </button>
+                  ))}
+                </div>
+              )}
 
               <div className="mail-translate">
                 <div className="mail-translate-bar">
@@ -454,6 +615,7 @@ export function MailApp() {
                       {translating ? "Traduction…" : "Traduire"}
                     </button>
                   )}
+                  <span className="mail-translate-note">Le texte déchiffré part au service de langue.</span>
                   <select value={targetLang} onChange={(e) => setTargetLang(e.target.value)}>
                     {LANGS.map((l) => (
                       <option key={l.id} value={l.id}>{l.label}</option>
@@ -471,14 +633,17 @@ export function MailApp() {
         <ComposePanel
           self={account.email}
           signature={account.signature}
+          session={vault}
           onClose={() => setCompose(false)}
-          onSent={(delivered, bounced) => {
+          onSent={(delivered, bounced, draft) => {
             setCompose(false);
             void loadMessages(folder, q);
             showToast(
-              bounced.length
-                ? `Remise partielle — ${bounced.length} échec(s), notification en boîte.`
-                : `Message envoyé à ${delivered.join(", ")}.`,
+              draft
+                ? "Brouillon chiffré enregistré."
+                : bounced.length
+                  ? `Remise partielle — ${bounced.length} échec(s), notification en boîte.`
+                  : `Message envoyé à ${delivered.join(", ") || "la boîte"}.`,
             );
           }}
         />
@@ -486,8 +651,15 @@ export function MailApp() {
       {settingsOpen && (
         <SettingsPanel
           account={account}
+          session={vault}
           onClose={() => setSettingsOpen(false)}
           onSaved={() => void loadAccount()}
+          onLock={() => {
+            setVault(null);
+            setSettingsOpen(false);
+            setOpen(null);
+            setContentKey(null);
+          }}
           onToast={showToast}
         />
       )}
@@ -499,15 +671,20 @@ export function MailApp() {
 /* ── Paramètres du compte ───────────────────────────────────────────── */
 function SettingsPanel({
   account,
+  session,
   onClose,
   onSaved,
+  onLock,
   onToast,
 }: {
   account: Account;
+  session: VaultSession;
   onClose: () => void;
   onSaved: () => void;
+  onLock: () => void;
   onToast: (m: string) => void;
 }) {
+  const [tab, setTab] = useState<"compte" | "securite">("compte");
   const [name, setName] = useState(account.displayName);
   const [signature, setSignature] = useState(account.signature);
   const [avatar, setAvatar] = useState(account.avatar);
@@ -575,10 +752,18 @@ function SettingsPanel({
     <div className="mail-settings-overlay" onClick={onClose}>
       <div className="mail-settings" onClick={(e) => e.stopPropagation()}>
         <div className="mail-settings-head">
-          <span className="mail-kicker">PARAMÈTRES DU COMPTE</span>
+          <span className="mail-kicker">PARAMÈTRES</span>
           <button className="mail-btn" onClick={onClose}>✕</button>
         </div>
+        <div className="mail-switch" style={{ marginBottom: 16 }}>
+          <button className={tab === "compte" ? "on" : ""} onClick={() => setTab("compte")}>Compte</button>
+          <button className={tab === "securite" ? "on" : ""} onClick={() => setTab("securite")}>Sécurité</button>
+        </div>
 
+        {tab === "securite" ? (
+          <SecurityPane session={session} onLock={onLock} onToast={onToast} />
+        ) : (
+        <>
         <div className="mail-settings-photo">
           <button
             className="mail-settings-avatar"
@@ -610,7 +795,7 @@ function SettingsPanel({
           <div>
             <strong>{account.email}</strong>
             <p style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>
-              Photo visible par vos correspondants Ayeba. Redimensionnée à 128px, stockée chiffrée avec le compte.
+              Photo visible par vos correspondants Ayeba. Redimensionnée à 128 px, stockée avec le compte.
             </p>
             {avatar && (
               <button
@@ -644,7 +829,7 @@ function SettingsPanel({
 
         <div className="mail-settings-meta">
           <span>Compte vérifié par SMS</span>
-          <span>Chiffrement AES-256 au repos</span>
+          <span>Coffre de bout en bout</span>
           <span>Membre depuis {new Date(account.createdAt).toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}</span>
         </div>
 
@@ -654,6 +839,8 @@ function SettingsPanel({
             {saving ? "Enregistrement…" : "Enregistrer"}
           </button>
         </div>
+        </>
+        )}
       </div>
     </div>
   );
@@ -663,47 +850,72 @@ function SettingsPanel({
 function ComposePanel({
   self,
   signature,
+  session,
   onClose,
   onSent,
 }: {
   self: string;
   signature: string;
+  session: VaultSession;
   onClose: () => void;
-  onSent: (delivered: string[], bounced: { address: string }[]) => void;
+  onSent: (delivered: string[], bounced: { address: string }[], draft?: boolean) => void;
 }) {
   const [to, setTo] = useState("");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
+  const [files, setFiles] = useState<File[]>([]);
+  const [externalAck, setExternalAck] = useState(false);
   const [sending, setSending] = useState(false);
   const [err, setErr] = useState("");
+  const fileRef = useRef<HTMLInputElement>(null);
+  const leavesVault = to.split(/[,;\s]+/).some((t) => {
+    const e = t.trim().toLowerCase();
+    return e.includes("@") && !e.endsWith("@ayeba.app");
+  });
 
-  const send = async () => {
+  const addFiles = (list: FileList | null) => {
+    if (!list) return;
+    const next = [...files];
+    for (const file of list) {
+      if (next.length >= 3) {
+        setErr("3 pièces jointes maximum.");
+        break;
+      }
+      if (file.size > 3 * 1024 * 1024) {
+        setErr(`${file.name} dépasse 3 Mo.`);
+        continue;
+      }
+      next.push(file);
+    }
+    setFiles(next);
+  };
+
+  const send = async (draft = false) => {
     setErr("");
-    if (!to.trim()) return setErr("Ajoutez un destinataire.");
+    if (!draft && !to.trim()) return setErr("Ajoutez un destinataire.");
+    if (leavesVault && !externalAck && !draft) {
+      return setErr("Cochez la confirmation : ce message quitte le coffre.");
+    }
     setSending(true);
     try {
-      const res = await fetch("/api/mail/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          to,
-          subject,
-          body: signature ? `${body}\n\n—\n${signature}` : body,
-        }),
+      const text = signature && body ? `${body}\n\n—\n${signature}` : body;
+      const data = await sendSealedMessage({
+        session,
+        selfEmail: self,
+        toRaw: to,
+        subject,
+        body: text,
+        files,
+        externalAck,
+        draft,
       });
-      const data = (await res.json()) as {
-        ok?: boolean;
-        delivered?: string[];
-        bounced?: { address: string }[];
-        error?: string;
-      };
-      if (!res.ok && !data.bounced?.length) {
-        setErr(data.error || "Envoi impossible.");
+      if (data.error && !data.bounced?.length) {
+        setErr(data.error);
         return;
       }
-      onSent(data.delivered ?? [], data.bounced ?? []);
-    } catch {
-      setErr("Réseau indisponible — réessayez.");
+      onSent(data.delivered ?? [], data.bounced ?? [], draft);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Réseau indisponible — réessayez.");
     } finally {
       setSending(false);
     }
@@ -712,15 +924,43 @@ function ComposePanel({
   return (
     <div className="mail-compose">
       <div className="mail-compose-head">
-        <span className="mail-kicker">NOUVEAU MESSAGE — {self}</span>
+        <span className="mail-kicker">NOUVEAU MESSAGE — COFFRE — {self}</span>
         <button className="mail-btn" onClick={onClose}>✕</button>
       </div>
       <input value={to} onChange={(e) => setTo(e.target.value)} placeholder="À — prenom@ayeba.app" />
       <input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Objet" />
       <textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="Votre message…" />
+      {files.length > 0 && (
+        <div className="mail-compose-files">
+          {files.map((f, i) => (
+            <button key={`${f.name}-${i}`} className="mail-file" onClick={() => setFiles(files.filter((_, j) => j !== i))}>
+              <b>{f.name}</b>
+              <span>{Math.max(1, Math.round(f.size / 1024))} Ko · retirer</span>
+            </button>
+          ))}
+        </div>
+      )}
+      {leavesVault && (
+        <label className="mail-check mail-compose-warn">
+          <input type="checkbox" checked={externalAck} onChange={(e) => setExternalAck(e.target.checked)} />
+          <span>Cette adresse est hors Ayeba. Le message et les pièces jointes quittent le coffre et deviennent lisibles par le destinataire.</span>
+        </label>
+      )}
       <div className="mail-compose-foot">
-        <button className="mail-send-btn" onClick={() => void send()} disabled={sending}>
-          {sending ? "Envoi…" : "Envoyer"}
+        <button className="mail-btn" onClick={() => fileRef.current?.click()} disabled={sending}>Joindre</button>
+        <input
+          ref={fileRef}
+          type="file"
+          multiple
+          style={{ display: "none" }}
+          onChange={(e) => {
+            addFiles(e.target.files);
+            e.target.value = "";
+          }}
+        />
+        <button className="mail-btn" onClick={() => void send(true)} disabled={sending}>Brouillon</button>
+        <button className="mail-send-btn" onClick={() => void send(false)} disabled={sending}>
+          {sending ? "Chiffrement…" : "Envoyer"}
         </button>
         {err && <span className="mail-compose-err">{err}</span>}
       </div>
@@ -731,8 +971,8 @@ function ComposePanel({
 /* ── Landing — vraie page d'accueil produit ─────────────────────────── */
 const FEATURES = [
   {
-    t: "Chiffré au repos",
-    d: "Objets et contenus chiffrés AES-256-GCM dans la base. Vos messages ne sont jamais lus ni analysés — pas de publicité, pas de profilage.",
+    t: "Coffre de bout en bout",
+    d: "Entre adresses @ayeba.app, le texte et les pièces jointes sont chiffrés sur votre appareil. Ayeba stocke le chiffré, pas le contenu.",
     i: "◆",
   },
   {
