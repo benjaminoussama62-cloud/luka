@@ -22,12 +22,26 @@ const { pathToFileURL } = require("url");
 // Must run before app ready — avoid cache lock / multi-instance GPU errors on Windows
 app.setName("AYEBA");
 app.setPath("userData", path.join(app.getPath("appData"), "AyebaBrowser"));
+
+// GPU : accélération matérielle par défaut (vidéo/WebGL fluides). Le mode
+// logiciel reste un filet de sécurité : écrit automatiquement après un crash
+// du processus GPU (fichier gpu-safe-mode), ou forcé via AYEBA_GPU=0.
+// AYEBA_GPU=1 réactive le matériel et supprime le drapeau.
+const GPU_FLAG_FILE = path.join(app.getPath("userData"), "gpu-safe-mode");
+let gpuDisabled = false;
 if (process.platform === "win32") {
   app.setAppUserModelId("app.ayeba.browser");
-  // 360 / anciens pilotes GPU : Electron peut mourir sans fenêtre — forcer le mode logiciel
-  app.disableHardwareAcceleration();
-  app.commandLine.appendSwitch("disable-gpu");
-  app.commandLine.appendSwitch("disable-gpu-compositing");
+  if (process.env.AYEBA_GPU === "1") {
+    try {
+      fs.rmSync(GPU_FLAG_FILE);
+    } catch {}
+  }
+  if (process.env.AYEBA_GPU === "0" || fs.existsSync(GPU_FLAG_FILE)) {
+    gpuDisabled = true;
+    app.disableHardwareAcceleration();
+    app.commandLine.appendSwitch("disable-gpu");
+    app.commandLine.appendSwitch("disable-gpu-compositing");
+  }
 }
 
 const LOG_FILE = path.join(app.getPath("userData"), "ayeba.log");
@@ -90,6 +104,9 @@ const CHROME_URL = pathToFileURL(path.join(__dirname, "..", "chrome", "index.htm
 const RAIL_URL = pathToFileURL(path.join(__dirname, "..", "chrome", "rail.html")).href;
 const DATA_DIR = path.join(app.getPath("userData"), "data");
 const SETTINGS_FILE = path.join(DATA_DIR, "settings.json");
+// Partition mémoire des fenêtres InPrivate (cookies/cache effacés à la sortie).
+const PRIVATE_PARTITION = "ayeba-inprivate";
+const FETCH_TIMEOUT_MS = 8000;
 
 // ── Données personnelles : chaque compte Ayeba a son propre espace ──
 // history/favorites/passwords sont rangés dans data/<clé-compte>/ ; un invité
@@ -108,6 +125,7 @@ async function fetchSessionUser() {
     if (!token) return null;
     const res = await net.fetch("https://ayeba.app/api/auth/omega/session", {
       headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
     const data = await res.json();
     return data?.user || null;
@@ -127,12 +145,15 @@ async function accountKey() {
   return key;
 }
 
-async function userFile(name) {
-  const dir = path.join(DATA_DIR, await accountKey());
+async function userFile(name, guest = false) {
+  // En InPrivate, tout passe par l'espace « invite » : les données du compte
+  // réel ne sont ni lues ni modifiées depuis une fenêtre privée.
+  const key = guest ? "invite" : await accountKey();
+  const dir = path.join(DATA_DIR, key);
   fs.mkdirSync(dir, { recursive: true });
   // Migration : les anciens fichiers à la racine de data/ rejoignent le
   // premier compte résolu (l'utilisateur actuel conserve son historique).
-  if (!migrated) {
+  if (!migrated && !guest) {
     migrated = true;
     for (const f of USER_FILES) {
       const legacy = path.join(DATA_DIR, f);
@@ -202,9 +223,10 @@ function writeSettings(patch) {
 
 // Vie privée réelle : en-tête « Do Not Track » + blocage des cookies tiers
 // (les en-têtes Set-Cookie hors site visité sont supprimés dans webRequest).
-function applyPrivacy() {
+// Appliquée à la session par défaut ET à la session InPrivate.
+const privacySessions = new Set();
+function applyPrivacyTo(ses) {
   const s = readSettings();
-  const ses = session.defaultSession;
   ses.webRequest.onBeforeSendHeaders((details, callback) => {
     if (s.doNotTrack) details.requestHeaders["DNT"] = "1";
     callback({ requestHeaders: details.requestHeaders });
@@ -231,6 +253,11 @@ function applyPrivacy() {
       return callback({});
     }
   });
+  privacySessions.add(ses);
+}
+
+function applyPrivacy() {
+  for (const ses of privacySessions) applyPrivacyTo(ses);
 }
 
 function uniqueDownloadPath(dir, name) {
@@ -257,8 +284,8 @@ function writeJson(file, data) {
   fs.writeFileSync(file, JSON.stringify(data, null, 2));
 }
 
-async function pushHistory(entry) {
-  const file = await userFile("history.json");
+async function pushHistory(entry, guest = false) {
+  const file = await userFile("history.json", guest);
   const list = readJson(file, []);
   list.unshift({ ...entry, at: Date.now() });
   writeJson(file, list.slice(0, 500));
@@ -346,6 +373,30 @@ function normalizeOmni(input) {
   return target || HOME_URL;
 }
 
+// Hostname en minuscules pour une URL complète ou une saisie « domaine.tld ».
+// null si la valeur n'est pas un hôte http(s) (file:, data:, chaine vide…).
+function hostOf(input) {
+  try {
+    const s = String(input || "").trim();
+    if (!s) return null;
+    const u = new URL(/^https?:\/\//i.test(s) ? s : `https://${s}`);
+    return /^https?:$/.test(u.protocol) ? u.hostname.toLowerCase() : null;
+  } catch {
+    return null;
+  }
+}
+
+// Interstitiel façon Chrome pour les erreurs de certificat (ERR_CERT_*,
+// codes Chromium -200..-299) — bloquant, sans bouton « continuer quand même ».
+function certErrorUrl(url, errorDesc = "") {
+  const host = hostOf(url) || "ce site";
+  const esc = (v) =>
+    String(v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const html = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Connexion non sécurisée — AYEBA</title><style>body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0a0c11;color:#e9ecf3;font-family:"Segoe UI",system-ui,sans-serif}main{max-width:540px;padding:40px}svg{display:block}h1{font-size:20px;font-weight:600;margin:18px 0 8px}p{color:#9ca3af;font-size:14px;line-height:1.65;margin:8px 0}code{color:#7df0ff}button{margin-top:18px;height:38px;padding:0 22px;border:1px solid rgba(255,255,255,.16);border-radius:8px;background:rgba(255,255,255,.06);color:#e9ecf3;cursor:pointer;font-size:13px}button:hover{background:rgba(0,180,255,.14);border-color:rgba(0,180,255,.4)}</style></head><body><main><svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#e85d04" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2.5 20h19L12 3z"/><path d="M12 9.5v4.5M12 17.2h.01"/></svg><h1>Connexion non sécurisée</h1><p>Le certificat de <code>${esc(host)}</code> est invalide ou expiré. AYEBA a bloqué la connexion pour protéger vos données.</p><p>Un site qui se fait passer pour <code>${esc(host)}</code> pourrait tenter de récupérer vos mots de passe ou vos données personnelles.</p><button type="button" onclick="history.back()">Retour à la page précédente</button></main></body></html>`;
+  void errorDesc;
+  return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
+}
+
 function revealWindow(win) {
   if (!win || win.isDestroyed()) return;
   if (!win.isVisible()) win.show();
@@ -355,6 +406,14 @@ function revealWindow(win) {
 function createBrowserWindow(isPrivate = false) {
   ensureData();
   log(`createBrowserWindow execPath=${process.execPath} private=${isPrivate}`);
+  if (isPrivate) {
+    // La session InPrivate reçoit les mêmes protections que la session
+    // principale : DNT/cookies tiers, permissions consenties, downloads gérés.
+    const priv = session.fromPartition(PRIVATE_PARTITION);
+    applyPrivacyTo(priv);
+    bindPermissions(priv);
+    bindDownloads(priv);
+  }
 
   let win;
   try {
@@ -413,7 +472,7 @@ function createBrowserWindow(isPrivate = false) {
   // visible derrière (floutée par le backdrop CSS), comme sur ayeba.app.
   chrome.setBackgroundColor("#00000000");
   win.contentView.addChildView(chrome);
-  chrome.webContents.loadURL(CHROME_URL);
+  chrome.webContents.loadURL(CHROME_URL).catch((err) => log(`chrome loadURL: ${err?.message || err}`));
 
   // Rail vertical gauche (style Yandex) — vue dédiée pour ne pas bloquer
   // les clics : chaque vue ne couvre que sa propre zone rectangulaire.
@@ -428,7 +487,7 @@ function createBrowserWindow(isPrivate = false) {
   state.rail = rail;
   rail.setBackgroundColor("#0a0c11");
   win.contentView.addChildView(rail);
-  rail.webContents.loadURL(RAIL_URL);
+  rail.webContents.loadURL(RAIL_URL).catch((err) => log(`rail loadURL: ${err?.message || err}`));
 
   function raiseChrome() {
     if (win.isDestroyed() || chrome.webContents.isDestroyed()) return;
@@ -533,9 +592,136 @@ function createBrowserWindow(isPrivate = false) {
   function attachTabEvents(tab) {
     const wc = tab.view.webContents;
 
-    wc.setWindowOpenHandler(({ url }) => {
-      createTab(url, true);
+    // Liens et popups : target=_blank / ctrl+clic → vrai onglet ; window.open()
+    // (OAuth, postMessage vers l'ouvreur…) → vraie fenêtre popup sandboxée,
+    // sinon le handle renvoyé à la page serait null et casserait le flow.
+    wc.setWindowOpenHandler(({ url, disposition }) => {
+      if (disposition === "new-window") {
+        return {
+          action: "allow",
+          overrideBrowserWindowOptions: {
+            width: 1040,
+            height: 720,
+            autoHideMenuBar: true,
+            backgroundColor: "#0a0c11",
+            webPreferences: {
+              contextIsolation: true,
+              nodeIntegration: false,
+              sandbox: true,
+              spellcheck: true,
+              ...(state.isPrivate ? { partition: PRIVATE_PARTITION } : {}),
+            },
+          },
+        };
+      }
+      if (url) createTab(url, disposition !== "background-tab");
       return { action: "deny" };
+    });
+
+    // Raccourcis navigateur : les WebContentsView sont des renderers séparés,
+    // le keydown de chrome.js ne reçoit rien quand la page a le focus.
+    // before-input-event capte les touches côté processus principal.
+    let lastKeySig = "";
+    let lastKeyAt = 0;
+    wc.on("before-input-event", (event, input) => {
+      if (input.type === "keyUp") {
+        lastKeySig = "";
+        return;
+      }
+      if (input.type !== "keyDown" && input.type !== "rawKeyDown") return;
+      if (input.isAutoRepeat) return;
+      const key = String(input.key || "").toLowerCase();
+      const mod = input.control || input.meta;
+      // Un même appui peut émettre rawKeyDown puis keyDown : dédupliquer.
+      const sig = `${key}|${mod ? 1 : 0}${input.alt ? 1 : 0}${input.shift ? 1 : 0}`;
+      const now = Date.now();
+      const markHandled = () => {
+        event.preventDefault();
+        lastKeySig = sig;
+        lastKeyAt = now;
+      };
+      if (sig === lastKeySig && now - lastKeyAt < 200) return;
+
+      if (input.key === "F12" || (mod && input.shift && key === "i")) {
+        markHandled();
+        wc.openDevTools({ mode: "detach" });
+        return;
+      }
+      if (mod && key === "tab") {
+        markHandled();
+        if (state.tabs.length < 2) return;
+        const idx = state.tabs.findIndex((t) => t.id === state.activeId);
+        showTab(
+          state.tabs[(idx + (input.shift ? -1 : 1) + state.tabs.length) % state.tabs.length].id,
+        );
+        return;
+      }
+      if (input.alt && !mod) {
+        if (key === "arrowleft" && canBack(wc)) {
+          markHandled();
+          wc.goBack();
+        } else if (key === "arrowright" && canForward(wc)) {
+          markHandled();
+          wc.goForward();
+        }
+        return;
+      }
+      if (!mod || input.alt) return;
+
+      // Panneaux du chrome : donner le focus à la vue chrome puis cibler.
+      const focusChrome = (name, payload = {}) => {
+        markHandled();
+        chrome.webContents.focus();
+        emitChrome("ui:open", { name, ...payload });
+      };
+      if (key === "t") {
+        markHandled();
+        createTab(HOME_URL, true);
+      } else if (key === "w") {
+        markHandled();
+        closeTab(state.activeId);
+      } else if (key === "n") {
+        markHandled();
+        if (input.shift) createBrowserWindow(true);
+        else createBrowserWindow();
+      } else if (key === "j") focusChrome("downloads", { y: 140, side: "right" });
+      else if (key === "h") focusChrome("history", { y: 130, side: "right" });
+      else if (key === "l") focusChrome("omnibox");
+      else if (key === "r") {
+        markHandled();
+        if (input.shift) wc.reloadIgnoringCache();
+        else wc.reload();
+      } else if (key === "f") focusChrome("find");
+      else if (key === "p") {
+        markHandled();
+        wc.print({});
+      } else if (key === "d") focusChrome("fav-add");
+      else if (key === "o" && input.shift) focusChrome("favorites");
+    });
+
+    // Onglet crashé (OOM, renderer tué) : recharger, ou recréer la vue si le
+    // processus est mort — jamais laisser une page noire silencieuse.
+    wc.on("render-process-gone", (_e, details) => {
+      log(`render-process-gone tab=${tab.id} reason=${details?.reason || "?"}`);
+      setTimeout(() => {
+        if (win.isDestroyed()) return;
+        try {
+          if (!wc.isDestroyed()) {
+            wc.reload();
+            return;
+          }
+        } catch {}
+        const idx = state.tabs.findIndex((t) => t.id === tab.id);
+        if (idx < 0) return;
+        state.tabs.splice(idx, 1);
+        try {
+          win.contentView.removeChildView(tab.view);
+        } catch {}
+        const wasActive = state.activeId === tab.id;
+        if (wasActive) state.activeId = null;
+        createTab(tab.url || HOME_URL, wasActive || state.tabs.length === 0);
+        if (!wasActive) pushChromeState();
+      }, 300);
     });
 
     wc.on("page-title-updated", (_e, title) => {
@@ -558,7 +744,7 @@ function createBrowserWindow(isPrivate = false) {
       tab.url = wc.getURL();
       tab.title = isNewTab(tab.url) ? "Nouvel onglet" : (wc.getTitle() || tab.title);
       if (!state.isPrivate && !isNewTab(tab.url) && tab.url.startsWith("http")) {
-        pushHistory({ title: tab.title, url: tab.url });
+        pushHistory({ title: tab.title, url: tab.url }, state.isPrivate);
       }
       pushChromeState();
     });
@@ -573,12 +759,24 @@ function createBrowserWindow(isPrivate = false) {
       pushChromeState();
     });
 
-    // Hors-ligne : si l'accueil ayeba.app ne charge pas, on sert la page locale.
-    wc.on("did-fail-load", (_e, errorCode, _desc, validatedURL, isMainFrame) => {
-      if (!isMainFrame || errorCode === -3) return; // -3 = navigation interrompue (normal)
+    // Échecs de navigation (frame principale) : interstitiel dédié pour les
+    // erreurs de certificat (ERR_CERT_* : -200..-299), repli local pour l'accueil.
+    function handleMainFrameFail(errorCode, errorDesc, validatedURL) {
+      if (errorCode === -3) return; // navigation interrompue (normal)
+      if (errorCode <= -200 && errorCode >= -299) {
+        wc.loadURL(certErrorUrl(validatedURL, errorDesc)).catch(() => {});
+        return;
+      }
+      // Hors-ligne : si l'accueil ayeba.app ne charge pas, on sert la page locale.
       if (validatedURL === HOME_URL || validatedURL === "https://ayeba.app") {
         wc.loadURL(LOCAL_NTP_URL).catch(() => {});
       }
+    }
+    wc.on("did-fail-load", (_e, errorCode, desc, url, isMainFrame) => {
+      if (isMainFrame) handleMainFrameFail(errorCode, desc, url);
+    });
+    wc.on("did-fail-provisional-load", (_e, errorCode, desc, url, isMainFrame) => {
+      if (isMainFrame) handleMainFrameFail(errorCode, desc, url);
     });
 
     wc.on("dom-ready", () => {
@@ -664,10 +862,12 @@ function createBrowserWindow(isPrivate = false) {
         contextIsolation: true,
         nodeIntegration: false,
         sandbox: true,
-        backgroundThrottling: false,
+        // Onglets en arrière-plan bridés (CPU/batterie) — l'audio n'est pas
+        // affecté, les timers des onglets cachés ralentissent comme sur Chrome.
+        backgroundThrottling: true,
         spellcheck: true,
         // InPrivate: in-memory partition — cookies/cache wiped when the window closes.
-        ...(state.isPrivate ? { partition: "ayeba-inprivate" } : {}),
+        ...(state.isPrivate ? { partition: PRIVATE_PARTITION } : {}),
       },
     });
 
@@ -683,7 +883,7 @@ function createBrowserWindow(isPrivate = false) {
     state.tabs.push(tab);
     win.contentView.addChildView(view);
     attachTabEvents(tab);
-    view.webContents.loadURL(url);
+    view.webContents.loadURL(url).catch((err) => log(`loadURL ${url}: ${err?.message || err}`));
 
     if (activate) showTab(id);
     else {
@@ -794,12 +994,12 @@ function createBrowserWindow(isPrivate = false) {
     },
     "nav:home": () => {
       const t = activeTab();
-      if (t) t.view.webContents.loadURL(HOME_URL);
+      if (t) t.view.webContents.loadURL(HOME_URL).catch(() => {});
     },
     "nav:go": (_e, input) => {
       const t = activeTab();
       if (!t) return;
-      t.view.webContents.loadURL(normalizeOmni(input));
+      t.view.webContents.loadURL(normalizeOmni(input)).catch((err) => log(`nav:go ${input}: ${err?.message || err}`));
     },
     "zoom:set": (_e, factor) => {
       const t = activeTab();
@@ -865,10 +1065,10 @@ function createBrowserWindow(isPrivate = false) {
         return false;
       }
     },
-    "fav:list": async () => readJson(await userFile("favorites.json"), []),
+    "fav:list": async () => readJson(await userFile("favorites.json", state.isPrivate), []),
     "fav:add": async (_e, item) => {
       const t = activeTab();
-      const file = await userFile("favorites.json");
+      const file = await userFile("favorites.json", state.isPrivate);
       const list = readJson(file, []);
       const entry = {
         title: item?.title || t?.title || "Favori",
@@ -881,18 +1081,19 @@ function createBrowserWindow(isPrivate = false) {
       return next;
     },
     "fav:remove": async (_e, url) => {
-      const file = await userFile("favorites.json");
+      const file = await userFile("favorites.json", state.isPrivate);
       const next = readJson(file, []).filter((f) => f.url !== url);
       writeJson(file, next);
       return next;
     },
-    "history:list": async () => readJson(await userFile("history.json"), []),
+    "history:list": async () => readJson(await userFile("history.json", state.isPrivate), []),
     "history:clear": async () => {
-      writeJson(await userFile("history.json"), []);
+      writeJson(await userFile("history.json", state.isPrivate), []);
       return [];
     },
     // Recherches du compte (même historique que le site — cookie partagé).
     "history:searches": async () => {
+      if (state.isPrivate) return { history: [] };
       try {
         const jar = await session.defaultSession.cookies.get({
           url: "https://ayeba.app",
@@ -901,6 +1102,7 @@ function createBrowserWindow(isPrivate = false) {
         if (!jar[0]?.value) return { history: [] };
         const res = await net.fetch("https://ayeba.app/api/history", {
           headers: { Cookie: `ayeba_session=${jar[0].value}` },
+          signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
         });
         const data = await res.json();
         return { history: Array.isArray(data?.history) ? data.history : [] };
@@ -917,13 +1119,14 @@ function createBrowserWindow(isPrivate = false) {
       try {
         const res = await net.fetch(
           `https://ayeba.app/api/suggest?q=${encodeURIComponent(query)}`,
+          { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) },
         );
         const data = await res.json();
         remote = Array.isArray(data?.suggestions) ? data.suggestions : [];
       } catch {}
       let local = [];
       try {
-        const hist = readJson(await userFile("history.json"), []);
+        const hist = readJson(await userFile("history.json", state.isPrivate), []);
         const ql = query.toLowerCase();
         local = hist
           .filter((h) => (h.title || "").toLowerCase().includes(ql) || (h.url || "").includes(ql))
@@ -933,13 +1136,17 @@ function createBrowserWindow(isPrivate = false) {
       return { suggestions: remote.slice(0, 8), history: local };
     },
     "data:clear": async (_e, scope = {}) => {
+      // InPrivate : purger la partition privée, jamais les vrais cookies/compte.
+      const ses = state.isPrivate
+        ? session.fromPartition(PRIVATE_PARTITION)
+        : session.defaultSession;
       const jobs = [];
-      if (scope.cache !== false) jobs.push(session.defaultSession.clearCache());
+      if (scope.cache !== false) jobs.push(ses.clearCache());
       if (scope.cookies) {
-        jobs.push(session.defaultSession.clearStorageData({ storages: ["cookies"] }));
+        jobs.push(ses.clearStorageData({ storages: ["cookies"] }));
       }
-      if (scope.siteData) jobs.push(session.defaultSession.clearStorageData());
-      if (scope.history !== false) writeJson(await userFile("history.json"), []);
+      if (scope.siteData) jobs.push(ses.clearStorageData());
+      if (scope.history !== false) writeJson(await userFile("history.json", state.isPrivate), []);
       if (scope.downloads) {
         downloadLog.length = 0;
         pushAllChrome();
@@ -982,6 +1189,8 @@ function createBrowserWindow(isPrivate = false) {
     // Vrai compte Ayeba : même cookie de session que le site (partagé via la
     // session Chromium) → le navigateur affiche le profil réel de l'utilisateur.
     "account:get": async () => {
+      // InPrivate : pas de profil — la fenêtre ne connaît pas le compte réel.
+      if (state.isPrivate) return { user: null };
       const user = await fetchSessionUser();
       keyCache = {
         key: user?.email
@@ -992,6 +1201,8 @@ function createBrowserWindow(isPrivate = false) {
       return { user };
     },
     "account:logout": async () => {
+      // InPrivate : aucune session à couper — ne jamais toucher le vrai cookie.
+      if (state.isPrivate) return { ok: true };
       try {
         await session.defaultSession.cookies.remove("https://ayeba.app", "ayeba_session");
       } catch {}
@@ -1014,7 +1225,7 @@ function createBrowserWindow(isPrivate = false) {
     },
     "nav:ayebi": () => {
       const t = activeTab();
-      if (t) t.view.webContents.loadURL("https://ayeba.app/ayebi");
+      if (t) t.view.webContents.loadURL("https://ayeba.app/ayebi").catch(() => {});
     },
     "chrome:overlay": (_e, open) => {
       state.overlayOpen = !!open;
@@ -1027,6 +1238,10 @@ function createBrowserWindow(isPrivate = false) {
       const p = typeof payload === "object" && payload ? payload : { act: payload };
       if (p.act === "mail") {
         createTab("https://ayeba.app/mail", true);
+        return true;
+      }
+      if (p.act === "money") {
+        createTab("https://ayeba.app/money", true);
         return true;
       }
       emitChrome("ui:open", { name: p.act, y: (typeof p.y === "number" ? p.y : 240) + CHROME_H });
@@ -1057,8 +1272,10 @@ function createBrowserWindow(isPrivate = false) {
       return extPublic();
     },
     // ── Coffre de mots de passe (safeStorage → DPAPI Windows) ──
-    "pass:list": () => vaultPublic(),
+    // InPrivate : le coffre du compte n'est ni lu ni rempli — comme Chrome.
+    "pass:list": () => (state.isPrivate ? [] : vaultPublic()),
     "pass:add": async (_e, entry) => {
+      if (state.isPrivate) return [];
       const origin = String(entry?.origin || "").trim();
       const username = String(entry?.username || "").trim();
       const password = String(entry?.password || "");
@@ -1075,32 +1292,65 @@ function createBrowserWindow(isPrivate = false) {
       return vaultPublic();
     },
     "pass:remove": async (_e, id) => {
+      if (state.isPrivate) return [];
       const vault = await readVault();
       await writeVault(vault.filter((p) => p.id !== id));
       return vaultPublic();
     },
     "pass:reveal": async (_e, id) => {
+      if (state.isPrivate) return "";
       const vault = await readVault();
       const entry = vault.find((p) => p.id === id);
       return entry ? vaultDecrypt(entry) : "";
     },
     "pass:copy": async (_e, id) => {
+      if (state.isPrivate) return false;
       const vault = await readVault();
       const entry = vault.find((p) => p.id === id);
       const pw = entry ? vaultDecrypt(entry) : "";
       if (pw) {
         clipboard.writeText(pw);
-        setTimeout(() => clipboard.clear(), 30000);
+        // N'effacer le presse-papiers que s'il contient encore ce mot de passe :
+        // ne pas écraser ce que l'utilisateur a copié entre-temps.
+        setTimeout(() => {
+          try {
+            if (clipboard.readText() === pw) clipboard.clear();
+          } catch {}
+        }, 30000);
       }
       return !!pw;
     },
     // Remplit le formulaire de connexion visible de l'onglet actif.
+    // Jamais sans vérifier que le site correspond à l'entrée : un onglet
+    // de phishing ne doit pas recevoir les identifiants d'un autre site.
     "pass:fill": async (_e, id) => {
+      if (state.isPrivate) return false;
       const t = activeTab();
       const vault = await readVault();
       const entry = vault.find((p) => p.id === id);
       const pw = entry ? vaultDecrypt(entry) : "";
       if (!t || !pw || t.view.webContents.isDestroyed()) return false;
+      const tabHost = hostOf(t.url);
+      const entryHost = hostOf(entry.origin);
+      const sameSite =
+        tabHost &&
+        entryHost &&
+        (tabHost === entryHost ||
+          tabHost.endsWith(`.${entryHost}`) ||
+          entryHost.endsWith(`.${tabHost}`));
+      if (!sameSite) {
+        const r = await dialog.showMessageBox(win, {
+          type: "warning",
+          buttons: ["Annuler", "Remplir quand même"],
+          defaultId: 0,
+          cancelId: 0,
+          title: "Vérifier le site",
+          message: `« ${entry.origin} » ne correspond pas au site ouvert${tabHost ? ` (${tabHost})` : ""}.`,
+          detail:
+            "Injecter des identifiants sur un site différent peut les exposer à une page de phishing.",
+        });
+        if (r.response !== 1) return "cancelled";
+      }
       const js = `(() => {
         const pw = document.querySelector('input[type="password"]');
         if (!pw) return false;
@@ -1214,13 +1464,46 @@ function bindIpc() {
   });
 }
 
-app.whenReady().then(() => {
-  log(`ready v${app.getVersion()} userData=${app.getPath("userData")}`);
-  ensureData();
-  Menu.setApplicationMenu(null);
-  applyPrivacy();
-  void restoreExtensions();
-  session.defaultSession.setPermissionRequestHandler(async (webContents, permission, callback, details) => {
+// Permissions « sensibles » : « pas encore décidé » doit rester « pas
+// accordé » dans permissions.query / Notification.permission — sinon un site
+// pourrait déclencher l'action sans jamais passer par le prompt (le check
+// Electron est binaire : impossible d'exprimer « demander » comme Chrome).
+// Pour les API inoffensives (fullscreen, pointer-lock…), on évite le faux
+// « denied » qui fait croire aux sites que la permission est bloquée.
+const CHECK_GATED_SENSITIVE = new Set([
+  "media",
+  "geolocation",
+  "notifications",
+  "clipboard-read",
+  "clipboard-sanitized-write",
+  "display-capture",
+  "persistent-storage",
+  "midi",
+  "midi-sysex",
+  "idle-detection",
+  "window-management",
+  "local-fonts",
+  "serial",
+  "hid",
+  "usb",
+  "bluetooth",
+  "bluetoothScanning",
+  "payment-handler",
+  "accelerometer",
+  "gyroscope",
+  "magnetometer",
+  "ambient-light-sensor",
+  "background-sync",
+  "accessibility-events",
+  "speaker-selection",
+  "storage-access",
+  "top-level-storage-access",
+  "file-system-access",
+  "nfc",
+]);
+
+function bindPermissions(ses) {
+  ses.setPermissionRequestHandler(async (webContents, permission, callback, details) => {
     const requestingUrl = details?.requestingUrl || webContents.getURL();
     let origin;
     try {
@@ -1255,28 +1538,18 @@ app.whenReady().then(() => {
     permissionDecisions.set(key, allowed);
     callback(allowed);
   });
-  session.defaultSession.setPermissionCheckHandler((_webContents, permission, requestingOrigin) => {
-    return permissionDecisions.get(`${requestingOrigin}:${permission}`) === true;
+  ses.setPermissionCheckHandler((_webContents, permission, requestingOrigin) => {
+    const decided = permissionDecisions.get(`${requestingOrigin}:${permission}`);
+    if (typeof decided === "boolean") return decided;
+    return !CHECK_GATED_SENSITIVE.has(permission);
   });
-  bindIpc();
+}
 
-  if (app.isPackaged) {
-    autoUpdater.on("error", (error) => log(`auto-update error: ${error?.message || error}`));
-    autoUpdater.on("update-downloaded", async () => {
-      const result = await dialog.showMessageBox({
-        type: "info",
-        buttons: ["Redémarrer maintenant", "Plus tard"],
-        defaultId: 0,
-        cancelId: 1,
-        title: "Mise à jour AYEBA disponible",
-        message: "La mise à jour est prête à être installée.",
-      });
-      if (result.response === 0) autoUpdater.quitAndInstall();
-    });
-    autoUpdater.checkForUpdatesAndNotify().catch((error) => log(`auto-update check failed: ${error?.message || error}`));
-  }
-
-  session.defaultSession.on("will-download", (_event, item) => {
+const downloadBoundSessions = new WeakSet();
+function bindDownloads(ses) {
+  if (downloadBoundSessions.has(ses)) return;
+  downloadBoundSessions.add(ses);
+  ses.on("will-download", (_event, item) => {
     const s = readSettings();
     const downloadsDir = app.getPath("downloads");
     if (s.askSavePath) {
@@ -1315,6 +1588,55 @@ app.whenReady().then(() => {
     });
     pushAllChrome();
   });
+}
+
+let gpuCrashHandled = false;
+function onGpuProcessGone(reason) {
+  // Le GPU est réactivé par défaut : si le processus GPU meurt (pilote
+  // défectueux, antivirus…), on bascule en mode logiciel pour le prochain
+  // lancement puis on redémarre — l'utilisateur ne reste jamais sans fenêtre.
+  if (gpuCrashHandled || gpuDisabled || process.platform !== "win32") return;
+  gpuCrashHandled = true;
+  log(`GPU crash (${reason}) → passage en mode logiciel au prochain lancement`);
+  try {
+    fs.writeFileSync(GPU_FLAG_FILE, `${reason} ${new Date().toISOString()}`);
+  } catch {}
+  app.relaunch();
+  app.exit(0);
+}
+
+app.whenReady().then(() => {
+  log(`ready v${app.getVersion()} userData=${app.getPath("userData")} gpu=${gpuDisabled ? "software" : "hardware"}`);
+  ensureData();
+  Menu.setApplicationMenu(null);
+  applyPrivacyTo(session.defaultSession);
+  void restoreExtensions();
+  bindPermissions(session.defaultSession);
+  app.on("gpu-process-crashed", (_e, killed) =>
+    onGpuProcessGone(`gpu-process-crashed killed=${killed}`),
+  );
+  app.on("child-process-gone", (_e, details) => {
+    if (details?.type === "GPU") onGpuProcessGone(`child-process-gone ${details?.reason}`);
+  });
+  bindIpc();
+
+  if (app.isPackaged) {
+    autoUpdater.on("error", (error) => log(`auto-update error: ${error?.message || error}`));
+    autoUpdater.on("update-downloaded", async () => {
+      const result = await dialog.showMessageBox({
+        type: "info",
+        buttons: ["Redémarrer maintenant", "Plus tard"],
+        defaultId: 0,
+        cancelId: 1,
+        title: "Mise à jour AYEBA disponible",
+        message: "La mise à jour est prête à être installée.",
+      });
+      if (result.response === 0) autoUpdater.quitAndInstall();
+    });
+    autoUpdater.checkForUpdatesAndNotify().catch((error) => log(`auto-update check failed: ${error?.message || error}`));
+  }
+
+  bindDownloads(session.defaultSession);
 
   app.on("second-instance", () => {
     log("second-instance → focus existing window");

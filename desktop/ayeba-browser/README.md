@@ -18,6 +18,26 @@ npm install
 npm start
 ```
 
+### GPU / mode sans échec
+
+L'accélération matérielle est **activée par défaut** (vidéo, WebGL fluides).
+Si le processus GPU crash (vieux pilote, antivirus 360…), AYEBA écrit
+`%APPDATA%\AyebaBrowser\gpu-safe-mode` et redémarre en rendu logiciel.
+
+Variables d'environnement :
+
+| Variable | Effet |
+| --- | --- |
+| `AYEBA_GPU=0` | Force le rendu logiciel |
+| `AYEBA_GPU=1` | Force le matériel (supprime le drapeau safe-mode) |
+| `AYEBA_DEBUG=1` | Journalise aussi sur stderr |
+
+### Raccourcis (actifs même quand la page a le focus)
+
+Ctrl+T/W/N · Ctrl+Shift+N (InPrivate) · Ctrl+L (omnibox) · Ctrl+R (+Shift = forcé) ·
+Ctrl+F · Ctrl+H · Ctrl+J · Ctrl+P · Ctrl+D · Ctrl+Shift+O (favoris) ·
+Ctrl+Tab / Ctrl+Shift+Tab · Alt+←/→ · F12 ou Ctrl+Shift+I (DevTools)
+
 ## Build distribution
 
 ```bash

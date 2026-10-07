@@ -1,12 +1,14 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
+// Surface volontairement minimale : ce preload tourne sur TOUTES les pages
+// web — n'exposer ici que des appels sans risque (jamais pass:*, data:clear…).
+// Les canaux sensibles exigent d'ailleurs l'émetteur chrome/rail côté main.
 contextBridge.exposeInMainWorld("ayebaTab", {
-  openInAyeba: (url) => ipcRenderer.invoke("shell:open-external", url),
   search: async (q) => {
     const query = String(q || "").trim();
     if (!query) return;
     const url = await ipcRenderer.invoke("settings:search-url-global", query);
     if (url) window.location.href = url;
   },
-  getSettings: () => ipcRenderer.invoke("settings:search-url-global", "").then(() => ipcRenderer.invoke("app:get-paths")),
+  getPaths: () => ipcRenderer.invoke("app:get-paths"),
 });

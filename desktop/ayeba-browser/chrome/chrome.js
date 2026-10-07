@@ -202,12 +202,24 @@
       b.type = "button";
       b.className = "fav-row";
       const fav = faviconFor(item.url);
-      b.innerHTML = `
-        ${fav ? `<img src="${fav}" alt="" onerror="this.style.display='none'"/>` : ""}
-        <div class="fav-text">
+      // Pas de onerror inline : la CSP du chrome (script-src 'self') bloque les
+      // gestionnaires inline → la favicon cassée restait affichée.
+      if (fav) {
+        const img = document.createElement("img");
+        img.src = fav;
+        img.alt = "";
+        img.addEventListener("error", () => {
+          img.style.display = "none";
+        });
+        b.appendChild(img);
+      }
+      b.insertAdjacentHTML(
+        "beforeend",
+        `<div class="fav-text">
           <strong>${escapeHtml(item.title || item.url)}</strong>
           <span>${escapeHtml(item.url)}</span>
-        </div>`;
+        </div>`,
+      );
       const rm = document.createElement("button");
       rm.type = "button";
       rm.className = "fav-remove";
@@ -614,7 +626,8 @@
       holder.querySelectorAll("[data-fill]").forEach((b) =>
         b.addEventListener("click", async () => {
           const ok = await api.invoke("pass:fill", b.dataset.fill);
-          b.textContent = ok ? "Rempli ✓" : "Aucun champ";
+          b.textContent =
+            ok === true ? "Rempli ✓" : ok === "cancelled" ? "Annulé" : "Aucun champ";
           setTimeout(() => (b.textContent = "Remplir"), 1500);
         }),
       );
@@ -1141,13 +1154,20 @@
   api.on("ui:open", async (payload) => {
     const name = typeof payload === "string" ? payload : payload?.name;
     const y = typeof payload === "object" ? payload?.y : undefined;
-    if (name === "tabs") showTabsPanel(y, "left");
+    const side = (typeof payload === "object" && payload?.side) || "left";
+    if (name === "tabs") showTabsPanel(y, side);
     else if (name === "favorites") { openFlyout("favorites"); await renderFavoritesDrawer(); }
-    else if (name === "history") showList("history", y, "left");
-    else if (name === "downloads") showDownloadsPanel(y, "left");
-    else if (name === "extensions") await showExtensions(y, "left");
-    else if (name === "passwords") await showPasswords(y, "left");
-    else if (name === "settings") await showSettings(y, "left");
+    else if (name === "history") showList("history", y, side);
+    else if (name === "downloads") showDownloadsPanel(y, side);
+    else if (name === "extensions") await showExtensions(y, side);
+    else if (name === "passwords") await showPasswords(y, side);
+    else if (name === "settings") await showSettings(y, side);
+    // Cibles clavier (raccourcis captés par le main quand la page a le focus)
+    else if (name === "find") openFind();
+    else if (name === "omnibox") {
+      els.omni?.focus();
+      els.omni?.select();
+    } else if (name === "fav-add") void addFavorite();
   });
 
   let lastUrl = "";

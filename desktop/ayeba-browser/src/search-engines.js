@@ -35,7 +35,16 @@ function buildSearchUrl(query, engineId) {
 function normalizeOmni(input, engineId) {
   const raw = String(input || "").trim();
   if (!raw) return null;
-  if (/^(https?|file|ayeba):\/\//i.test(raw)) return raw;
+  // Schémas réellement supportés par les onglets. « ayeba: » n'est pas un
+  // protocole enregistré : le laisser passer ferait échouer loadURL — il part
+  // en recherche comme n'importe quel schéma inconnu.
+  if (/^(https?|file):\/\//i.test(raw)) return raw;
+  // Hôtes locaux sans point : localhost, 127.x.x.x, [::1] (+ port/chemin)
+  // doivent naviguer, pas partir en recherche.
+  if (/^(localhost|127(?:\.\d{1,3}){3}|\[::1\])(:\d+)?(\/\S*)?$/i.test(raw)) {
+    return `http://${raw}`;
+  }
+  if (/^::1(:\d+)?(\/\S*)?$/.test(raw)) return `http://[::1]${raw.slice(3)}`;
   if (raw.includes(" ") || !raw.includes(".")) return buildSearchUrl(raw, engineId);
   return `https://${raw}`;
 }
