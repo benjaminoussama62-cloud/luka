@@ -27,7 +27,7 @@
     },
     {
       "path": "/api/cron/money-reconcile",
-      "schedule": "*/15 * * * *"
+      "schedule": "0 5 * * *"
     }
   ]
 }
