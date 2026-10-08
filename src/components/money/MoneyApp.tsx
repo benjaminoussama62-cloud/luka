@@ -1,10 +1,11 @@
 "use client";
 
 /**
- * Ayeba Money — coquille légère.
+ * Ayeba Money — coquille légère, langage visuel ayeba.app.
  * Toute la sécurité vit côté serveur ; ici : affichage + saisie.
  * Le PIN n'est jamais conservé (state locale, effacée après envoi), jamais
  * stocké dans localStorage, jamais envoyé ailleurs qu'en POST JSON.
+ * L'@adresse est OPTIONNELLE — on envoie à un email ou un téléphone.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -65,6 +66,7 @@ export function MoneyApp() {
   const [auth, setAuth] = useState<"loading" | "anon" | "ok">("loading");
   const [txs, setTxs] = useState<Tx[]>([]);
   const [panel, setPanel] = useState<Panel>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [toast, setToast] = useState("");
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -98,19 +100,21 @@ export function MoneyApp() {
 
   if (auth === "loading") {
     return (
-      <main className="mn-shell">
-        <div className="mn-center">Chargement…</div>
+      <main className="mn-root">
+        <div className="mn-center">
+          <span className="mn-kicker">Ayeba Money</span>
+        </div>
       </main>
     );
   }
   if (auth === "anon") {
     return (
-      <main className="mn-shell">
-        <div className="mn-center mn-card mn-login">
-          <MoneyLogo />
-          <h1>Ayeba Money</h1>
-          <p>Votre portefeuille USD &amp; CDF — transferts internes instantanés et gratuits.</p>
-          <a className="mn-btn mn-btn-primary" href="/compte?next=/money">
+      <main className="mn-root">
+        <div className="mn-center">
+          <span className="mn-kicker">Portefeuille</span>
+          <h1 className="mn-title">AYEBA MONEY</h1>
+          <p className="mn-sub">Soldes USD &amp; CDF. Transferts internes instantanés et gratuits.</p>
+          <a className="mn-btn-primary" href="/compte?next=/money">
             Se connecter avec Ayeba
           </a>
         </div>
@@ -119,68 +123,126 @@ export function MoneyApp() {
   }
 
   const hasPin = info?.wallet.hasPin ?? false;
+  const frozen = info?.wallet.status === "frozen";
 
   return (
-    <main className="mn-shell">
-      <header className="mn-top">
+    <main className="mn-root">
+      <header className="mn-topbar">
         <div className="mn-brand">
-          <MoneyLogo small />
-          <span>Ayeba Money</span>
+          <strong>AYEBA</strong>
+          <span className="mn-kicker">Money</span>
         </div>
-        <div className="mn-handle">
-          {info?.wallet.handle ? (
-            <span className="mn-chip">{info.wallet.handle}</span>
-          ) : (
-            <HandleClaim onDone={(h) => { notify(`Adresse ${h} activée`); void refresh(); }} />
-          )}
+        <div className="mn-topbar-right">
+          {info?.wallet.handle && <span className="mn-addr">{info.wallet.handle}</span>}
+          <button
+            type="button"
+            className="mn-icon-btn"
+            title="Paramètres"
+            aria-label="Paramètres"
+            onClick={() => setSettingsOpen((v) => !v)}
+          >
+            <IconGear />
+          </button>
         </div>
       </header>
 
-      {!hasPin ? (
-        <PinSetup
-          onDone={() => {
-            notify("Code PIN activé — vos mouvements sont protégés");
-            void refresh();
-          }}
-        />
-      ) : (
-        <>
-          <section className="mn-balances">
-            <BalanceCard currency="USD" display={info?.balances.USD.display ?? "…"} />
-            <BalanceCard currency="CDF" display={info?.balances.CDF.display ?? "…"} />
-          </section>
+      <div className="mn-body">
+        {!hasPin ? (
+          <PinSetup
+            onDone={() => {
+              notify("Code PIN activé — vos mouvements sont protégés");
+              void refresh();
+            }}
+          />
+        ) : (
+          <>
+            {frozen && (
+              <div className="mn-banner-bad">
+                Portefeuille gelé — aucun mouvement possible. Contactez le support.
+              </div>
+            )}
 
-          <nav className="mn-actions">
-            <ActionBtn label="Envoyer" icon={<IconSend />} onClick={() => setPanel("send")} />
-            <ActionBtn label="Déposer" icon={<IconPlus />} onClick={() => setPanel("deposit")} />
-            <ActionBtn label="Retirer" icon={<IconDown />} onClick={() => setPanel("withdraw")} />
-          </nav>
+            <section className="mn-hero">
+              <span className="mn-kicker">Vos soldes</span>
+              <div className="mn-balances">
+                <div className="mn-bal">
+                  <span className="mn-bal-cur">USD — Dollars</span>
+                  <b>
+                    {info?.balances.USD.display ?? "…"}
+                    <em>$</em>
+                  </b>
+                </div>
+                <div className="mn-bal">
+                  <span className="mn-bal-cur">CDF — Francs congolais</span>
+                  <b>
+                    {info?.balances.CDF.display ?? "…"}
+                    <em>FC</em>
+                  </b>
+                </div>
+              </div>
+            </section>
 
-          <section className="mn-history">
-            <h2>Activité</h2>
-            {txs.length === 0 && <p className="mn-empty">Aucun mouvement pour l’instant.</p>}
-            <ul>
-              {txs.map((t) => (
-                <li key={t.entryId} className={`mn-tx mn-tx-${t.status}`}>
-                  <span className={`mn-tx-ico ${t.direction}`}>{t.direction === "in" ? "↓" : "↑"}</span>
-                  <span className="mn-tx-main">
-                    <b>{TX_LABEL[t.kind]}</b>
+            <nav className="mn-actions">
+              <button type="button" className="mn-act mn-act-primary" onClick={() => setPanel("send")} disabled={frozen}>
+                <IconSend /> Envoyer
+              </button>
+              <button type="button" className="mn-act" onClick={() => setPanel("deposit")} disabled={frozen}>
+                <IconPlus /> Déposer
+              </button>
+              <button type="button" className="mn-act" onClick={() => setPanel("withdraw")} disabled={frozen}>
+                <IconDown /> Retirer
+              </button>
+            </nav>
+
+            {settingsOpen && (
+              <section className="mn-settings">
+                <span className="mn-kicker">Paramètres</span>
+                <div className="mn-settings-row">
+                  <div>
+                    <b>Adresse de réception</b>
                     <small>
-                      {new Date(t.createdAt).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}
-                      {" · "}
-                      {STATUS_LABEL[t.status] ?? t.status}
+                      Optionnel — un @pseudo facilite les envois vers vous. Sans adresse,
+                      on peut déjà vous envoyer via votre email.
                     </small>
-                  </span>
-                  <span className={`mn-tx-amt ${t.direction}`}>
-                    {t.direction === "in" ? "+" : "−"}
-                    {t.amount} {t.currency === "USD" ? "$" : "FC"}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </section>
-        </>
-      )}
+                  </div>
+                  {info?.wallet.handle ? (
+                    <span className="mn-addr">{info.wallet.handle}</span>
+                  ) : (
+                    <HandleClaim onDone={(h) => { notify(`Adresse ${h} activée`); void refresh(); }} />
+                  )}
+                </div>
+                <PinChange onDone={() => notify("Code PIN modifié")} />
+              </section>
+            )}
+
+            <section className="mn-history">
+              <span className="mn-kicker">Activité</span>
+              {txs.length === 0 && <p className="mn-empty">Aucun mouvement pour l&rsquo;instant.</p>}
+              <ul>
+                {txs.map((t) => (
+                  <li key={t.entryId} className={`mn-tx mn-tx-${t.status}`}>
+                    <span className={`mn-tx-dir ${t.direction}`}>
+                      {t.direction === "in" ? <IconIn /> : <IconOut />}
+                    </span>
+                    <span className="mn-tx-main">
+                      <b>{TX_LABEL[t.kind]}</b>
+                      <small>
+                        {new Date(t.createdAt).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}
+                        {" · "}
+                        {STATUS_LABEL[t.status] ?? t.status}
+                      </small>
+                    </span>
+                    <span className={`mn-tx-amt ${t.direction}`}>
+                      {t.direction === "in" ? "+" : "−"}
+                      {t.amount} <i>{t.currency === "USD" ? "$" : "FC"}</i>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          </>
+        )}
+      </div>
 
       {panel && (
         <MovePanel
@@ -198,65 +260,61 @@ export function MoneyApp() {
 
       {toast && <div className="mn-toast">{toast}</div>}
       {info && !info.integrityOk && (
-        <div className="mn-warn">Anomalie de cohérence détectée — nos équipes ont été notifiées.</div>
+        <div className="mn-banner-bad mn-banner-fixed">
+          Anomalie de cohérence détectée — nos équipes ont été notifiées.
+        </div>
       )}
     </main>
   );
 }
 
-/* ── Sous-composants ─────────────────────────────────────────────── */
-
-function MoneyLogo({ small }: { small?: boolean }) {
-  return (
-    <svg width={small ? 22 : 44} height={small ? 22 : 44} viewBox="0 0 48 48" fill="none" aria-hidden>
-      <rect x="3" y="10" width="42" height="30" rx="7" stroke="currentColor" strokeWidth="3" />
-      <path d="M3 19h42" stroke="currentColor" strokeWidth="3" />
-      <circle cx="35" cy="30" r="3.4" fill="currentColor" />
-    </svg>
-  );
-}
+/* ── Icônes (traits fins, façon rail Ayeba) ──────────────────────── */
 
 function IconSend() {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
       <path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7Z" />
     </svg>
   );
 }
 function IconPlus() {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
       <path d="M12 5v14M5 12h14" />
     </svg>
   );
 }
 function IconDown() {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
       <path d="M12 5v14m0 0 6-6m-6 6-6-6" />
     </svg>
   );
 }
-
-function BalanceCard({ currency, display }: { currency: "USD" | "CDF"; display: string }) {
+function IconIn() {
   return (
-    <div className={`mn-card mn-bal mn-bal-${currency.toLowerCase()}`}>
-      <small>{currency === "USD" ? "Dollars" : "Francs congolais"}</small>
-      <b>
-        {display} <em>{currency === "USD" ? "$" : "FC"}</em>
-      </b>
-    </div>
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 19V5m0 0-6 6m6-6 6 6" />
+    </svg>
+  );
+}
+function IconOut() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 5v14m0 0 6-6m-6 6-6-6" />
+    </svg>
+  );
+}
+function IconGear() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" />
+    </svg>
   );
 }
 
-function ActionBtn({ label, icon, onClick }: { label: string; icon: React.ReactNode; onClick: () => void }) {
-  return (
-    <button type="button" className="mn-action" onClick={onClick}>
-      <span className="mn-action-ico">{icon}</span>
-      {label}
-    </button>
-  );
-}
+/* ── Sous-composants ─────────────────────────────────────────────── */
 
 function PinInput({ value, onChange, autoFocus }: { value: string; onChange: (v: string) => void; autoFocus?: boolean }) {
   return (
@@ -299,21 +357,82 @@ function PinSetup({ onDone }: { onDone: () => void }) {
   }
 
   return (
-    <section className="mn-card mn-pinsetup">
+    <section className="mn-pinsetup">
+      <span className="mn-kicker">Sécurité</span>
       <h2>Créez votre code PIN</h2>
       <p>
-        4 chiffres, exigés pour <b>chaque</b> envoi ou retrait. Même si votre session est volée,
-        votre argent ne bouge pas sans ce code.
+        4 chiffres, exigés pour <b>chaque</b> envoi ou retrait. Même si votre session est
+        volée, votre argent ne bouge pas sans ce code.
       </p>
-      <label>Code PIN</label>
-      <PinInput value={pin} onChange={setPin} autoFocus />
-      <label>Confirmez</label>
-      <PinInput value={confirm} onChange={setConfirm} />
+      <label>
+        Code PIN
+        <PinInput value={pin} onChange={setPin} autoFocus />
+      </label>
+      <label>
+        Confirmez
+        <PinInput value={confirm} onChange={setConfirm} />
+      </label>
       {error && <p className="mn-error">{error}</p>}
-      <button className="mn-btn mn-btn-primary" disabled={busy || pin.length !== 4 || confirm.length !== 4} onClick={() => void submit()}>
+      <button className="mn-btn-primary" disabled={busy || pin.length !== 4 || confirm.length !== 4} onClick={() => void submit()}>
         {busy ? "Activation…" : "Activer le PIN"}
       </button>
     </section>
+  );
+}
+
+function PinChange({ onDone }: { onDone: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [current, setCurrent] = useState("");
+  const [next, setNext] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function submit() {
+    if (next.length !== 4) return setError("4 chiffres requis");
+    setBusy(true);
+    setError("");
+    try {
+      await api("/api/money/pin", { method: "POST", body: JSON.stringify({ pin: next, currentPin: current }) });
+      setOpen(false);
+      setCurrent("");
+      setNext("");
+      onDone();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <div className="mn-settings-row">
+        <div>
+          <b>Code PIN</b>
+          <small>Modifier le code exigé à chaque mouvement.</small>
+        </div>
+        <button type="button" className="mn-btn" onClick={() => setOpen(true)}>Changer</button>
+      </div>
+    );
+  }
+  return (
+    <div className="mn-settings-row mn-pinchange">
+      <div>
+        <b>Nouveau code PIN</b>
+        <small>Le code actuel est requis pour le changer.</small>
+      </div>
+      <div className="mn-pinchange-fields">
+        <PinInput value={current} onChange={setCurrent} />
+        <PinInput value={next} onChange={setNext} />
+        {error && <small className="mn-error">{error}</small>}
+        <span>
+          <button type="button" className="mn-btn" onClick={() => setOpen(false)}>Annuler</button>
+          <button type="button" className="mn-btn-primary" disabled={busy || current.length !== 4 || next.length !== 4} onClick={() => void submit()}>
+            {busy ? "…" : "Valider"}
+          </button>
+        </span>
+      </div>
+    </div>
   );
 }
 
@@ -338,13 +457,13 @@ function HandleClaim({ onDone }: { onDone: (h: string) => void }) {
 
   if (!open) {
     return (
-      <button type="button" className="mn-chip mn-chip-btn" onClick={() => setOpen(true)}>
-        + Créer mon @adresse
+      <button type="button" className="mn-btn" onClick={() => setOpen(true)}>
+        Choisir un @pseudo
       </button>
     );
   }
   return (
-    <span className="mn-handle-claim">
+    <span className="mn-claim">
       <input
         value={value}
         onChange={(e) => setValue(e.target.value)}
@@ -353,7 +472,7 @@ function HandleClaim({ onDone }: { onDone: (h: string) => void }) {
         autoFocus
         onKeyDown={(e) => e.key === "Enter" && void submit()}
       />
-      <button type="button" onClick={() => void submit()} disabled={busy}>OK</button>
+      <button type="button" className="mn-btn-primary" onClick={() => void submit()} disabled={busy}>OK</button>
       {error && <small className="mn-error">{error}</small>}
     </span>
   );
@@ -419,11 +538,14 @@ function MovePanel({
   return (
     <div className="mn-overlay" onClick={() => onClose(false)}>
       <section className="mn-sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-label={title}>
-        <h2>{title}</h2>
+        <div className="mn-sheet-head">
+          <span className="mn-kicker">{title}</span>
+          <button type="button" className="mn-icon-btn" aria-label="Fermer" onClick={() => onClose(false)}>✕</button>
+        </div>
         {kind === "send" && (
           <label>
-            Destinataire (@adresse, email ou téléphone)
-            <input value={to} onChange={(e) => setTo(e.target.value)} placeholder="@pseudo" autoFocus />
+            Destinataire — email, téléphone ou @pseudo
+            <input value={to} onChange={(e) => setTo(e.target.value)} placeholder="nom@ayeba.app ou +243 …" autoFocus />
           </label>
         )}
         {kind !== "send" && (
@@ -471,7 +593,7 @@ function MovePanel({
           <button type="button" className="mn-btn" onClick={() => onClose(false)}>Annuler</button>
           <button
             type="button"
-            className="mn-btn mn-btn-primary"
+            className="mn-btn-primary"
             disabled={busy || noProvider || !amount || (kind === "send" && (!to || pin.length !== 4)) || (kind !== "send" && !phone) || (kind === "withdraw" && pin.length !== 4)}
             onClick={() => void submit()}
           >
