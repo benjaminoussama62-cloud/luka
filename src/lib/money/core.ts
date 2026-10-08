@@ -816,19 +816,118 @@ export async function listTransactions(
   walletId: string,
   limit = 30,
   beforeId?: number,
-): Promise<Array<MoneyTransaction & { direction: "in" | "out"; entry_id: number }>> {
+): Promise<
+  Array<
+    Omit<MoneyTransaction, "meta"> & {
+      direction: "in" | "out";
+      entry_id: number;
+      counterparty: string | null;
+      meta: Record<string, unknown>;
+    }
+  >
+> {
   const rows = (await (await db()).all(
-    `SELECT t.*, e.id AS entry_id FROM money_entries e
+    `SELECT t.*, e.id AS entry_id,
+            cw.handle AS cp_handle, cu.email AS cp_email
+     FROM money_entries e
      JOIN money_transactions t ON t.id = e.transaction_id
+     LEFT JOIN money_wallets cw
+       ON cw.id = CASE WHEN t.to_wallet_id = ? THEN t.from_wallet_id ELSE t.to_wallet_id END
+     LEFT JOIN users cu ON cu.id = cw.user_id
      WHERE e.wallet_id = ? AND e.id < COALESCE(?, 9223372036854775807)
      ORDER BY e.id DESC LIMIT ?`,
-    [walletId, beforeId ?? null, Math.min(limit, 100)],
-  )) as Array<MoneyTransaction & { entry_id: number }>;
-  return rows.map((t) => ({
-    ...t,
-    amount_minor: Number(t.amount_minor),
-    direction: t.to_wallet_id === walletId && t.from_wallet_id !== walletId ? "in" : "out",
-  }));
+    [walletId, walletId, beforeId ?? null, Math.min(limit, 100)],
+  )) as Array<
+    MoneyTransaction & { entry_id: number; cp_handle: string | null; cp_email: string | null }
+  >;
+  return rows.map((t) => {
+    let meta: Record<string, unknown> = {};
+    try {
+      meta = JSON.parse(t.meta || "{}") as Record<string, unknown>;
+    } catch {
+      /* meta illisible → objet vide */
+    }
+    return {
+      ...t,
+      amount_minor: Number(t.amount_minor),
+      direction: t.to_wallet_id === walletId && t.from_wallet_id !== walletId ? "in" : "out",
+      counterparty: t.cp_handle ? `@${t.cp_handle}` : t.cp_email,
+      meta,
+    };
+  });
+}
+
+/**
+ * Totaux du mois courant (UTC) par devise — alimente la ligne
+ * « ce mois » de l'accueil. Les reversal/recrédits entrent dans "in".
+ */
+export async function monthlyTotals(
+  walletId: string,
+): Promise<Record<MoneyCurrency, { in: number; out: number }>> {
+  const start = new Date();
+  start.setUTCDate(1);
+  start.setUTCHours(0, 0, 0, 0);
+  const rows = (await (await db()).all(
+    `SELECT currency,
+            SUM(CASE WHEN delta_minor > 0 THEN delta_minor ELSE 0 END) AS in_minor,
+            SUM(CASE WHEN delta_minor < 0 THEN -delta_minor ELSE 0 END) AS out_minor
+     FROM money_entries
+     WHERE wallet_id = ? AND created_at >= ?
+     GROUP BY currency`,
+    [walletId, start.toISOString()],
+  )) as Array<{ currency: MoneyCurrency; in_minor: number; out_minor: number }>;
+  const out: Record<MoneyCurrency, { in: number; out: number }> = {
+    USD: { in: 0, out: 0 },
+    CDF: { in: 0, out: 0 },
+  };
+  for (const r of rows) {
+    out[r.currency] = { in: Number(r.in_minor) || 0, out: Number(r.out_minor) || 0 };
+  }
+  return out;
+}
+
+/**
+ * Relevé complet du wallet — une ligne par écriture, ordre chronologique.
+ * Utilisé par l'export CSV (/api/money/statement).
+ */
+export async function listStatementEntries(walletId: string, limit = 5000) {
+  const rows = (await (await db()).all(
+    `SELECT e.id AS entry_id, e.delta_minor, e.balance_after_minor, e.created_at AS entry_at,
+            t.id, t.kind, t.status, t.currency, t.provider, t.provider_ref, t.meta,
+            t.from_wallet_id, t.to_wallet_id,
+            cw.handle AS cp_handle, cu.email AS cp_email
+     FROM money_entries e
+     JOIN money_transactions t ON t.id = e.transaction_id
+     LEFT JOIN money_wallets cw
+       ON cw.id = CASE WHEN t.to_wallet_id = ? THEN t.from_wallet_id ELSE t.to_wallet_id END
+     LEFT JOIN users cu ON cu.id = cw.user_id
+     WHERE e.wallet_id = ?
+     ORDER BY e.id ASC LIMIT ?`,
+    [walletId, walletId, Math.min(limit, 20000)],
+  )) as Array<{
+    entry_id: number;
+    delta_minor: number;
+    balance_after_minor: number;
+    entry_at: string;
+    id: string;
+    kind: string;
+    status: string;
+    currency: string;
+    provider: string | null;
+    provider_ref: string | null;
+    meta: string;
+    cp_handle: string | null;
+    cp_email: string | null;
+  }>;
+  return rows.map((r) => {
+    let meta: Record<string, unknown> = {};
+    try {
+      meta = JSON.parse(r.meta || "{}") as Record<string, unknown>;
+    } catch {
+      /* ignore */
+    }
+    return { ...r, counterparty: r.cp_handle ? `@${r.cp_handle}` : r.cp_email, meta };
+  });
 }
 
 /**

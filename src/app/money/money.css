@@ -122,10 +122,30 @@
 }
 .mn-bal em { font-style: normal; font-size: 0.5em; color: var(--muted); margin-left: 8px; }
 
+/* Ligne « ce mois » */
+.mn-month {
+  display: flex;
+  align-items: baseline;
+  gap: 8px 22px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+.mn-month > span {
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.mn-month small { color: var(--muted); font-size: 12.5px; }
+.mn-month i { font-style: normal; font-variant-numeric: tabular-nums; }
+.mn-month i.in { color: var(--good); }
+.mn-month i.out { color: var(--muted); }
+
 /* Actions — boutons pleine hauteur, façon compose Mail */
 .mn-actions {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 10px;
   margin-bottom: 40px;
   max-width: 880px;
@@ -153,32 +173,75 @@
 .mn-act-primary:hover { background: var(--orange); border-color: var(--orange); color: #fff; }
 .mn-act-primary:disabled { background: var(--surface); color: var(--faint); border-color: var(--line); }
 
-/* Paramètres */
-.mn-settings {
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--surface);
-  padding: 20px 22px;
-  margin-bottom: 40px;
+/* Paramètres — panneau plein */
+.mn-sheet-settings { max-width: 560px; }
+.mn-settings-scroll {
+  overflow-y: auto;
+  max-height: min(70vh, 640px);
   display: grid;
-  gap: 18px;
+  gap: 22px;
+  padding-right: 4px;
 }
-.mn-settings-row {
+.mn-set-group { display: grid; gap: 10px; }
+.mn-set-title {
+  font-family: var(--font-mono), monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--orange);
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+}
+.mn-set-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 18px;
+  gap: 16px;
   flex-wrap: wrap;
 }
-.mn-settings-row > div { display: flex; flex-direction: column; gap: 3px; }
-.mn-settings-row b { font-size: 14px; font-weight: 600; }
-.mn-settings-row small { color: var(--faint); font-size: 12.5px; line-height: 1.5; max-width: 52ch; }
+.mn-set-row > div { display: flex; flex-direction: column; gap: 3px; }
+.mn-set-row b { font-size: 14px; font-weight: 600; }
+.mn-set-row small { color: var(--faint); font-size: 12.5px; line-height: 1.5; max-width: 48ch; }
+.mn-set-meta { font-family: var(--font-mono), monospace; font-size: 10.5px; color: var(--faint); white-space: nowrap; }
+.mn-addr-inline { font-family: var(--font-mono), monospace; letter-spacing: 0.04em; }
+.mn-set-links { display: grid; gap: 2px; }
+.mn-set-links a {
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 13px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+  transition: color 0.15s;
+}
+.mn-set-links a:last-child { border-bottom: 0; }
+.mn-set-links a:hover { color: var(--ink); }
+.mn-set-links a.mn-danger:hover { color: var(--bad); }
 .mn-pinchange-fields { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .mn-pinchange-fields > span { display: flex; gap: 8px; }
 
 /* Historique — liste fine façon Mail */
 .mn-history { display: grid; gap: 12px; }
+.mn-history-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.mn-history-tools { display: flex; gap: 8px; }
 .mn-empty { color: var(--faint); font-size: 13.5px; }
+.mn-filters { display: flex; gap: 8px; flex-wrap: wrap; }
+.mn-chip {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  border-radius: 99px;
+  padding: 6px 14px;
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+.mn-chip:hover { border-color: var(--orange); color: var(--orange); }
+.mn-chip.on { border-color: var(--orange); color: var(--orange); }
+.mn-btn-mini { padding: 7px 12px; font-size: 9.5px; display: inline-flex; align-items: center; gap: 7px; text-decoration: none; }
+.mn-more { justify-self: center; margin-top: 4px; }
 .mn-history ul { list-style: none; margin: 0; padding: 0; display: grid; }
 .mn-tx {
   display: flex;
@@ -186,7 +249,18 @@
   gap: 14px;
   padding: 13px 4px;
   border-bottom: 1px solid var(--line);
+  width: 100%;
+  background: none;
+  border-top: 0;
+  border-left: 0;
+  border-right: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s;
 }
+.mn-tx:hover { background: rgba(255, 255, 255, 0.025); }
 .mn-tx-dir {
   width: 30px; height: 30px;
   display: grid; place-content: center;
@@ -401,6 +475,64 @@ a.mn-btn-primary { text-decoration: none; display: inline-block; }
   z-index: 60; margin-bottom: 0; max-width: 90vw;
 }
 
+/* Recevoir — QR centré */
+.mn-sheet-receive { text-align: center; }
+.mn-qr {
+  display: grid;
+  place-content: center;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  justify-self: center;
+}
+.mn-qr img { display: block; image-rendering: pixelated; }
+.mn-qr-loading { width: 200px; height: 200px; }
+.mn-receive-id {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.mn-receive-id b {
+  font-family: var(--font-mono), monospace;
+  font-size: 16px;
+  letter-spacing: 0.04em;
+}
+.mn-sheet-receive .mn-note { text-align: center; }
+.mn-sheet-receive .mn-sheet-actions { justify-content: center; }
+.mn-sheet-actions .mn-btn, .mn-sheet-actions .mn-btn-primary {
+  display: inline-flex; align-items: center; gap: 7px;
+}
+
+/* Reçu — détail transaction */
+.mn-receipt-amt {
+  font-family: var(--font-display), var(--font-body), sans-serif;
+  font-size: 2.2rem;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.mn-receipt-amt.in { color: var(--good); }
+.mn-receipt-amt i { font-style: normal; font-size: 0.5em; color: var(--faint); }
+.mn-receipt { margin: 0; display: grid; }
+.mn-receipt > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line);
+}
+.mn-receipt > div:last-child { border-bottom: 0; }
+.mn-receipt dt {
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--faint);
+  flex-shrink: 0;
+}
+.mn-receipt dd { margin: 0; font-size: 13px; text-align: right; overflow-wrap: anywhere; }
+
 /* Desktop : sheet centrée */
 @media (min-width: 640px) {
   .mn-overlay { align-items: center; padding: 24px; }
@@ -416,9 +548,11 @@ a.mn-btn-primary { text-decoration: none; display: inline-block; }
 @media (max-width: 620px) {
   .mn-body { padding: 26px 16px 48px; }
   .mn-balances { grid-template-columns: 1fr; }
-  .mn-actions { grid-template-columns: repeat(3, 1fr); gap: 8px; }
-  .mn-act { padding: 12px 6px; font-size: 9.5px; flex-direction: column; gap: 7px; }
+  .mn-actions { grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .mn-act { padding: 12px 4px; font-size: 8.5px; flex-direction: column; gap: 7px; }
   .mn-addr { display: none; }
   .mn-title { font-size: 2rem; }
   .mn-legal { padding-bottom: 4px; }
+  .mn-filters { gap: 6px; }
+  .mn-chip { padding: 5px 11px; }
 }
