@@ -27,6 +27,21 @@ const LINKS = [
     text: "Données locales, recherches et absence de télémétrie dans les apps Ayeba.",
   },
   {
+    href: "/privacy/money",
+    title: "Confidentialité — Ayeba Money",
+    text: "Notice propre au portefeuille : soldes, transactions, PIN, partenaires de paiement.",
+  },
+  {
+    href: "/money/conditions",
+    title: "Conditions — Ayeba Money",
+    text: "Portefeuille virtuel, transferts internes, dépôts/retraits, code PIN, responsabilités.",
+  },
+  {
+    href: "/money/suppression",
+    title: "Suppression — Ayeba Money",
+    text: "Fermeture du portefeuille : procédure, données supprimées et conservées.",
+  },
+  {
     href: "/terms",
     title: "Conditions d’utilisation",
     text: "Règles d’usage du moteur, des comptes et des services associés.",

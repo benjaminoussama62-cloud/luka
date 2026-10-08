@@ -7,6 +7,7 @@
  * stocké dans localStorage, jamais envoyé ailleurs qu'en POST JSON.
  * L'@adresse est OPTIONNELLE — on envoie à un email ou un téléphone.
  */
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 type WalletInfo = {
@@ -110,13 +111,34 @@ export function MoneyApp() {
   if (auth === "anon") {
     return (
       <main className="mn-root">
-        <div className="mn-center">
-          <span className="mn-kicker">Portefeuille</span>
-          <h1 className="mn-title">AYEBA MONEY</h1>
-          <p className="mn-sub">Soldes USD &amp; CDF. Transferts internes instantanés et gratuits.</p>
-          <a className="mn-btn-primary" href="/compte?next=/money">
-            Se connecter avec Ayeba
-          </a>
+        <div className="mn-landing">
+          <div className="mn-center">
+            <span className="mn-kicker">Portefeuille — écosystème Ayeba</span>
+            <h1 className="mn-title">AYEBA MONEY</h1>
+            <p className="mn-sub">
+              Un portefeuille à part, dans votre compte Ayeba. Soldes USD &amp; CDF, transferts
+              internes instantanés et gratuits, dépôts et retraits Mobile Money.
+            </p>
+            <div className="mn-features">
+              <div>
+                <b>Instantané</b>
+                <small>Envoyez à un email ou un téléphone Ayeba — zéro frais, zéro attente.</small>
+              </div>
+              <div>
+                <b>Blindé</b>
+                <small>PIN exigé à chaque mouvement, journal comptable immuable, audit complet.</small>
+              </div>
+              <div>
+                <b>Mobile Money</b>
+                <small>Dépôt et retrait vers votre compte — recrédité automatiquement si échec.</small>
+              </div>
+            </div>
+            <a className="mn-btn-primary" href="/compte?next=/money">
+              Se connecter avec Ayeba
+            </a>
+            <small className="mn-landing-note">Un compte Ayeba suffit — le PIN est créé au premier accès.</small>
+          </div>
+          <LegalFooter />
         </div>
       </main>
     );
@@ -242,6 +264,8 @@ export function MoneyApp() {
             </section>
           </>
         )}
+
+        <LegalFooter />
       </div>
 
       {panel && (
@@ -315,6 +339,18 @@ function IconGear() {
 }
 
 /* ── Sous-composants ─────────────────────────────────────────────── */
+
+function LegalFooter() {
+  return (
+    <footer className="mn-legal">
+      <Link href="/privacy/money">Confidentialité</Link>
+      <Link href="/money/conditions">Conditions</Link>
+      <Link href="/money/suppression">Suppression</Link>
+      <Link href="/support">Support</Link>
+      <span className="mn-legal-tag">Produit distinct — écosystème Ayeba</span>
+    </footer>
+  );
+}
 
 function PinInput({ value, onChange, autoFocus }: { value: string; onChange: (v: string) => void; autoFocus?: boolean }) {
   return (

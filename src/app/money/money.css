@@ -324,6 +324,59 @@ a.mn-btn-primary { text-decoration: none; display: inline-block; }
 }
 .mn-claim input:focus { outline: none; border-color: var(--orange); }
 
+/* Landing (non connecté) */
+.mn-landing {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+.mn-features {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  margin: 10px 0 26px;
+  max-width: 720px;
+}
+.mn-features > div {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  padding: 18px;
+  text-align: left;
+}
+.mn-features b { display: block; font-size: 14px; margin-bottom: 6px; color: var(--ink); }
+.mn-features small { color: var(--muted); font-size: 12.5px; line-height: 1.55; }
+.mn-landing-note { color: var(--faint); font-size: 12px; }
+
+/* Pied de page légal */
+.mn-legal {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin-top: auto;
+  padding: 28px 16px 8px;
+  font-size: 12px;
+}
+.mn-legal a {
+  color: var(--faint);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+.mn-legal a:hover { color: var(--ink); }
+.mn-legal-tag {
+  font-family: var(--font-mono), monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--faint);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 3px 8px;
+}
+
 /* Feedback */
 .mn-error { color: var(--bad); font-size: 12.5px; margin: 0; }
 .mn-toast {
@@ -354,6 +407,11 @@ a.mn-btn-primary { text-decoration: none; display: inline-block; }
   .mn-sheet { border-radius: 10px; border-bottom: 1px solid var(--line); }
 }
 
+/* Tablette : grilles à une colonne pour les features */
+@media (max-width: 860px) {
+  .mn-features { grid-template-columns: 1fr; max-width: 480px; margin-left: 0; }
+}
+
 /* Mobile : tout se compresse proprement */
 @media (max-width: 620px) {
   .mn-body { padding: 26px 16px 48px; }
@@ -361,4 +419,6 @@ a.mn-btn-primary { text-decoration: none; display: inline-block; }
   .mn-actions { grid-template-columns: repeat(3, 1fr); gap: 8px; }
   .mn-act { padding: 12px 6px; font-size: 9.5px; flex-direction: column; gap: 7px; }
   .mn-addr { display: none; }
+  .mn-title { font-size: 2rem; }
+  .mn-legal { padding-bottom: 4px; }
 }
