@@ -5,20 +5,35 @@ simulé — les apps chargent le vrai site en HTTPS, la sécurité vit côté se
 
 ## Android — TWA (Bubblewrap)
 
+Le projet Gradle généré vit dans `android-twa/twa-app/` (commité).
+Prérequis : JDK 17 (`JAVA_HOME`) + Android SDK (`ANDROID_HOME`) avec
+`platforms;android-36` et `build-tools;36.0.0`.
+
+Signature — le keystore `android.keystore` (alias `ayeba-money`, RSA 2048)
+n'est **jamais** commité ; son mot de passe est fourni par variables
+d'environnement :
+
 ```bash
-npm i -g @bubblewrap/cli
-cd mobile/android-twa
-bubblewrap init --manifest ../android-twa/twa-manifest.json
-bubblewrap build
+cd mobile/android-twa/twa-app
+JAVA_HOME=... ANDROID_HOME=... \
+KEYSTORE_FILE=../android.keystore \
+KEYSTORE_PASSWORD=... KEY_ALIAS=ayeba-money KEY_PASSWORD=... \
+./gradlew bundleRelease
+# → app/build/outputs/bundle/release/app-release.aab
 ```
 
-Puis :
+Fingerprint de signature : `keytool -list -v -keystore android.keystore`.
+`/.well-known/assetlinks.json` publie l'association dès que
+`ANDROID_PACKAGE_NAME=app.ayeba.money` et
+`ANDROID_SHA256_FINGERPRINT=XX:XX:…` sont configurés en production.
 
-1. Signer l'APK/AAB avec le keystore de production.
-2. Extraire le fingerprint : `keytool -list -v -keystore android.keystore`
-3. Déployer avec `ANDROID_PACKAGE_NAME=app.ayeba.money` et
-   `ANDROID_SHA256_FINGERPRINT=XX:XX:…` — `/.well-known/assetlinks.json`
-   publie alors l'association automatiquement.
+Regénérer le projet si `twa-manifest.json` change (non interactif) :
+
+```bash
+node -e "const {TwaGenerator,TwaManifest}=require('@bubblewrap/core');
+(async()=>{const m=await TwaManifest.fromFile('twa-manifest.json');
+await new TwaGenerator().createTwaProject('twa-app',m,()=>{})})()"
+```
 
 ## iOS + Android — Capacitor
 
