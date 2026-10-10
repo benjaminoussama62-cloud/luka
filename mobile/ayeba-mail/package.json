@@ -1,6 +1,6 @@
 {
   "name": "ayeba-mail-mobile",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "private": true,
   "description": "Ayeba Mail — application mobile offline (Capacitor)",
   "scripts": {
