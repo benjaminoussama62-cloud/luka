@@ -33,8 +33,10 @@ jobs:
       # SDK Android préinstallé sur ubuntu-latest (ANDROID_HOME déjà défini) —
       # android-actions/setup-android@v3 est cassé sur les runners récents.
 
-      - name: Accept SDK licenses
-        run: yes | sdkmanager --licenses || true
+      - name: Accept SDK licenses & install platform 36
+        run: |
+          yes | sdkmanager --licenses || true
+          sdkmanager "platforms;android-36" "build-tools;36.0.0" || true
 
       - name: Install deps, bundle offline app & Capacitor sync
         run: |
@@ -62,8 +64,8 @@ jobs:
           chmod +x gradlew
           ./gradlew bundleRelease --stacktrace
         env:
-          AYEBA_VERSION: "1.0.3"
-          AYEBA_VERSION_CODE: "4"
+          AYEBA_VERSION: "1.0.4"
+          AYEBA_VERSION_CODE: "5"
 
       - name: Upload AAB artifact
         uses: actions/upload-artifact@v4
@@ -75,10 +77,10 @@ jobs:
       - name: Publish AAB on GitHub Releases (download sans login)
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: mail-1.0.3
-          name: Ayeba Mail 1.0.3
+          tag_name: mail-1.0.4
+          name: Ayeba Mail 1.0.4
           body: |
-            Fichier Play Store : **app-release.aab** → renommer `AyebaMail-1.0.3.aab` (API 35)
-            Package : `app.ayeba.mail` — versionCode 4 — application offline embarquée
+            Fichier Play Store : **app-release.aab** → renommer `AyebaMail-1.0.4.aab` (API 35)
+            Package : `app.ayeba.mail` — versionCode 5 — targetSdk 36 — offline embarquée
           files: mobile/ayeba-mail/android/app/build/outputs/bundle/release/app-release.aab
           overwrite_files: true
