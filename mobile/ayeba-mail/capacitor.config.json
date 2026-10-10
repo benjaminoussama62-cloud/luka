@@ -3,7 +3,6 @@
   "appName": "Ayeba Mail",
   "webDir": "www",
   "server": {
-    "url": "https://ayeba.app/mail?app=1",
     "cleartext": false,
     "androidScheme": "https"
   },
