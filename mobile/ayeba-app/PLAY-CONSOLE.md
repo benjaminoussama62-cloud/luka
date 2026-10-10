@@ -68,6 +68,44 @@ Réponds comme ça — sous-déclarer = rejet, sur-déclarer = badge moche :
 
 ---
 
+## Écran « Informations de connexion » (App access)
+
+Réponds **« Oui »** — l'app a un espace compte (login Google/mail) et des
+sections limitées (Compte, Ayeba Mail). « Non » + un reviewer qui tombe
+sur un écran de connexion = rejet.
+
+- Crée un **compte de test dédié** (jamais le tien, jamais un admin) :
+  `playreview@ayeba.app` / mot de passe simple, **sans 2FA**.
+- Instructions à coller (FR + EN) :
+
+```
+Pour utiliser AYEBA, aucun compte n'est requis : la recherche fonctionne
+librement. Seules les pages « Compte » et « Ayeba Mail » demandent une
+connexion. Identifiants de test ci-dessous.
+
+Account is NOT required: search works fully without login. Only the
+"Compte" / "Ayeba Mail" sections ask for sign-in. Demo credentials below.
+```
+
+---
+
+## Écran « Classification du contenu » (IARC)
+
+- E-mail : `contact@ayeba.app` (ou ton adresse Play Console)
+- Catégorie : **« Tous les autres types d'applications »** — pas « Social
+  ou Communication » (même avec l'onglet communauté : l'affichage de
+  contenu externe n'est pas la fonction principale)
+- Cocher les conditions IARC, puis questionnaire :
+
+| Question | Réponse |
+|---|---|
+| Violence / sexe / langage / substances / jeux d'argent | Non |
+| Interaction entre utilisateurs / partage de contenu | Non — affichage seul |
+| **Accès web non restreint** | **Oui** — navigateur intégré (liens arbitraires) → classification ~Teen/12+, normal pour un moteur |
+| Localisation / achats / pubs | Non |
+
+---
+
 ## Mot de passe keystore (garde-le)
 
 - Mot de passe : `ayeba2026`
