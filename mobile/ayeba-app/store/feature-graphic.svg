@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1024" height="500" viewBox="0 0 1024 500">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="0.35">
+      <stop offset="0" stop-color="#050507"/><stop offset="0.45" stop-color="#0a0a0e"/><stop offset="1" stop-color="#101320"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#00b4ff" stop-opacity="0.16"/><stop offset="0.55" stop-color="#e85d04" stop-opacity="0.07"/><stop offset="0.72" stop-color="#e85d04" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glow2" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#7df0ff" stop-opacity="0.10"/><stop offset="0.7" stop-color="#7df0ff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="ayebaA" gradientUnits="userSpaceOnUse" x1="160" y1="130" x2="360" y2="380">
+      <stop offset="0" stop-color="#7df0ff"/><stop offset="0.45" stop-color="#00b4ff"/><stop offset="1" stop-color="#e85d04"/></linearGradient>
+    <linearGradient id="tileBg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0a0a0e"/><stop offset="1" stop-color="#12141c"/>
+    </linearGradient>
+    <linearGradient id="word" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#7df0ff"/><stop offset="0.55" stop-color="#00b4ff"/><stop offset="1" stop-color="#e85d04"/>
+    </linearGradient>
+    <pattern id="dots" width="34" height="34" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="1.5" fill="rgba(125,240,255,0.06)"/>
+    </pattern>
+  </defs>
+  <rect width="1024" height="500" fill="url(#bg)"/>
+  <rect width="1024" height="500" fill="url(#dots)"/>
+  <circle cx="1084" cy="-60" r="280" fill="url(#glow)"/>
+  <circle cx="-50" cy="560" r="210" fill="url(#glow2)"/>
+  <g transform="translate(72,132)">
+    <rect width="236" height="236" rx="52" fill="url(#tileBg)" stroke="rgba(0,180,255,0.35)" stroke-width="3"/>
+    <g transform="translate(34,34) scale(0.328)">
+      <path d="M152 384 L256 128 L360 384" fill="none" stroke="url(#ayebaA)" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M196 300 L316 300" fill="none" stroke="url(#ayebaA)" stroke-width="30" stroke-linecap="round"/>
+    </g>
+  </g>
+  <text x="372" y="158" font-family="Segoe UI, Arial" font-size="17" font-weight="600" letter-spacing="5" fill="#7df0ff">MOTEUR DE RECHERCHE</text>
+  <text x="368" y="252" font-family="Segoe UI, Arial" font-weight="800" font-size="84" letter-spacing="-1" fill="url(#word)">AYEBA</text>
+  <text x="372" y="312" font-family="Segoe UI, Arial" font-size="27" fill="#aeb6c4">Le monde entier, <tspan fill="#e8ecf2" font-weight="600">une requête.</tspan></text>
+  <g font-family="Segoe UI, Arial" font-size="15" font-weight="600" letter-spacing="1.5">
+    <rect x="372" y="352" width="272" height="42" rx="21" fill="rgba(0,180,255,0.07)" stroke="rgba(0,180,255,0.4)" stroke-width="1.5"/>
+    <text x="396" y="380" fill="#9fdcf0">RÉPONSES INSTANTANÉES</text>
+    <rect x="660" y="352" width="196" height="42" rx="21" fill="rgba(0,180,255,0.07)" stroke="rgba(0,180,255,0.4)" stroke-width="1.5"/>
+    <text x="682" y="380" fill="#9fdcf0">IMAGES &amp; VIDÉOS</text>
+    <rect x="872" y="352" width="140" height="42" rx="21" fill="rgba(232,93,4,0.08)" stroke="rgba(232,93,4,0.45)" stroke-width="1.5"/>
+    <text x="897" y="380" fill="#f0b48a">GRATUIT</text>
+  </g>
+</svg>

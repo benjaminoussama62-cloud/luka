@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="AYEBA">
+  <defs>
+    <linearGradient id="ayebaBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0a0a0e"/>
+      <stop offset="100%" stop-color="#12141c"/>
+    </linearGradient>
+    <linearGradient id="ayebaA" gradientUnits="userSpaceOnUse" x1="160" y1="130" x2="360" y2="380">
+      <stop offset="0" stop-color="#7df0ff"/><stop offset="0.45" stop-color="#00b4ff"/><stop offset="1" stop-color="#e85d04"/></linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="108" fill="url(#ayebaBg)"/>
+  <rect x="22" y="22" width="468" height="468" rx="92" fill="none" stroke="rgba(0,180,255,0.35)" stroke-width="6"/>
+  <!-- Lettre A : deux jambes + barre transversale, même trait que l'enveloppe Mail -->
+  <path d="M152 384 L256 128 L360 384" fill="none" stroke="url(#ayebaA)" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M196 300 L316 300" fill="none" stroke="url(#ayebaA)" stroke-width="30" stroke-linecap="round"/>
+</svg>
