@@ -124,7 +124,8 @@ export function AyebaProvider({ children }: { children: ReactNode }) {
         if (seq !== searchSeqRef.current) return;
         setResponse(data);
         setSearchError(null);
-        if (data.code) setCodeOpen(true);
+        // Pas d'auto-ouverture des outils — le code/podcast sont désormais
+        // toujours présents dans la réponse ; ils s'ouvrent via le menu.
         if (!nextOpts.privateMode) {
           try {
             const prev = JSON.parse(sessionStorage.getItem("ayeba-history") || "[]") as string[];

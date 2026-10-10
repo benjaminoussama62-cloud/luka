@@ -13,6 +13,7 @@ type Props = {
   onForward?: () => void;
   onReload?: () => void;
   onNavigate?: (url: string) => void;
+  onSearch?: (query: string) => void;
   onHome?: () => void;
 };
 
@@ -25,6 +26,7 @@ export function InAppBrowser({
   onForward,
   onReload,
   onNavigate,
+  onSearch,
   onHome,
 }: Props) {
   const [nonce, setNonce] = useState(0);
@@ -49,6 +51,24 @@ export function InAppBrowser({
     <div className={`ayeba-inapp-browser${mobile ? " is-mobile" : ""}`}>
       {!mobile ? (
         <div className="ayeba-inapp-toolbar">
+          <button
+            type="button"
+            className="ayeba-inapp-reload"
+            onClick={onBack}
+            disabled={!canGoBack}
+            aria-label="Précédent"
+          >
+            ←
+          </button>
+          <button
+            type="button"
+            className="ayeba-inapp-reload"
+            onClick={onForward}
+            disabled={!canGoForward}
+            aria-label="Suivant"
+          >
+            →
+          </button>
           <div className="ayeba-inapp-chip" title={title}>
             <span className="ayeba-inapp-chip-dot" aria-hidden />
             <span className="ayeba-inapp-chip-title">{title}</span>
@@ -80,6 +100,7 @@ export function InAppBrowser({
           onForward={onForward}
           onReload={reload}
           onNavigate={onNavigate ?? (() => {})}
+          onSearch={onSearch ?? (() => {})}
           onHome={onHome}
         />
       ) : null}

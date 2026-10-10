@@ -9,8 +9,6 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { isMobileApp } from "@/lib/mobile-app";
-
 export type AyebaTab =
   | { id: string; kind: "home"; title: string }
   | {
@@ -104,11 +102,11 @@ export function BrowserShellProvider({ children }: { children: ReactNode }) {
   }, []);
 
   /**
-   * External destinations open the REAL site — ayeba.app is a search engine
-   * (like Google), not an iframe wrapper. Inside the native app shell the
-   * WebView navigates directly (Safari-style); on the web a new tab opens.
+   * External destinations open inside Ayeba's own browser tab — the shell
+   * keeps the result page, tab history and navigation chrome so the user
+   * never loses the app inside the mobile WebView.
    */
-  const openWebTab = useCallback((rawUrl: string) => {
+  const openWebTab = useCallback((rawUrl: string, title?: string) => {
     let url = rawUrl.trim();
     if (!/^https?:\/\//i.test(url)) url = `https://${url}`;
     try {
@@ -116,11 +114,17 @@ export function BrowserShellProvider({ children }: { children: ReactNode }) {
     } catch {
       return;
     }
-    if (isMobileApp()) {
-      window.location.href = url;
-      return;
-    }
-    window.open(url, "_blank", "noopener,noreferrer");
+    const id = uid();
+    const tab: AyebaTab = {
+      id,
+      kind: "web",
+      title: title?.trim() || hostnameTitle(url),
+      url,
+      history: [url],
+      historyIndex: 0,
+    };
+    setTabs((prev) => [...prev, tab]);
+    setActiveId(id);
   }, []);
 
   const navigateWebTab = useCallback((rawUrl: string, title?: string) => {

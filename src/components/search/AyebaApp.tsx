@@ -28,6 +28,8 @@ import { MarketTicker } from "./MarketTicker";
 import { PodcastPlayer } from "./PodcastPlayer";
 import { RelatedSearches } from "./RelatedSearches";
 import { ResultCard } from "./ResultCard";
+import { AppTabBar } from "@/components/shell/AppTabBar";
+import { InAppBrowser } from "@/components/shell/InAppBrowser";
 import { SearchBar } from "./SearchBar";
 import { ToolsMenu } from "./ToolsMenu";
 import { TrustMeters } from "./TrustBadges";
@@ -334,6 +336,27 @@ function PeopleAlsoAskBlock() {
   );
 }
 
+/** Onglet vertical vide → piste de retour, jamais une impasse blanche. */
+function EmptyVertical({ label }: { label: string }) {
+  const { setTab, response } = useAyeba();
+  return (
+    <div className="ayeba-panel p-8 text-center">
+      <p className="ayeba-kicker ayeba-kicker-accent mb-3">Aucun {label} indexé</p>
+      <p className="text-[15px] text-[var(--muted)]">
+        Rien dans cette rubrique pour « {response?.query} » — les résultats web
+        restent la meilleure piste.
+      </p>
+      <button
+        type="button"
+        className="ayeba-cta mt-4 px-4 py-2 text-sm"
+        onClick={() => setTab("web")}
+      >
+        Voir les résultats web
+      </button>
+    </div>
+  );
+}
+
 function EmptyResults() {
   const { response, search } = useAyeba();
   if (!response || response.results.length > 0) return null;
@@ -369,19 +392,14 @@ function EmptyResults() {
 }
 
 function Modals() {
-  const lite = typeof window !== "undefined" && isMobileApp();
   const { deepResearchOpen } = useAyeba();
   return (
     <>
       <LoginModal />
-      {!lite ? (
-        <>
-          {deepResearchOpen ? <DeepResearchPanel /> : null}
-          <InteractiveCanvas />
-          <CodeExecutor />
-          <PodcastPlayer />
-        </>
-      ) : null}
+      {deepResearchOpen ? <DeepResearchPanel /> : null}
+      <InteractiveCanvas />
+      <CodeExecutor />
+      <PodcastPlayer />
     </>
   );
 }
@@ -397,7 +415,9 @@ export function AyebaApp() {
 function AyebaAppBody() {
   const { hasSearched, response, searching, searchError, search, tab, setTab, splitScreen, resetHome, setDeepResearchOpen } = useAyeba();
   const { t } = useI18n();
-  const { openHomeTab } = useBrowserShell();
+  const { tabs, activeTab, activateTab, openHomeTab, openWebTab, navigateWebTab, webGoBack, webGoForward } = useBrowserShell();
+  const inApp = typeof window !== "undefined" && isMobileApp();
+  const showTabBar = inApp || tabs.length > 1;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -412,11 +432,64 @@ function AyebaAppBody() {
     return () => window.removeEventListener("keydown", onKey);
   }, [resetHome, openHomeTab]);
 
+  // Dans l'app, tout lien externe s'ouvre dans un onglet navigateur Ayeba —
+  // jamais une navigation du WebView entier qui ferait perdre l'application.
+  useEffect(() => {
+    if (!inApp) return;
+    const onClick = (e: MouseEvent) => {
+      if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey) return;
+      const anchor = (e.target as HTMLElement | null)?.closest?.("a[href]");
+      if (!anchor) return;
+      const href = anchor.getAttribute("href") ?? "";
+      if (!/^https?:\/\//i.test(href)) return;
+      try {
+        if (new URL(href).origin === window.location.origin) return;
+      } catch {
+        return;
+      }
+      e.preventDefault();
+      openWebTab(href, anchor.textContent?.trim().slice(0, 80) || undefined);
+    };
+    document.addEventListener("click", onClick, true);
+    return () => document.removeEventListener("click", onClick, true);
+  }, [inApp, openWebTab]);
+
+  const goHomeTab = () => {
+    const homeTab = tabs.find((tb) => tb.kind === "home");
+    if (homeTab) activateTab(homeTab.id);
+    else openHomeTab();
+  };
+
+  const onOmniSearch = (q: string) => {
+    goHomeTab();
+    search(q);
+  };
+
+  if (activeTab.kind === "web") {
+    return (
+      <div className="flex min-h-dvh flex-col">
+        {showTabBar ? <AppTabBar /> : null}
+        <InAppBrowser
+          url={activeTab.url}
+          title={activeTab.title}
+          canGoBack={activeTab.historyIndex > 0}
+          canGoForward={activeTab.historyIndex < activeTab.history.length - 1}
+          onBack={webGoBack}
+          onForward={webGoForward}
+          onNavigate={navigateWebTab}
+          onSearch={onOmniSearch}
+          onHome={goHomeTab}
+        />
+      </div>
+    );
+  }
+
   if (!hasSearched) {
     return (
       <>
         <Stage home />
         <div className="relative z-10 flex min-h-dvh flex-col">
+          {showTabBar ? <AppTabBar /> : null}
           <AnnouncementBanner />
           <main className="ayeba-home-shell mx-auto flex w-full flex-1 flex-col px-3 pb-10 sm:max-w-xl sm:px-4 sm:pb-12">
             <HomeSplashGate
@@ -439,6 +512,7 @@ function AyebaAppBody() {
     <>
       <Stage />
       <div className="relative z-10 min-h-dvh pb-12">
+        {showTabBar ? <AppTabBar /> : null}
         <header className="ayeba-chrome-header ayeba-serp-header">
           <div className="ayeba-serp-header-inner">
             <button type="button" onClick={resetHome} className="ayeba-serp-brand shrink-0" aria-label="Accueil">
@@ -510,12 +584,26 @@ function AyebaAppBody() {
                 <RelatedSearches />
               </>
             ) : null}
-            {tab === "community" && response ? <CommunityIndex posts={response.community} /> : null}
-            {tab === "images" && response ? <NativeMediaGrid items={response.images} kind="image" /> : null}
-            {tab === "videos" && response ? <NativeMediaGrid items={response.videos} kind="video" /> : null}
-            {tab === "news" && response?.news.map((r) => <ResultCard key={r.id} result={r} dense />)}
-            {tab === "maps" && response ? <InteractiveMapPanel places={response.maps} /> : null}
-            {tab === "shopping" && response ? <NativeShoppingPanel items={response.shopping} /> : null}
+            {tab === "community" && response ? (
+              response.community.length ? <CommunityIndex posts={response.community} /> : <EmptyVertical label="discussion" />
+            ) : null}
+            {tab === "images" && response ? (
+              response.images.length ? <NativeMediaGrid items={response.images} kind="image" /> : <EmptyVertical label="image" />
+            ) : null}
+            {tab === "videos" && response ? (
+              response.videos.length ? <NativeMediaGrid items={response.videos} kind="video" /> : <EmptyVertical label="vidéo" />
+            ) : null}
+            {tab === "news" && response ? (
+              response.news.length
+                ? response.news.map((r) => <ResultCard key={r.id} result={r} dense />)
+                : <EmptyVertical label="actualité" />
+            ) : null}
+            {tab === "maps" && response ? (
+              response.maps.length ? <InteractiveMapPanel places={response.maps} /> : <EmptyVertical label="lieu" />
+            ) : null}
+            {tab === "shopping" && response ? (
+              response.shopping.length ? <NativeShoppingPanel items={response.shopping} /> : <EmptyVertical label="produit" />
+            ) : null}
             {response && tab === "web" && !isMobileApp() ? (
               <button type="button" onClick={() => setDeepResearchOpen(true)} className="ayeba-ghost mt-6 px-4 py-2 text-xs">
                 Recherche profonde

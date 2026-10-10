@@ -13,6 +13,7 @@ type Props = {
   onForward: () => void;
   onReload: () => void;
   onNavigate: (url: string) => void;
+  onSearch: (query: string) => void;
   onHome: () => void;
 };
 
@@ -25,6 +26,7 @@ export function MobileBrowserChrome({
   onForward,
   onReload,
   onNavigate,
+  onSearch,
   onHome,
 }: Props) {
   const [omniOpen, setOmniOpen] = useState(false);
@@ -32,10 +34,16 @@ export function MobileBrowserChrome({
 
   function onOmniSubmit(e: FormEvent) {
     e.preventDefault();
-    const target = normalizeOmniInput(omni);
+    const raw = omni.trim();
     setOmniOpen(false);
-    if (target.startsWith("http")) onNavigate(target);
-    else window.location.href = target;
+    if (!raw) return;
+    if (raw.startsWith("/")) {
+      window.location.href = raw;
+      return;
+    }
+    const looksLikeAddr = /^https?:\/\//i.test(raw) || (!raw.includes(" ") && raw.includes("."));
+    if (looksLikeAddr) onNavigate(normalizeOmniInput(raw));
+    else onSearch(raw);
   }
 
   async function onShare() {

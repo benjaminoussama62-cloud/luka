@@ -2303,7 +2303,6 @@ select option {
   flex: 1;
   flex-direction: column;
   min-height: 0;
-  height: calc(100dvh - 2.55rem);
   background: #ffffff;
 }
 
@@ -2364,6 +2363,8 @@ select option {
   text-transform: uppercase;
   cursor: pointer;
 }
+
+.ayeba-inapp-reload:disabled { opacity: 0.35; }
 
 .ayeba-inapp-reload:hover {
   border-color: rgba(0, 180, 255, 0.45);
