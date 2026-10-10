@@ -64,8 +64,8 @@ jobs:
         env:
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
           JAVA_HOME: ${{ env.JAVA_HOME }}
-          AYEBA_VERSION: "1.0.2"
-          AYEBA_VERSION_CODE: "3"
+          AYEBA_VERSION: "1.0.3"
+          AYEBA_VERSION_CODE: "4"
 
       - name: Upload AAB artifact
         uses: actions/upload-artifact@v4
@@ -77,10 +77,10 @@ jobs:
       - name: Publish AAB on GitHub Releases (download sans login)
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: mail-1.0.2
-          name: Ayeba Mail 1.0.2
+          tag_name: mail-1.0.3
+          name: Ayeba Mail 1.0.3
           body: |
-            Fichier Play Store : **app-release.aab** → renommer `AyebaMail-1.0.2.aab` (API 35)
-            Package : `app.ayeba.mail` — versionCode 3 — application offline embarquée
+            Fichier Play Store : **app-release.aab** → renommer `AyebaMail-1.0.3.aab` (API 35)
+            Package : `app.ayeba.mail` — versionCode 4 — application offline embarquée
           files: mobile/ayeba-mail/android/app/build/outputs/bundle/release/app-release.aab
           overwrite_files: true

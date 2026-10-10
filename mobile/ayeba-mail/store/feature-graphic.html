@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1024px; height: 500px; overflow: hidden; }
+  body {
+    background: linear-gradient(115deg, #050507 0%, #0a0a0e 45%, #101320 100%);
+    font-family: "Segoe UI", Arial, sans-serif;
+    display: flex;
+    align-items: center;
+    position: relative;
+  }
+  /* halo dégradé marque */
+  .glow {
+    position: absolute; width: 560px; height: 560px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(0,180,255,0.16) 0%, rgba(232,93,4,0.07) 55%, transparent 72%);
+    right: -140px; top: -140px;
+  }
+  .glow2 {
+    position: absolute; width: 420px; height: 420px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(125,240,255,0.10) 0%, transparent 70%);
+    left: -120px; bottom: -160px;
+  }
+  /* trame discrète */
+  .dots {
+    position: absolute; inset: 0;
+    background-image: radial-gradient(rgba(125,240,255,0.06) 1.5px, transparent 1.5px);
+    background-size: 34px 34px;
+  }
+  .wrap {
+    position: relative; display: flex; align-items: center;
+    width: 100%; padding: 0 72px; gap: 64px;
+  }
+  /* pastille icône — reprise exacte de l'icône 512 */
+  .icon {
+    flex: 0 0 auto; width: 236px; height: 236px; border-radius: 52px;
+    background: linear-gradient(135deg, #0a0a0e 0%, #12141c 100%);
+    border: 3px solid rgba(0,180,255,0.35);
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 0 60px rgba(0,180,255,0.22), inset 0 0 30px rgba(0,0,0,0.6);
+  }
+  .icon svg { width: 168px; height: 168px; }
+  .text { position: relative; }
+  .kicker {
+    font-size: 17px; letter-spacing: 5px; font-weight: 600;
+    color: #7df0ff; text-transform: uppercase; margin-bottom: 14px;
+  }
+  h1 {
+    font-size: 84px; line-height: 1.02; font-weight: 800; letter-spacing: -1px;
+    color: #f2f4f8;
+  }
+  h1 .mail {
+    background: linear-gradient(100deg, #7df0ff 0%, #00b4ff 55%, #e85d04 110%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .tagline {
+    margin-top: 18px; font-size: 27px; font-weight: 400; color: #aeb6c4;
+  }
+  .tagline b { color: #e8ecf2; font-weight: 600; }
+  .badges { margin-top: 30px; display: flex; gap: 14px; }
+  .badge {
+    font-size: 15px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase;
+    color: #9fdcf0; border: 1.5px solid rgba(0,180,255,0.4); border-radius: 999px;
+    padding: 8px 18px; background: rgba(0,180,255,0.07);
+  }
+  .badge.alt { color: #f0b48a; border-color: rgba(232,93,4,0.45); background: rgba(232,93,4,0.08); }
+</style>
+</head>
+<body>
+  <div class="dots"></div>
+  <div class="glow"></div>
+  <div class="glow2"></div>
+  <div class="wrap">
+    <div class="icon">
+      <svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="g" x1="20%" y1="10%" x2="80%" y2="90%">
+            <stop offset="0%" stop-color="#7df0ff"/>
+            <stop offset="45%" stop-color="#00b4ff"/>
+            <stop offset="100%" stop-color="#e85d04"/>
+          </linearGradient>
+        </defs>
+        <rect x="104" y="158" width="304" height="196" rx="30" fill="none" stroke="url(#g)" stroke-width="24"/>
+        <path d="M118 182 L256 296 L394 182" fill="none" stroke="url(#g)" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <div class="text">
+      <div class="kicker">Messagerie sécurisée</div>
+      <h1>Ayeba <span class="mail">Mail</span></h1>
+      <div class="tagline">Votre boîte <b>@ayeba.app</b>, chiffrée sur votre appareil.</div>
+      <div class="badges">
+        <span class="badge">Hors ligne</span>
+        <span class="badge">Zéro collecte</span>
+        <span class="badge alt">AES-256</span>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,32 @@
+=== NOM DE L'APPLICATION (max 30) ===
+Ayeba Mail
+
+=== BRÈVE DESCRIPTION (max 80) ===
+Messagerie @ayeba.app chiffrée sur l'appareil — hors ligne, zéro collecte.
+
+=== DESCRIPTION COMPLÈTE (max 4000) ===
+Ayeba Mail — votre messagerie, vraiment à vous.
+
+Une boîte @ayeba.app complète, embarquée dans l'application : elle s'ouvre sans connexion, chiffre vos messages sur l'appareil et garde le design Ayeba.
+
+CHIFFRÉ SUR VOTRE APPAREIL
+• Sujet, texte et pièces jointes chiffrés en AES-256 dans votre coffre local
+• Phrase secrète protégée par PBKDF2 (600 000 itérations) : elle ne quitte jamais votre téléphone
+• Clé de récupération unique pour restaurer l'accès à votre coffre
+
+FONCTIONNE SANS RÉSEAU
+• Interface 100 % embarquée : l'app démarre en mode avion, en zone blanche ou sans data
+• Aucun chargement web au lancement — quasi-0 consommation de données
+• Rédigez, classez, recherchez : tout reste disponible hors ligne
+
+VOTRE ADRESSE @AYEBA.APP
+• Une adresse unique, à vous pour la vie, vérifiée par téléphone
+• Boîte de réception, envoyés, brouillons, archives, corbeille et suivis
+• Pièces jointes chiffrées, jusqu'à 3 fichiers par message
+
+CONFIDENTIALITÉ RÉELLE
+• Aucune donnée collectée, aucun tracker, aucune publicité
+• Pas d'analyse de contenu : vos messages restent sur votre appareil
+• Remise honnête : sans réseau, vos messages attendent dans Envoyés au lieu de prétendre être remis
+
+Ayeba Mail — la messagerie pensée pour les réseaux réels.

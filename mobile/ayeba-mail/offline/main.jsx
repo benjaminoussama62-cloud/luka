@@ -59,9 +59,9 @@ const FEATURES = [
     i: "▽",
   },
   {
-    t: "Même design Ayeba",
-    d: "Le rail, la liste, le lecteur, le coffre et les réglages reprennent le langage visuel de la version web.",
-    i: "⇄",
+    t: "Aucune publicité",
+    d: "Pas de pub, pas de tracker, pas d'analyse de vos messages. Votre boîte vous appartient.",
+    i: "∅",
   },
 ];
 
@@ -1008,11 +1008,11 @@ function Landing({ onSignup, onSignin }) {
         </section>
 
         <section className="mail-band">
-          <span className="mail-kicker">HORS LIGNE · MÊME DESIGN</span>
+          <span className="mail-kicker">PENSÉE POUR LE HORS LIGNE</span>
           <p>
-            Ayeba Mail offline n’attend pas ayeba.app pour démarrer. La rédaction,
-            la lecture et les réglages restent disponibles ; la remise réseau sera
-            ajoutée comme synchronisation séparée.
+            Ayeba Mail vit entièrement sur votre téléphone. Écrivez, lisez et
+            organisez vos messages même sans connexion — la rédaction, la lecture
+            et les réglages restent toujours disponibles.
           </p>
         </section>
       </div>
@@ -1107,7 +1107,7 @@ function SignupFlow({ onDone, onBack }) {
               <div className="mail-field">
                 <label>Votre adresse</label>
                 <div className="addr-row">
-                  <input value={address} onChange={(e) => checkAddress(e.target.value)} placeholder="benjaminoussama" autoFocus />
+                  <input value={address} onChange={(e) => checkAddress(e.target.value)} placeholder="votre.prenom" autoFocus />
                   <span className="suffix">@{MAIL_DOMAIN}</span>
                 </div>
                 {avail && <div className={`mail-avail ${avail.ok ? "ok" : "ko"}`}>{avail.msg}</div>}
@@ -1129,7 +1129,7 @@ function SignupFlow({ onDone, onBack }) {
               {err && <div className="mail-err">{err}</div>}
               <div className="mail-field">
                 <label>Nom complet</label>
-                <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Benjamin Oussama" autoFocus />
+                <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Votre nom complet" autoFocus />
               </div>
               <div className="mail-field">
                 <label>Date de naissance</label>
