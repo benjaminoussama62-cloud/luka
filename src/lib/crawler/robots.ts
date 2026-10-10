@@ -1,27 +1,31 @@
-const cache = new Map<string, { allowed: boolean; expires: number }>();
+// Cache des RÈGLES robots.txt par origine — jamais du verdict d'une URL :
+// autoriser /a ne dit rien sur /private/b (bug corrigé : le premier chemin
+// vérifié décidait pour tout le domaine).
+const cache = new Map<string, { robots: string | null; expires: number }>();
 
 export async function canFetch(url: string, userAgent = "AyebiBot/1.0"): Promise<boolean> {
   try {
-    const { origin } = new URL(url);
+    const { origin, pathname } = new URL(url);
     const cached = cache.get(origin);
-    if (cached && cached.expires > Date.now()) return cached.allowed;
+    let robots: string | null;
 
-    const robotsUrl = `${origin}/robots.txt`;
-    const res = await fetch(robotsUrl, {
-      signal: AbortSignal.timeout(4000),
-      headers: { "User-Agent": userAgent },
-    });
-
-    if (!res.ok) {
-      cache.set(origin, { allowed: true, expires: Date.now() + 3600000 });
-      return true;
+    if (cached && cached.expires > Date.now()) {
+      robots = cached.robots;
+    } else {
+      try {
+        const res = await fetch(`${origin}/robots.txt`, {
+          signal: AbortSignal.timeout(4000),
+          headers: { "User-Agent": userAgent },
+        });
+        robots = res.ok ? await res.text() : null;
+      } catch {
+        robots = null;
+      }
+      cache.set(origin, { robots, expires: Date.now() + 3600000 });
     }
 
-    const text = await res.text();
-    const path = new URL(url).pathname;
-    const allowed = !isDisallowed(text, userAgent, path);
-    cache.set(origin, { allowed, expires: Date.now() + 3600000 });
-    return allowed;
+    if (robots == null) return true;
+    return !isDisallowed(robots, userAgent, pathname);
   } catch {
     return true;
   }

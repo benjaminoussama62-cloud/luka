@@ -22,6 +22,25 @@ export function enqueueUrl(url: string, priority = 0) {
   ).run(url, priority, now, now);
 }
 
+/**
+ * Remet en file une URL déjà connue (recrawl) : done/failed → pending.
+ * Distinct d'enqueueUrl — les seeds et liens découverts ne doivent PAS
+ * re-crawler un document frais (DO NOTHING volontaire là-bas).
+ */
+function requeueUrl(url: string, priority: number) {
+  const db = getDb();
+  const now = new Date().toISOString();
+  db.prepare(
+    `INSERT INTO crawl_queue (url, priority, status, scheduled_at, created_at)
+     VALUES (?, ?, 'pending', ?, ?)
+     ON CONFLICT(url) DO UPDATE SET
+       status = CASE WHEN crawl_queue.status IN ('done','failed') THEN 'pending'
+                     ELSE crawl_queue.status END,
+       priority = MAX(crawl_queue.priority, excluded.priority),
+       scheduled_at = excluded.scheduled_at`,
+  ).run(url, priority, now, now);
+}
+
 export function seedQueue() {
   for (const u of GLOBAL_SEEDS) {
     const sister = /jemsa\.net|to-tala\.com|sombatekaonline|omega-web\.org|devalpha1\.com|ayeba\.app/.test(
@@ -62,7 +81,7 @@ export function enqueueStaleDocuments(limit = 60): number {
     )
     .all(now, limit) as { url: string }[];
   for (const s of stale) {
-    enqueueUrl(s.url, 1);
+    requeueUrl(s.url, 1);
   }
   return stale.length;
 }
