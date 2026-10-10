@@ -557,6 +557,22 @@ function migrate(db: AyebaDatabase) {
     CREATE INDEX IF NOT EXISTS idx_imp_domain_time ON impression_signals(domain, shown_at DESC);
     CREATE INDEX IF NOT EXISTS idx_imp_query_domain ON impression_signals(query, domain);
 
+    -- Journal de santé de la recherche : taux de zéro-résultat, latence,
+    -- mode dégradé — les métriques qui pilotent la qualité en production.
+    CREATE TABLE IF NOT EXISTS search_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      query TEXT NOT NULL,
+      results_count INTEGER NOT NULL DEFAULT 0,
+      degraded INTEGER NOT NULL DEFAULT 0,
+      latency_ms INTEGER NOT NULL DEFAULT 0,
+      device TEXT NOT NULL DEFAULT '',
+      country TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_sev_time ON search_events(created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_sev_query ON search_events(query);
+
     CREATE TABLE IF NOT EXISTS studio_sites (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,

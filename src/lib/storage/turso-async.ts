@@ -107,6 +107,38 @@ export async function searchIndexAsync(query: string, limit = 30): Promise<Async
   }
 }
 
+/** Même journal de santé que recordSearchEvent, en chemin non-bloquant. */
+export async function recordSearchEventAsync(
+  query: string,
+  info: {
+    resultsCount: number;
+    degraded?: boolean;
+    latencyMs?: number;
+    device?: string;
+    country?: string;
+  },
+): Promise<void> {
+  const client = getAsyncClient();
+  if (!client || !query) return;
+  try {
+    await client.execute({
+      sql: `INSERT INTO search_events (query, results_count, degraded, latency_ms, device, country, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        query,
+        info.resultsCount,
+        info.degraded ? 1 : 0,
+        info.latencyMs ?? 0,
+        info.device || "",
+        info.country || "",
+        new Date().toISOString(),
+      ],
+    });
+  } catch {
+    /* télémétrie best-effort */
+  }
+}
+
 /** Impressions + Radar aggregates in one batch — never on the sync driver. */
 export async function recordImpressionsAsync(
   query: string,

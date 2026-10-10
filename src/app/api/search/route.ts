@@ -4,12 +4,13 @@ import { pushSearchHistory } from "@/lib/db";
 import { synthesizeWithLlm } from "@/lib/llm";
 import { rateLimit } from "@/lib/rate-limit";
 import { liveSearch } from "@/lib/real-search";
-import { recordImpressions } from "@/lib/search-index/fts";
+import { recordImpressions, recordSearchEvent } from "@/lib/search-index/fts";
 import { getDbMode } from "@/lib/storage/database";
 import { signalContext } from "@/lib/http-ctx";
 import {
   pushSearchHistoryAsync,
   recordImpressionsAsync,
+  recordSearchEventAsync,
 } from "@/lib/storage/turso-async";
 import type { AlgorithmSliders, SearchResponse } from "@/lib/types";
 
@@ -103,6 +104,24 @@ export async function POST(req: Request) {
 
     after(async () => {
       const turso = getDbMode() === "turso";
+      try {
+        // Journal de santé — enregistré même à zéro résultat : c'est
+        // exactement ce cas qu'on veut mesurer. Mode privé : rien du tout.
+        if (!body.privateMode && query.trim()) {
+          const ctx = signalContext(req);
+          const info = {
+            resultsCount: serp.results?.length ?? 0,
+            degraded,
+            latencyMs: timings.route ?? Date.now() - startedAt,
+            device: ctx.device,
+            country: ctx.country,
+          };
+          if (turso) await recordSearchEventAsync(query.trim(), info);
+          else recordSearchEvent(query.trim(), info);
+        }
+      } catch (e) {
+        console.warn("[search] event skipped", e);
+      }
       try {
         if (!body.privateMode && query.trim() && serp.results?.length) {
           const impressions = serp.results.slice(0, 20).map((r, i) => ({

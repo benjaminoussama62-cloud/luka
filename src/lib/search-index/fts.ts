@@ -303,6 +303,76 @@ function bumpRadarDaily(input: {
   }
 }
 
+/**
+ * Journal de santé recherche : chaque requête laisse une trace (hors mode
+ * privé) — zéro-résultat, latence, mode dégradé. C'est la boucle de
+ * feedback qui rend la qualité pilotable en production.
+ */
+export function recordSearchEvent(
+  query: string,
+  info: {
+    resultsCount: number;
+    degraded?: boolean;
+    latencyMs?: number;
+    device?: string;
+    country?: string;
+  },
+) {
+  try {
+    const db = getDb();
+    db.prepare(
+      `INSERT INTO search_events (query, results_count, degraded, latency_ms, device, country, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      query,
+      info.resultsCount,
+      info.degraded ? 1 : 0,
+      info.latencyMs ?? 0,
+      info.device || "",
+      info.country || "",
+      new Date().toISOString(),
+    );
+  } catch {
+    /* télémétrie best-effort */
+  }
+}
+
+/**
+ * Agrégats de qualité sur une fenêtre donnée — le tableau de bord minimal
+ * du moteur : taux de zéro-résultat, latence moyenne, mode dégradé.
+ */
+export function searchQualityStats(days = 7) {
+  if (!canUseSyncDb()) {
+    return { days, queries: 0, zeroResultRate: 0, avgLatencyMs: 0, degradedRate: 0, topZeroResultQueries: [] as string[] };
+  }
+  const db = getDb();
+  const row = db
+    .prepare(
+      `SELECT COUNT(*) AS n,
+              SUM(CASE WHEN results_count = 0 THEN 1 ELSE 0 END) AS zeros,
+              SUM(CASE WHEN degraded = 1 THEN 1 ELSE 0 END) AS degraded,
+              AVG(latency_ms) AS avg_lat
+       FROM search_events
+       WHERE created_at > datetime('now', ?)`,
+    )
+    .get(`-${days} days`) as { n: number; zeros: number | null; degraded: number | null; avg_lat: number | null };
+  const topZero = db
+    .prepare(
+      `SELECT query, COUNT(*) AS c FROM search_events
+       WHERE results_count = 0 AND created_at > datetime('now', ?)
+       GROUP BY query ORDER BY c DESC LIMIT 10`,
+    )
+    .all(`-${days} days`) as { query: string }[];
+  return {
+    days,
+    queries: row.n,
+    zeroResultRate: row.n ? (row.zeros ?? 0) / row.n : 0,
+    avgLatencyMs: Math.round(row.avg_lat ?? 0),
+    degradedRate: row.n ? (row.degraded ?? 0) / row.n : 0,
+    topZeroResultQueries: topZero.map((r) => r.query),
+  };
+}
+
 export function clickBoost(query: string, url: string): number {
   if (!canUseSyncDb()) return 0;
   const row = getDb()

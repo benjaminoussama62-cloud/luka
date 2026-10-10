@@ -11,7 +11,7 @@ for (const k of [
 }
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { indexDocument, searchIndex } from "@/lib/search-index/fts";
+import { indexDocument, recordSearchEvent, searchIndex, searchQualityStats } from "@/lib/search-index/fts";
 import { correctSpelling, suggestFromVocabulary } from "@/lib/search-index/spell";
 import { rankHits } from "@/lib/search-index/ranking";
 import { getDb, canUseSyncDb } from "@/lib/storage/database";
@@ -136,6 +136,21 @@ describe("benchmark qualité de recherche — index propre", () => {
   it("le spam clickbait ne sort jamais dans le top 3", () => {
     const ids = benchRanked("kinshasa").map((h) => h.docId);
     expect(ids.slice(0, 3)).not.toContain("bench-kinshasa-spam");
+  });
+
+  it("le journal de santé mesure zéro-résultat, latence et mode dégradé", () => {
+    recordSearchEvent("bench-evt-ok", { resultsCount: 7, latencyMs: 120 });
+    recordSearchEvent("bench-evt-zero-a", { resultsCount: 0, latencyMs: 40 });
+    recordSearchEvent("bench-evt-zero-a", { resultsCount: 0, latencyMs: 60 });
+    recordSearchEvent("bench-evt-zero-b", { resultsCount: 0, latencyMs: 80, degraded: true });
+
+    const stats = searchQualityStats(7);
+    expect(stats.queries).toBeGreaterThanOrEqual(4);
+    expect(stats.zeroResultRate).toBeGreaterThan(0);
+    expect(stats.zeroResultRate).toBeLessThan(1);
+    expect(stats.avgLatencyMs).toBeGreaterThan(0);
+    expect(stats.degradedRate).toBeGreaterThan(0);
+    expect(stats.topZeroResultQueries[0]).toBe("bench-evt-zero-a");
   });
 
   it("agrégats au-dessus des seuils de régression", () => {
