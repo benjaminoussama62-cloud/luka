@@ -1,0 +1,41 @@
+=== NOM DE L'APPLICATION (max 30) ===
+AYEBA
+
+=== BRÈVE DESCRIPTION (max 80) ===
+Ayeba — moteur de recherche : réponses directes, web, images et vidéos.
+
+=== DESCRIPTION COMPLÈTE (max 4000) ===
+Ayeba est un moteur de recherche indépendant : tapez votre question, obtenez la réponse.
+
+RÉPONSES DIRECTES
+• Définitions et sens des mots (dictionnaire intégré)
+• Calculs, conversions d'unités et de devises, météo
+• Distances entre villes, populations, capitales, listes et classements
+• Questions factuelles résolues sur la base de données structurées (Wikidata, Wikipédia, Wiktionnaire)
+• Panneaux de connaissance pour les personnes, lieux, films, organisations…
+
+TOUS LES TYPES DE RÉSULTATS
+• Recherche web classée par pertinence
+• Images (Bing Images, Openverse, Wikimedia Commons)
+• Vidéos (Dailymotion et autres sources)
+• Actualités en continu
+• Contenus libres et communs de la connaissance
+
+NAVIGATEUR INTÉGRÉ
+• Ouvrez les résultats dans l'app : onglets multiples, historique, vue d'ensemble
+• Barre d'adresse unique pour rechercher ou naviguer
+
+OUTILS INTÉGRÉS
+• Traduction, exécution de code, podcasts et utilitaires de recherche
+
+SIMPLE ET GRATUIT
+• Aucun compte requis : la recherche fonctionne librement
+• Le compte Ayeba (facultatif) synchronise vos préférences et donne accès aux services de l'écosystème
+
+RESPECT DE VOS DONNÉES
+• Pas de suivi publicitaire ni de profilage marketing
+• Historique de navigation conservé sur votre appareil
+• Suppression du compte en libre-service à tout moment
+• Politique complète : https://ayeba.app/privacy
+
+Ayeba — cherchez, trouvez, c'est tout.
