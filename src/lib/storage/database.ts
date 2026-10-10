@@ -1098,8 +1098,9 @@ function seedOAuthClients(db: AyebaDatabase) {
 }
 
 function seedMlWeights(db: AyebaDatabase) {
-  const row = db.prepare("SELECT id FROM ml_rank_weights WHERE id = 1").get();
-  if (row) return;
+  const row = db
+    .prepare("SELECT id, samples FROM ml_rank_weights WHERE id = 1")
+    .get() as { id: number; samples: number } | undefined;
   const defaultWeights = {
     fts: 0.35,
     titleMatch: 0.22,
@@ -1108,7 +1109,7 @@ function seedMlWeights(db: AyebaDatabase) {
     clickBoost: 0.18,
     contentLen: 0.04,
     freshness: 0.06,
-    queryCoverage: 0.14,
+    queryCoverage: 0.22,
     spamPenalty: -0.25,
     ayebiBoost: 0.2,
     newsBoost: 0.08,
@@ -1118,8 +1119,10 @@ function seedMlWeights(db: AyebaDatabase) {
     hasImage: 0.02,
     linkCount: 0.05,
   };
+  if (row && row.samples > 0) return; // poids appris par clics — ne pas écraser
   db.prepare(
-    "INSERT INTO ml_rank_weights (id, weights_json, samples, updated_at) VALUES (1, ?, 0, ?)",
+    `INSERT INTO ml_rank_weights (id, weights_json, samples, updated_at) VALUES (1, ?, 0, ?)
+     ON CONFLICT(id) DO UPDATE SET weights_json = excluded.weights_json, updated_at = excluded.updated_at`,
   ).run(JSON.stringify(defaultWeights), new Date().toISOString());
 }
 

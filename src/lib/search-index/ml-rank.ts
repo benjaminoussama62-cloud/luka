@@ -1,4 +1,5 @@
 import { getDb } from "../storage/database";
+import { queryTokens, tokenVariants } from "./fts-query";
 
 export type RankFeatures = {
   fts: number;
@@ -29,7 +30,7 @@ const DEFAULT_WEIGHTS: MlWeights = {
   clickBoost: 0.18,
   contentLen: 0.04,
   freshness: 0.06,
-  queryCoverage: 0.14,
+  queryCoverage: 0.22,
   spamPenalty: -0.25,
   ayebiBoost: 0.2,
   newsBoost: 0.08,
@@ -64,13 +65,16 @@ export function extractFeatures(
   },
   query: string,
 ): RankFeatures {
-  const qTokens = query.toLowerCase().split(/\s+/).filter((t) => t.length >= 2);
+  // Tokens de contenu (stopwords exclus) — « monnaie rdc » couvre un doc qui
+  // dit « congolais » grâce aux variantes d'expansion.
+  const qTokens = queryTokens(query);
   const titleLower = hit.title.toLowerCase();
   const textLower = `${hit.title} ${hit.snippet}`.toLowerCase();
   const coverage =
     qTokens.length === 0
       ? 0
-      : qTokens.filter((t) => textLower.includes(t)).length / qTokens.length;
+      : qTokens.filter((t) => tokenVariants(t).some((v) => textLower.includes(v))).length /
+        qTokens.length;
 
   let freshness = 0.5;
   if (hit.crawledAt) {
@@ -87,7 +91,11 @@ export function extractFeatures(
 
   return {
     fts: Math.min(Math.abs(hit.rank ?? 0) / 10, 1),
-    titleMatch: qTokens.some((t) => titleLower.includes(t)) ? 1 : 0,
+    titleMatch:
+      qTokens.length === 0
+        ? 0
+        : qTokens.filter((t) => tokenVariants(t).some((v) => titleLower.includes(v))).length /
+          qTokens.length,
     domainTrust: Math.min(hit.credibility, 1),
     localRdc: hit.localRelevant || hit.domain.endsWith(".cd") ? 1 : 0,
     clickBoost: Math.min((hit.clickBoost ?? 0) / 25, 1),

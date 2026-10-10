@@ -42,7 +42,7 @@ export type AsyncFtsHit = {
   rank: number;
 };
 
-const FTS_SQL = `SELECT doc_id, url, domain, title, snippet(body, '<b>', '</b>', '…', 10) as snip,
+const FTS_SQL = `SELECT doc_id, url, domain, title, snippet(search_fts, 4, '<b>', '</b>', '…', 10) as snip,
         source_type, credibility, local_relevant, rank
  FROM search_fts WHERE search_fts MATCH ? ORDER BY rank LIMIT ?`;
 
