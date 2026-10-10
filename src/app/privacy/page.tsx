@@ -12,7 +12,7 @@ export default function PrivacyPage() {
   return (
     <LegalDocumentShell
       title="Politique de confidentialité"
-      subtitle="La présente politique explique quelles catégories de données Ayeba traite, pour quelles finalités, pendant combien de temps, avec qui elles peuvent être partagées, et quels droits vous pouvez exercer. Elle s’applique au site ayeba.app et aux services associés (recherche, compte, Ayeba Mail, Ayebi, Studio, identité pour applications autorisées)."
+      subtitle="La présente politique explique quelles catégories de données Ayeba traite, pour quelles finalités, pendant combien de temps, avec qui elles peuvent être partagées, et quels droits vous pouvez exercer. Elle s’applique au site ayeba.app, à l’application mobile AYEBA (Android) et aux services associés (recherche, compte, Ayeba Mail, Ayebi, Studio, identité pour applications autorisées)."
       updated="Dernière mise à jour · 29 août 2026"
     >
       <LegalSection title="1. Responsable du traitement">
@@ -96,7 +96,32 @@ export default function PrivacyPage() {
         </p>
       </LegalSection>
 
-      <LegalSection title="5. Ayeba Mail">
+      <LegalSection title="5. Application mobile AYEBA (Android)">
+        <p>
+          L’application mobile AYEBA est une coque qui ouvre le service ayeba.app dans un
+          navigateur intégré (WebView). Les traitements décrits dans les autres sections de la
+          présente politique s’appliquent tel quel à l’application : recherches, compte, services
+          associés.
+        </p>
+        <p>
+          L’application ne demande aucune autorisation Android au-delà de l’accès réseau
+          (INTERNET). Elle n’accède pas à la localisation, aux contacts, à l’appareil photo, au
+          micro, ni aux fichiers de l’appareil.
+        </p>
+        <p>
+          Les onglets et l’historique du navigateur intégré restent stockés localement sur
+          l’appareil et ne sont pas transmis aux serveurs. Vous pouvez les effacer en fermant
+          l’application.
+        </p>
+        <p>
+          Si un outil de surveillance des erreurs (Sentry) est activé, des journaux d’erreur et
+          de plantage techniques peuvent être transmis afin d’améliorer la stabilité ; aucune
+          relecture de session n’est déclenchée hors cas d’erreur. L’application n’embarque aucun
+          kit publicitaire ni aucun traceur de tiers à des fins de ciblage.
+        </p>
+      </LegalSection>
+
+      <LegalSection title="6. Ayeba Mail">
         <p>
           Le service Ayeba Mail traite les données nécessaires à la fourniture d’une boîte de
           réception : adresse attribuée, messages envoyés et reçus (expéditeurs, destinataires,
@@ -123,7 +148,7 @@ export default function PrivacyPage() {
         </p>
       </LegalSection>
 
-      <LegalSection title="6. « Se connecter avec Ayeba »">
+      <LegalSection title="7. « Se connecter avec Ayeba »">
         <p>
           Si vous autorisez une application à utiliser votre compte Ayeba, celle-ci reçoit
           uniquement les informations correspondant aux permissions que vous avez acceptées sur
@@ -144,7 +169,7 @@ export default function PrivacyPage() {
         </p>
       </LegalSection>
 
-      <LegalSection title="7. Indexation web et contenus publics">
+      <LegalSection title="8. Indexation web et contenus publics">
         <p>
           Ayeba explore et indexe des pages publiquement accessibles, dans le respect des
           directives robots et des bonnes pratiques d’exploration. Les extraits affichés dans les
@@ -158,7 +183,7 @@ export default function PrivacyPage() {
         </p>
       </LegalSection>
 
-      <LegalSection title="8. Cookies et stockage local">
+      <LegalSection title="9. Cookies et stockage local">
         <p>
           Outre le cookie de session, Ayeba peut mémoriser localement des préférences (langue,
           marché, options d’interface) afin d’éviter de vous les redemander à chaque visite. Vous
@@ -171,7 +196,7 @@ export default function PrivacyPage() {
         </p>
       </LegalSection>
 
-      <LegalSection title="9. Destinataires et sous-traitants">
+      <LegalSection title="10. Destinataires et sous-traitants">
         <p>
           Les données peuvent être traitées par des prestataires techniques nécessaires à
           l’hébergement, au stockage, à l’envoi d’e-mails de service ou à la sécurité. Ces
@@ -185,7 +210,7 @@ export default function PrivacyPage() {
         </p>
       </LegalSection>
 
-      <LegalSection title="10. Transferts et localisation">
+      <LegalSection title="11. Transferts et localisation">
         <p>
           Selon l’architecture d’hébergement, certaines données peuvent être traitées dans des
           infrastructures situées hors de votre pays de résidence. Dans ce cas, Ayeba s’attache à
@@ -198,7 +223,7 @@ export default function PrivacyPage() {
         </p>
       </LegalSection>
 
-      <LegalSection title="11. Vos droits">
+      <LegalSection title="12. Vos droits">
         <p>
           Vous disposez notamment des droits d’accès, de rectification, d’effacement, de
           limitation, d’opposition et de portabilité, dans les conditions prévues par la
@@ -219,7 +244,7 @@ export default function PrivacyPage() {
         </p>
       </LegalSection>
 
-      <LegalSection title="12. Sécurité">
+      <LegalSection title="13. Sécurité">
         <p>
           Ayeba met en œuvre des mesures techniques et organisationnelles destinées à protéger les
           comptes et les données contre l’accès non autorisé, la perte accidentelle ou
@@ -241,7 +266,7 @@ export default function PrivacyPage() {
         </p>
       </LegalSection>
 
-      <LegalSection title="13. Conservation">
+      <LegalSection title="14. Conservation">
         <p>
           Les données de compte sont conservées tant que le compte est actif, puis pendant une
           durée limitée après clôture si une obligation ou un intérêt légitime de conservation
@@ -254,7 +279,7 @@ export default function PrivacyPage() {
         </p>
       </LegalSection>
 
-      <LegalSection title="13. Modifications">
+      <LegalSection title="15. Modifications">
         <p>
           Cette politique peut être mise à jour pour refléter l’évolution du service, des
           prestataires ou des obligations légales. La date de mise à jour figure en tête de page.

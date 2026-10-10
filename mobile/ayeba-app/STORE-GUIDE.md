@@ -35,7 +35,7 @@ npm run android
 - Catégorie : **Outils** ou **Productivité**
 - Cible : téléphones, min Android 7 (API 24)
 - Taille APK/AAB annoncée : ~12 Mo
-- Politique confidentialité : `https://ayeba.app/mentions-legales`
+- Politique confidentialité : `https://ayeba.app/privacy`
 - Data safety : recherche web, compte optionnel (Google OAuth)
 
 **Listing FR (RDC)**

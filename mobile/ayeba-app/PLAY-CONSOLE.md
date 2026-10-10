@@ -40,7 +40,31 @@ C:\Users\ADMIN\DevAlpha org\luka\mobile\ayeba-app\AYEBA-1.0.0.aab
 3. **Importer** → choisis `app-release.aab`
 4. Pays : **République démocratique du Congo** en premier
 5. Remplis fiche store (icône 512×512, 2 captures minimum)
-6. Politique : https://ayeba.app/mentions-legales
+6. **Règles de confidentialité** (le champ de ta capture) :
+   **`https://ayeba.app/privacy`** ← copie EXACTEMENT cette URL.
+   La page couvre explicitement l'app Android (section 5) — exigé en review.
+
+---
+
+## Formulaire « Sécurité des données » (Data safety) — réponses exactes
+
+L'app = coque WebView, permission **INTERNET uniquement**, aucun SDK pub.
+Réponds comme ça — sous-déclarer = rejet, sur-déclarer = badge moche :
+
+| Question | Réponse |
+|---|---|
+| L'app collecte-t-elle des données utilisateur ? | **Oui** (recherches + compte éventuel) |
+| **Identité** — adresse e-mail, nom | Collecté, **facultatif**, finalité *fonctionnalité de l'app*, partagé : **non** |
+| **Activité dans l'app** — requêtes de recherche | Collecté, **facultatif**, finalité *fonctionnalité*, partagé : **non** |
+| **Performances** — journaux de plantage (Sentry) | Collecté, finalité *analyse*, partagé : **non** |
+| Localisation / contacts / photos / fichiers / santé / finances | **Non collectées** |
+| Données chiffrées en transit ? | **Oui** (HTTPS partout) |
+| L'utilisateur peut demander la suppression ? | **Oui** — `https://ayeba.app/compte` ou contact@ayeba.app |
+| Suivi publicitaire / profilage | **Non** |
+| Annonces dans l'app ? | **Non** |
+
+Écran « Publicité » → « Mon appli ne contient pas de publicité » : **OUI**
+Écran « Public cible » → **Tout le monde** (pas d'app enfants)
 
 ---
 
