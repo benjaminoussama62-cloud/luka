@@ -104,6 +104,19 @@ Account is NOT required: search works fully without login. Only the
 | **Accès web non restreint** | **Oui** — navigateur intégré (liens arbitraires) → classification ~Teen/12+, normal pour un moteur |
 | Localisation / achats / pubs | Non |
 
+Sous-section UGC (si « Oui » à l'échange de contenu — Ayeba Mail est
+accessible dans la coque) :
+
+| Question | Réponse |
+|---|---|
+| Échange de contenu entre utilisateurs | **Oui** — Ayeba Mail accessible dans l'app |
+| UGC = source principale du contenu | Non — les résultats de recherche dominent |
+| Partage public de nudité | Non |
+| Bloquer / signaler des utilisateurs ou du contenu | Non — aucune fonction de ce type dans le code |
+| Modération des conversations | Non — messagerie privée entre comptes identifiés |
+| Interactions limitées aux amis invités | Non — Mail envoie à toute adresse |
+| Contenu en ligne | Oui — recherche web + navigateur intégré |
+
 ---
 
 ## Mot de passe keystore (garde-le)
