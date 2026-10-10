@@ -62,8 +62,6 @@ jobs:
           chmod +x gradlew
           ./gradlew bundleRelease --stacktrace
         env:
-          ANDROID_HOME: ${{ env.ANDROID_HOME }}
-          JAVA_HOME: ${{ env.JAVA_HOME }}
           AYEBA_VERSION: "1.0.3"
           AYEBA_VERSION_CODE: "4"
 
