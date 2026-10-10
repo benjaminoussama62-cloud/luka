@@ -1,6 +1,64 @@
 import { lookupDefinition } from "./definitions";
 import type { InstantAnswer } from "./types";
 
+/**
+ * Mot nu (« salut », « bonjour ») → vraie définition du Wiktionnaire —
+ * l'équivalent de la carte Larousse que Google affiche pour un mot seul.
+ * Jamais appelé pour une requête multi-mots ou déjà résolue.
+ */
+export function isBareLexicalQuery(query: string): boolean {
+  const q = query.trim();
+  if (!/^[\p{L}][\p{L}'-]{1,30}$/u.test(q)) return false;
+  return true;
+}
+
+async function fetchWiktionaryDefinition(word: string): Promise<InstantAnswer | null> {
+  try {
+    const res = await fetch(
+      `https://fr.wiktionary.org/w/api.php?action=query&prop=extracts&explaintext=1&exsectionformat=plain&redirects=1&titles=${encodeURIComponent(word)}&format=json`,
+      { signal: AbortSignal.timeout(2800), headers: { "User-Agent": "AyebaSearch/2.0 (https://ayeba.app)" }, next: { revalidate: 86400 } },
+    );
+    if (!res.ok) return null;
+    const data = (await res.json()) as {
+      query?: { pages?: Record<string, { extract?: string; missing?: boolean }> };
+    };
+    const page = Object.values(data.query?.pages ?? {})[0];
+    const extract = page?.extract;
+    if (!extract || page.missing) return null;
+
+    // La section Français seule — le Wiktionnaire liste toutes les langues.
+    const frMatch = extract.match(/={2,}\s*Français\s*={2,}([\s\S]*?)(?=\n={2,}\s*[A-ZÀ-Ü]|$)/i);
+    const frSection = (frMatch?.[1] ?? extract).slice(0, 4000);
+
+    // Nature du mot : interjection / nom commun / verbe…
+    const pos = frSection.match(/interjection|nom commun|nom propre|verbe|adjectif|adverbe|préposition|conjonction|pronom|article|onomatopée|locution/i);
+
+    // Définitions numérotées « 1. Sens du mot… »
+    const defs: string[] = [];
+    for (const line of frSection.split("\n")) {
+      const m = line.trim().match(/^\d+[.)]\s+(.+)/);
+      if (!m) continue;
+      const text = m[1].replace(/\([^)]*\)\.?/g, "").replace(/\s{2,}/g, " ").trim();
+      if (text.length < 8 || text.length > 280) continue;
+      defs.push(text);
+      if (defs.length >= 2) break;
+    }
+    if (!defs.length) return null;
+
+    return {
+      kind: "definition",
+      title: word.charAt(0).toUpperCase() + word.slice(1),
+      lines: defs.map((d, i) => ({
+        label: i === 0 ? (pos ? pos[0].charAt(0).toUpperCase() + pos[0].slice(1) : "Définition") : `Sens ${i + 1}`,
+        value: d,
+      })),
+      footnote: "Wiktionnaire · fr.wiktionary.org",
+    };
+  } catch {
+    return null;
+  }
+}
+
 type FxRates = {
   cdf: number;
   eur: number;
@@ -303,6 +361,11 @@ export async function resolveInstantAnswers(query: string): Promise<InstantAnswe
       lines: [{ label: "Définition", value: def.def }],
       footnote: "Ayebi · dictionnaire AYEBA",
     });
+  } else if (isBareLexicalQuery(q)) {
+    // Mot nu — vraie définition du Wiktionnaire (comme la carte Larousse
+    // que Google affiche pour un mot seul).
+    const wikt = await fetchWiktionaryDefinition(q);
+    if (wikt) out.push(wikt);
   }
 
   const time = tryTime(q);

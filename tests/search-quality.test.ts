@@ -329,3 +329,103 @@ describe("math + world count — compréhension générale", () => {
     ).toEqual(["euro"]);
   });
 });
+
+describe("parseSearchIntent — intents calculables (réponses directes)", () => {
+  it("« combien de km entre Kinshasa et Lubumbashi » → distance", () => {
+    const intent = parseSearchIntent("combien de km entre Kinshasa et Lubumbashi");
+    expect(intent.kind).toBe("distance");
+    if (intent.kind === "distance") {
+      expect(intent.from.toLowerCase()).toContain("kinshasa");
+      expect(intent.to.toLowerCase()).toContain("lubumbashi");
+    }
+  });
+
+  it("« distance de Paris à Bruxelles » → distance", () => {
+    const intent = parseSearchIntent("distance de Paris a Bruxelles ?");
+    expect(intent.kind).toBe("distance");
+    if (intent.kind === "distance") {
+      expect(intent.from.toLowerCase()).toContain("paris");
+      expect(intent.to.toLowerCase()).toContain("bruxelles");
+    }
+  });
+
+  it("« cite-moi 3 villes chinoises » → liste de villes en Chine", () => {
+    const intent = parseSearchIntent("cite-moi 3 villes chinoises");
+    expect(intent.kind).toBe("list");
+    if (intent.kind === "list") {
+      expect(intent.count).toBe(3);
+      expect(intent.classQid).toBe("Q515");
+      expect(intent.country?.toLowerCase()).toContain("chin");
+    }
+  });
+
+  it("« les plus grands fleuves du monde » → liste sans pays", () => {
+    const intent = parseSearchIntent("quelles sont les plus grands fleuves du monde ?");
+    expect(intent.kind).toBe("list");
+    if (intent.kind === "list") {
+      expect(intent.classQid).toBe("Q355304");
+      expect(intent.country).toBeUndefined();
+    }
+  });
+
+  it("« le lion est-il un reptile ? » → appartenance taxonomique", () => {
+    const intent = parseSearchIntent("le lion est-il un reptile ?");
+    expect(intent.kind).toBe("membership");
+    if (intent.kind === "membership") {
+      expect(intent.subject.toLowerCase()).toContain("lion");
+      expect(intent.claim.toLowerCase()).toContain("reptile");
+    }
+  });
+
+  it("« est-ce que le requin est un mammifere » → appartenance", () => {
+    const intent = parseSearchIntent("est-ce que le requin est un mammifere ?");
+    expect(intent.kind).toBe("membership");
+    if (intent.kind === "membership") {
+      expect(intent.subject.toLowerCase()).toContain("requin");
+      expect(intent.claim.toLowerCase()).toContain("mammifere");
+    }
+  });
+
+  it("un mot nu reste general — la couche lexicale prend le relais", () => {
+    expect(parseSearchIntent("salut").kind).toBe("general");
+    expect(parseSearchIntent("bonjour").kind).toBe("general");
+  });
+
+  it("les faux positifs restent exclus", () => {
+    // « job elementaire » ne doit jamais matcher membership/distance/list.
+    expect(parseSearchIntent("job elementaire").kind).toBe("general");
+    expect(parseSearchIntent("marseille provence").kind).toBe("general");
+  });
+});
+
+describe("haversineKm — distance réelle", () => {
+  it("Kinshasa ↔ Lubumbashi ≈ 1 560 km (±8 %)", async () => {
+    const { haversineKm } = await import("@/lib/real-search/direct-answers");
+    const km = haversineKm(
+      { lat: -4.3219, lon: 15.3119 },   // Kinshasa
+      { lat: -11.6609, lon: 27.4794 }, // Lubumbashi
+    );
+    expect(km).toBeGreaterThan(1400);
+    expect(km).toBeLessThan(1750);
+  });
+});
+
+describe("questionLikeQuery + isBareLexicalQuery — garde « Réponse courte »", () => {
+  it("les questions bloquent la promotion d'un article", async () => {
+    const { questionLikeQuery } = await import("@/lib/query-intent");
+    expect(questionLikeQuery("combien de km entre X et Y ?")).toBe(true);
+    expect(questionLikeQuery("cite-moi 3 villes chinoises")).toBe(true);
+    expect(questionLikeQuery("le lion est-il un reptile ?")).toBe(true);
+    expect(questionLikeQuery("job elementaire")).toBe(false);
+    expect(questionLikeQuery("salut")).toBe(false);
+  });
+
+  it("un mot nu est une requête lexicale, pas « iphone 15 » ni une phrase", async () => {
+    const { isBareLexicalQuery } = await import("@/lib/instant-answers");
+    expect(isBareLexicalQuery("salut")).toBe(true);
+    expect(isBareLexicalQuery("bonjour")).toBe(true);
+    expect(isBareLexicalQuery("s'épanouir")).toBe(true);
+    expect(isBareLexicalQuery("iphone 15")).toBe(false);
+    expect(isBareLexicalQuery("le lion")).toBe(false);
+  });
+});

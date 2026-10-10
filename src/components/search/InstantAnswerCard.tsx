@@ -15,6 +15,8 @@ const KIND_LABEL: Record<string, string> = {
   population: "Population",
   administrative: "Administration",
   geography: "Géographie",
+  distance: "Distance",
+  list: "Liste",
   calc: "Calcul",
   answer: "Réponse",
 };

@@ -34,8 +34,11 @@ import {
   knownCapitalAnswer,
   normalizeSmsFrench,
   parseSearchIntent,
+  questionLikeQuery,
   upstreamQuery,
 } from "../query-intent";
+import { isBareLexicalQuery } from "../instant-answers";
+import { answerDistance, answerList, answerMembership } from "./direct-answers";
 import { matchKinshasaCommune } from "../kinshasa-communes";
 import type {
   CommunityPost,
@@ -143,6 +146,9 @@ async function liveSearchCore(
   // LLM remplacer « continents » par « Europe » ou √9 par √2.
   const lockRuleIntent =
     ruleIntent.kind === "math" ||
+    ruleIntent.kind === "distance" ||
+    ruleIntent.kind === "list" ||
+    ruleIntent.kind === "membership" ||
     (ruleIntent.kind === "question" && ruleIntent.attrKey === "world_count");
   if (understanding && !lockRuleIntent) {
     if (understanding.intent === "calc" && understanding.expr && evalMath(understanding.expr)) {
@@ -199,7 +205,7 @@ async function liveSearchCore(
   // Service / commerce local : ne jamais réduire à la ville seule
   // (« maison de retraite à Kinshasa » ≠ panneau Kinshasa + 0 résultat).
   const localServiceQuery =
-    /\b(maison\s+de\s+retraite|ehpad|h[oô]pital|clinique|pharmacie|restaurant|h[oô]tel|supermarch|[ée]cole\b|universit|banque|garage|coiffeur|salon\s+de)\b/i.test(
+    /\b(maison\s+de\s+retraite|ehpad|h[oô]pital|clinique|pharmacie|restaurant|h[oô]tel|supermarch|[ée]cole\b|universit|banque|garage|coiffeur|salon\s+de|job\b|emploi|travail|stage\b|recrutement|offre\s+d|annonce|carri[eè]re|d[ée]marche)\b/i.test(
       q,
     );
   if (localServiceQuery && intent.kind === "question") {
@@ -492,6 +498,16 @@ async function liveSearchCore(
   // Toujours interroger le web — priorité RDC = boost au classement, pas couper Internet.
   const upstreamMs = Math.min(UPSTREAM_MS, msLeft());
 
+  // Intents calculables détectés par les règles → résolution graphe Wikidata.
+  const directCall =
+    intent.kind === "distance"
+      ? answerDistance(intent.from, intent.to)
+      : intent.kind === "list"
+        ? answerList(intent.count, intent.classQid, intent.classLabel, intent.country)
+        : intent.kind === "membership"
+          ? answerMembership(intent.subject, intent.claim)
+          : null;
+
   const [
     wikiFr,
     wikiEn,
@@ -508,6 +524,7 @@ async function liveSearchCore(
     communityPosts,
     instantAnswers,
     questionAnswer,
+    directAnswer,
   ] = await timed(opts.timings, "upstream", () =>
     Promise.all([
       offline || skipWebForMath
@@ -534,7 +551,9 @@ async function liveSearchCore(
       offline
         ? Promise.resolve([] as RawHit[])
         : settled(fetchNewsRss(webQ), [], upstreamMs),
-      offline || navSite || factualIntent
+      // Job/service/local : jamais de panneau entité générique (« job
+      // elementaire » ne doit PAS résoudre vers Elementary OS).
+      offline || navSite || factualIntent || localServiceQuery
         ? Promise.resolve(undefined)
         : settled(
             fetchWikiSummary(wikiQueries),
@@ -569,6 +588,11 @@ async function liveSearchCore(
             // sinon elle timeout toujours (wiki+entité+claims ≈ 2-3s en série).
             Math.min(3100, msLeft()),
           ),
+      // Intents calculables — km/liste/oui-non — résolus dans le graphe
+      // Wikidata, jamais depuis un article promu au hasard.
+      offline || !directCall
+        ? Promise.resolve(undefined)
+        : settled(directCall, undefined, Math.min(3000, msLeft())),
     ]),
   );
 
@@ -578,6 +602,10 @@ async function liveSearchCore(
   if (questionAnswer && qIntent) {
     instantAnswers.unshift(questionAnswer.instant);
   }
+  if (directAnswer) {
+    instantAnswers.unshift(directAnswer.instant);
+  }
+  const answerBundle = questionAnswer ?? directAnswer;
   // Calcul : résultat réel en tête, comme le calculateur de Google.
   if (intent.kind === "math") {
     const mathResult = evalMath(intent.expr);
@@ -912,11 +940,11 @@ async function liveSearchCore(
   // — comme le Knowledge Panel de Google (« Saddam Hussein » pour la question
   // « qui est sadam hussein »). Le graphe Ayebi peut dériver vers un sujet
   // voisin et ne doit jamais le détrôner ; il passe en panneau secondaire.
-  if (questionAnswer) {
-    if (knowledgePanel && knowledgePanel.title !== questionAnswer.panel.title) {
+  if (answerBundle) {
+    if (knowledgePanel && knowledgePanel.title !== answerBundle.panel.title) {
       wikipediaKnowledge ??= knowledgePanel;
     }
-    knowledgePanel = questionAnswer.panel;
+    knowledgePanel = answerBundle.panel;
   }
 
   const topWeb = results.find(
@@ -928,7 +956,19 @@ async function liveSearchCore(
   );
 
   const questionSnippet: FeaturedSnippet | undefined =
-    qIntent && questionAnswer ? questionAnswer.snippet : undefined;
+    answerBundle && (qIntent || directAnswer) ? answerBundle.snippet : undefined;
+
+  // Garde-fou « Réponse courte » : jamais un article au hasard pour une
+  // question non résolue, jamais une news pour une requête nominale, jamais
+  // un site non lexical pour un mot nu. Pas de carte > fausse carte.
+  const snippetBlocked =
+    questionLikeQuery(q) || localServiceQuery || Boolean(answerBundle);
+  const bareWord = isBareLexicalQuery(q);
+  const snippetable = (r: { domain: string; sourceType?: string }) =>
+    !snippetBlocked &&
+    r.sourceType !== "news" &&
+    (!bareWord ||
+      /wiktionary|larousse|cnrtl|academie|dictionnaire|wikipedia|vocabulaire/i.test(r.domain));
 
   const featuredSnippet: FeaturedSnippet | undefined =
     questionSnippet ??
@@ -989,14 +1029,16 @@ async function liveSearchCore(
               "#",
             domain: knowledgePanel.facts.some((f) => f.label === "Lire sur Ayebi") ? "ayebi" : topWeb?.domain ?? "ayeba",
           }
-        : topWeb
+        : topWeb && snippetable(topWeb)
           ? {
               title: topWeb.title,
               text: topWeb.snippet,
               url: topWeb.url,
               domain: topWeb.domain,
             }
-          : results[0] && isRetrievedHitAdmissible(results[0], q, subjects)
+          : results[0] &&
+              isRetrievedHitAdmissible(results[0], q, subjects) &&
+              snippetable(results[0])
             ? {
                 title: results[0].title,
                 text: results[0].snippet,

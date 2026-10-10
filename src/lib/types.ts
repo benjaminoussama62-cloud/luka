@@ -166,6 +166,8 @@ export type InstantAnswerKind =
   | "population"
   | "administrative"
   | "geography"
+  | "distance"
+  | "list"
   | "answer";
 
 export type InstantAnswer = {

@@ -30,6 +30,9 @@ export type SearchIntent =
        *  par Wikidata est l'ACTUEL ; on le labellise honnêtement. */
       past?: boolean;
     }
+  | { kind: "distance"; from: string; to: string }
+  | { kind: "list"; count: number; classQid: string; classLabel: string; country?: string }
+  | { kind: "membership"; subject: string; claim: string }
   | { kind: "navigational"; site: NavigationalSite }
   | { kind: "general" };
 
@@ -1055,6 +1058,185 @@ export function worldCountAnswer(subject: string): {
   return null;
 }
 
+/** Chiffres en toutes lettres pour « cite-moi trois … ». */
+const FRENCH_NUMBERS: Record<string, number> = {
+  un: 1, une: 1, deux: 2, trois: 3, quatre: 4, cinq: 5,
+  six: 6, sept: 7, huit: 8, neuf: 9, dix: 10,
+};
+
+/**
+ * « combien de km entre Minsk et Paris », « distance de A à B » —
+ * réponse calculable : géocodage Wikidata + orthodromie.
+ */
+function parseDistanceIntent(raw: string): SearchIntent | null {
+  const nq = normalizeSmsFrench(raw);
+  const wantsDistance =
+    /\b(kilometres?|kilometrage|\bkm\b|distance|a\s+vol\s+d.oiseau|a\s+quelle\s+distance|how\s+far|heures?\s+de\s+(route|vol))\b/.test(nq);
+  if (!wantsDistance) return null;
+  const m =
+    nq.match(/\bentre\s+(.+?)\s+et\s+(.+?)\s*[?.!]*\s*$/i) ??
+    nq.match(/\bfrom\s+(.+?)\s+to\s+(.+?)\s*[?.!]*$/i) ??
+    nq.match(/\bde\s+(.+?)\s+a\s+(.+?)\s*[?.!]*$/i);
+  if (!m) return null;
+  const from = stripLeadingDeter(m[1]);
+  const to = stripLeadingDeter(m[2]);
+  if (from.length < 2 || to.length < 2 || from === to) return null;
+  return { kind: "distance", from, to };
+}
+
+/** Noms de classes listables → classe Wikidata (P31/P279*). */
+export const LIST_CLASSES: Record<string, { qid: string; label: string }> = {
+  villes: { qid: "Q515", label: "ville" },
+  ville: { qid: "Q515", label: "ville" },
+  cities: { qid: "Q515", label: "city" },
+  city: { qid: "Q515", label: "city" },
+  pays: { qid: "Q6256", label: "pays" },
+  countries: { qid: "Q6256", label: "country" },
+  country: { qid: "Q6256", label: "country" },
+  capitales: { qid: "Q5119", label: "capitale" },
+  capitale: { qid: "Q5119", label: "capitale" },
+  capitals: { qid: "Q5119", label: "capital" },
+  fleuves: { qid: "Q355304", label: "fleuve" },
+  fleuve: { qid: "Q355304", label: "fleuve" },
+  rivieres: { qid: "Q4022", label: "rivière" },
+  riviere: { qid: "Q4022", label: "rivière" },
+  rivers: { qid: "Q4022", label: "river" },
+  montagnes: { qid: "Q8502", label: "montagne" },
+  montagne: { qid: "Q8502", label: "montagne" },
+  mountains: { qid: "Q8502", label: "mountain" },
+  lacs: { qid: "Q23397", label: "lac" },
+  lac: { qid: "Q23397", label: "lac" },
+  lakes: { qid: "Q23397", label: "lake" },
+  musees: { qid: "Q33506", label: "musée" },
+  musee: { qid: "Q33506", label: "musée" },
+  museums: { qid: "Q33506", label: "museum" },
+  universites: { qid: "Q3918", label: "université" },
+  universite: { qid: "Q3918", label: "université" },
+  universities: { qid: "Q3918", label: "university" },
+  aeroports: { qid: "Q1248784", label: "aéroport" },
+  aeroport: { qid: "Q1248784", label: "aéroport" },
+  airports: { qid: "Q1248784", label: "airport" },
+  langues: { qid: "Q34770", label: "langue" },
+  langue: { qid: "Q34770", label: "langue" },
+  languages: { qid: "Q34770", label: "language" },
+  monnaies: { qid: "Q8142", label: "monnaie" },
+  monnaie: { qid: "Q8142", label: "monnaie" },
+  devises: { qid: "Q8142", label: "devise" },
+  currencies: { qid: "Q8142", label: "currency" },
+  entreprises: { qid: "Q4830453", label: "entreprise" },
+  entreprise: { qid: "Q4830453", label: "entreprise" },
+  companies: { qid: "Q4830453", label: "company" },
+  footballeurs: { qid: "Q937857", label: "footballeur" },
+  footballeur: { qid: "Q937857", label: "footballeur" },
+  chanteurs: { qid: "Q177220", label: "chanteur" },
+  chanteur: { qid: "Q177220", label: "chanteur" },
+  chanteuses: { qid: "Q177220", label: "chanteuse" },
+  singers: { qid: "Q177220", label: "singer" },
+  clubs: { qid: "Q476028", label: "club de football" },
+  equipes: { qid: "Q476028", label: "équipe" },
+  equipe: { qid: "Q476028", label: "équipe" },
+  presidents: { qid: "Q30461", label: "président" },
+  president: { qid: "Q30461", label: "président" },
+  rois: { qid: "Q116", label: "roi" },
+  roi: { qid: "Q116", label: "roi" },
+  joueurs: { qid: "Q937857", label: "joueur" },
+  films: { qid: "Q11424", label: "film" },
+  film: { qid: "Q11424", label: "film" },
+  movies: { qid: "Q11424", label: "movie" },
+};
+
+const LIST_CLASS_KEYS = Object.keys(LIST_CLASSES).sort((a, b) => b.length - a.length);
+
+/**
+ * « cite-moi 3 villes chinoises », « liste des fleuves africains »,
+ * « les plus grandes villes du monde » → top-N Wikidata (population).
+ */
+function parseListIntent(raw: string): SearchIntent | null {
+  const nq = normalizeSmsFrench(raw);
+  let rest = "";
+  let count = 0;
+
+  const imp = nq.match(
+    /\b(?:cite|site|citer|liste|donne|nomme|enumere|montre)(?:[- ]moi|s|nous)?\s+(?:les\s+|des\s+|quelques\s+)?(?:(\d+|[a-zà-ü]+)\s+)?(.+?)\s*[?.!]*\s*$/i,
+  );
+  const sup = nq.match(
+    /\b(?:quelles?\s+sont\s+)?(?:les\s+)?(\d+\s+)?(?:plus\s+(?:grandes?|grands?|importantes?|importants?|peuples?|peuplees?|riches?|peupl[ée]es?)|principales?|premi[èe]res?|premiers?)\s+(.+?)\s*[?.!]*\s*$/i,
+  );
+  if (imp) {
+    count = m_count(imp[1]);
+    rest = imp[2];
+  } else if (sup) {
+    count = m_count(sup[1]);
+    rest = sup[2];
+  } else {
+    return null;
+  }
+
+  const normRest = rest.replace(/^(?:des|de|du|de la|d[''])\s+/i, "").trim();
+  for (const key of LIST_CLASS_KEYS) {
+    const re = new RegExp(`\\b${key}\\b`, "i");
+    if (!re.test(normRest)) continue;
+    const qualifier = normRest
+      .replace(re, " ")
+      .replace(/^(?:de|du|des|de la|d['']|en|au|aux)\s+/i, "")
+      .replace(/\b(?:de|du|des|de la|d['']|en|au|aux)\s+$/i, "")
+      .trim();
+    const canon = qualifier ? normalizeCountry(qualifier) : "";
+    const country =
+      canon && canon !== qualifier
+        ? canon
+        : /monde|world|global|international/i.test(qualifier)
+          ? undefined
+          : qualifier && qualifier.length > 2
+            ? canon
+            : undefined;
+    return {
+      kind: "list",
+      count: Math.min(count || 5, 10),
+      classQid: LIST_CLASSES[key].qid,
+      classLabel: LIST_CLASSES[key].label,
+      country,
+    };
+  }
+  return null;
+}
+
+function m_count(raw?: string): number {
+  if (!raw) return 0;
+  if (/^\d+$/.test(raw)) return Number(raw);
+  return FRENCH_NUMBERS[raw.toLowerCase()] ?? 0;
+}
+
+/**
+ * « le lion est-il un reptile ? », « est-ce que X est un Y » —
+ * vérifiable dans le graphe : transitivité P171/P31/P279 vers la
+ * classe revendiquée.
+ */
+function parseMembershipIntent(raw: string): SearchIntent | null {
+  const nq = normalizeSmsFrench(raw);
+  if (!/\b(est|sont)\b/.test(nq)) return null;
+  const patterns = [
+    /\best[- ]ce\s+que\s+(.+?)\s+(?:est|sont)\s+(?:un|une|des|du|de la|de l['']|le|la|les)?\s*(.+?)\s*$/,
+    /^(?:le|la|les|l[''e])\s+(.+?)\s+(?:est|sont)[- ]?(?:il|elle|ils|elles|ce)?\s*(?:un|une|du|de la|de l[''']|des)?\s*(.+?)\s*$/,
+    /^(.+?)\s+(?:est|sont)[- ](?:il|elle|ils|elles|ce)\s+(?:un|une|des|du|de la)?\s*(.+?)\s*$/,
+  ];
+  // « est dans quel pays », « est-ce que… qui » — une question de lieu ou
+  // d'agent n'est JAMAIS une classe d'appartenance.
+  const notAClass = /^(quel|quels|quelle|quelles|ou|où|dans|combien|comment|quand|pourquoi|qui|que|quoi|ou se|ou est)\b/;
+  for (const re of patterns) {
+    const m = nq.match(re);
+    if (!m) continue;
+    const subject = cleanSubject(m[1]);
+    const claim = stripLeadingDeter(
+      m[m.length - 1].trim().replace(/\s+(un|une|des)\s+/g, " "),
+    );
+    if (subject.length < 2 || claim.length < 2) continue;
+    if (subject === claim || notAClass.test(claim)) continue;
+    return { kind: "membership", subject, claim };
+  }
+  return null;
+}
+
 export function parseSearchIntent(query: string): SearchIntent {
   const raw = query.trim();
   if (!raw) return { kind: "general" };
@@ -1064,6 +1246,15 @@ export function parseSearchIntent(query: string): SearchIntent {
 
   const world = parseWorldCountIntent(raw);
   if (world) return world;
+
+  const distance = parseDistanceIntent(raw);
+  if (distance) return distance;
+
+  const membership = parseMembershipIntent(raw);
+  if (membership) return membership;
+
+  const list = parseListIntent(raw);
+  if (list) return list;
 
   const capital = parseCapitalIntent(raw);
   // Capitale « connue » → réponse instantanée hors-ligne. Sinon on laisse
@@ -1086,6 +1277,20 @@ export function parseSearchIntent(query: string): SearchIntent {
   if (question) return question;
 
   return { kind: "general" };
+}
+
+/**
+ * La requête ressemble à une question ou demande factuelle — une « réponse
+ * courte » générique ne doit JAMAIS promouvoir un article au hasard.
+ * Mieux vaut aucune carte qu'une carte fausse (leçon Google).
+ */
+export function questionLikeQuery(query: string): boolean {
+  const nq = normalizeSmsFrench(query);
+  return (
+    /\b(combien|quelles?|quels?|quand|comment|pourquoi|est[- ]ce|cite|site|citer|liste|nomme|enumere|donne|distance|est[- ](il|elle|ce)|sont[- ](ils|elles)|combien)\b/.test(
+      nq,
+    ) || /\?\s*$/.test(nq)
+  );
 }
 
 /** Capitales connues — réponse immédiate si Wikipedia tarde. */
