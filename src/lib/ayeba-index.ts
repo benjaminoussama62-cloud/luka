@@ -1,6 +1,7 @@
 /** Corpus + suggestions + dictionnaire Ayeba (index maison léger). */
 
 import { meaningfulTokens, relevanceScore } from "./search-relevance";
+import { correctSpelling } from "./search-index/spell";
 
 export const POPULAR_QUERIES = [
   "Patrice Lumumba",
@@ -286,6 +287,15 @@ export function didYouMean(query: string): string | undefined {
   if (!raw) return undefined;
   // Ne pas « corriger » acronymes / sigles tapés volontairement
   if (/^[A-Z0-9-]{2,8}$/.test(raw)) return undefined;
+
+  // Priorité au vocabulaire réel de l'index — il connaît les noms que le
+  // dictionnaire statique ignore (« tchisekedi » → « tshisekedi »).
+  try {
+    const fromIndex = correctSpelling(raw);
+    if (fromIndex && fromIndex !== raw.toLowerCase()) return fromIndex;
+  } catch {
+    /* vocab indisponible — dict statique en repli */
+  }
 
   const tokens = raw.toLowerCase().split(/\s+/);
   if (!tokens.length) return undefined;

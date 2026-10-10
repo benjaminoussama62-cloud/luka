@@ -40,11 +40,22 @@ export type AsyncFtsHit = {
   credibility: number;
   localRelevant: boolean;
   rank: number;
+  crawledAt?: string;
+  inlinks?: number;
 };
 
-const FTS_SQL = `SELECT doc_id, url, domain, title, snippet(search_fts, 4, '<b>', '</b>', '…', 10) as snip,
-        source_type, credibility, local_relevant, rank
- FROM search_fts WHERE search_fts MATCH ? ORDER BY rank LIMIT ?`;
+// Parité avec le chemin sync : bm25 pondéré (titre ×10), crawled_at et
+// inlinks remontés pour les features fraîcheur/autorité du ranker.
+const FTS_SQL = `SELECT search_fts.doc_id, search_fts.url, search_fts.domain, search_fts.title,
+        snippet(search_fts, 4, '<b>', '</b>', '…', 10) as snip,
+        search_fts.source_type, search_fts.credibility, search_fts.local_relevant,
+        bm25(search_fts, 0, 0, 0, 10.0, 1.0, 0, 0, 0) as rank,
+        cd.crawled_at as crawled_at,
+        (SELECT COUNT(*) FROM document_links dl
+         WHERE dl.target_url = search_fts.url) as inlinks
+ FROM search_fts
+ LEFT JOIN crawl_documents cd ON cd.id = search_fts.doc_id
+ WHERE search_fts MATCH ? ORDER BY rank LIMIT ?`;
 
 async function matchRows(
   client: Client,
@@ -66,6 +77,8 @@ async function matchRows(
     credibility: Number(r.credibility ?? 0.5),
     localRelevant: Boolean(r.local_relevant),
     rank: Number(r.rank ?? 0),
+    crawledAt: r.crawled_at ? String(r.crawled_at) : undefined,
+    inlinks: Number(r.inlinks ?? 0),
   }));
 }
 

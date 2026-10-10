@@ -62,6 +62,7 @@ export function extractFeatures(
     clickBoost?: number;
     bodyLen?: number;
     crawledAt?: string;
+    linkCount?: number;
   },
   query: string,
 ): RankFeatures {
@@ -109,7 +110,7 @@ export function extractFeatures(
     govBoost: hit.sourceType === "gov" ? 1 : 0,
     urlDepth: Math.min(urlDepth / 12, 1),
     hasImage: /\.(jpg|jpeg|png|webp|gif)/i.test(hit.url) ? 1 : 0,
-    linkCount: 0,
+    linkCount: Math.min((hit.linkCount ?? 0) / 50, 1),
   };
 }
 

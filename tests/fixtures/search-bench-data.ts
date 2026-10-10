@@ -423,4 +423,11 @@ export const BENCH_QUERIES: BenchQuery[] = [
   // Rappel — mot tronqué / longue requête (teste le fallback OR)
   { q: "kinsha capitale congo", category: "recall", relevant: ["bench-kinshasa-wiki", "bench-rdc-wiki"] },
   { q: "quel est le nom de la banque commerciale du congo", category: "recall", relevant: ["bench-bcdc"] },
+
+  // Fautes de frappe — correction via le vocabulaire de l'index
+  { q: "kinshsa capitale", category: "typo", relevant: ["bench-kinshasa-wiki"] },
+  { q: "univarsité kinshasa", category: "typo", relevant: ["bench-unikin"] },
+  { q: "monnai rdc", category: "typo", relevant: ["bench-franc-congolais"] },
+  { q: "tchisekedi président", category: "typo", relevant: ["bench-tshisekedi-wiki"] },
+  { q: "republique democratike du congo", category: "typo", relevant: ["bench-rdc-wiki"] },
 ];

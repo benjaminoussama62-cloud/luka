@@ -1,5 +1,6 @@
 import { canUseSyncDb, getDb } from "../storage/database";
 import { ftsMatchQueries } from "./fts-query";
+import { correctSpelling, indexVocabulary } from "./spell";
 
 export type IndexedDoc = {
   id: string;
@@ -55,6 +56,13 @@ export function indexDocument(doc: IndexedDoc, extra?: { outLinks?: string[] }) 
     } catch { /* link table best-effort */ }
   }
 
+  // Le vocabulaire de l'index alimente la correction « vouliez-vous dire ».
+  try {
+    indexVocabulary(doc.title, doc.body);
+  } catch {
+    /* vocab best-effort */
+  }
+
   db.prepare("DELETE FROM search_fts WHERE doc_id = ?").run(doc.id);
   db.prepare(
     `INSERT INTO search_fts (doc_id, url, domain, title, body, source_type, credibility, local_relevant)
@@ -81,6 +89,8 @@ export type FtsHit = {
   credibility: number;
   localRelevant: boolean;
   rank: number;
+  crawledAt?: string;
+  inlinks?: number;
 };
 
 type FtsRow = {
@@ -93,15 +103,27 @@ type FtsRow = {
   credibility: number;
   local_relevant: number;
   rank: number;
+  crawled_at: string | null;
+  inlinks: number;
 };
 
+// bm25 pondéré : le titre compte ~10× plus que le corps — le signal le plus
+// discriminant d'une SERP propre. Le JOIN apporte crawled_at (fraîcheur
+// réelle) et le sous-select les inlinks (autorité du graphe document_links).
 function runMatch(matchQuery: string, limit: number): FtsRow[] {
   const db = getDb();
   return db
     .prepare(
-      `SELECT doc_id, url, domain, title, snippet(search_fts, 4, '<b>', '</b>', '…', 10) as snip,
-              source_type, credibility, local_relevant, rank
-       FROM search_fts WHERE search_fts MATCH ? ORDER BY rank LIMIT ?`,
+      `SELECT search_fts.doc_id, search_fts.url, search_fts.domain, search_fts.title,
+              snippet(search_fts, 4, '<b>', '</b>', '…', 10) as snip,
+              search_fts.source_type, search_fts.credibility, search_fts.local_relevant,
+              bm25(search_fts, 0, 0, 0, 10.0, 1.0, 0, 0, 0) as rank,
+              cd.crawled_at as crawled_at,
+              (SELECT COUNT(*) FROM document_links dl
+               WHERE dl.target_url = search_fts.url) as inlinks
+       FROM search_fts
+       LEFT JOIN crawl_documents cd ON cd.id = search_fts.doc_id
+       WHERE search_fts MATCH ? ORDER BY rank LIMIT ?`,
     )
     .all(matchQuery, limit) as FtsRow[];
 }
@@ -117,6 +139,16 @@ export function searchIndex(query: string, limit = 40): FtsHit[] {
 
   try {
     let rows = runMatch(and, limit);
+    // Faute de frappe : l'AND échoue → la requête corrigée (vocabulaire de
+    // l'index) a priorité sur le OR — sa précision est bien meilleure.
+    if (rows.length < 3) {
+      const corrected = correctSpelling(q);
+      if (corrected) {
+        const seenIds = new Set(rows.map((r) => r.doc_id));
+        const { and: corrAnd } = ftsMatchQueries(corrected);
+        rows = [...rows, ...runMatch(corrAnd, limit).filter((r) => !seenIds.has(r.doc_id))];
+      }
+    }
     // Rappel : requête longue ou mot rare → l'AND strict peut être vide.
     // Le OR préfixé élargit, le tri bm25 natif garde les bons docs en tête.
     if (rows.length < Math.min(6, limit) && or !== and) {
@@ -135,6 +167,8 @@ export function searchIndex(query: string, limit = 40): FtsHit[] {
       credibility: r.credibility,
       localRelevant: Boolean(r.local_relevant),
       rank: r.rank,
+      crawledAt: r.crawled_at ?? undefined,
+      inlinks: r.inlinks ?? 0,
     }));
   } catch {
     return [];

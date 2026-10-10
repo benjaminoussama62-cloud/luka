@@ -258,6 +258,13 @@ function migrate(db: AyebaDatabase) {
     CREATE INDEX IF NOT EXISTS idx_crawl_domain ON crawl_documents(domain);
     CREATE INDEX IF NOT EXISTS idx_crawl_recrawl ON crawl_documents(recrawl_after);
 
+    -- Vocabulaire vivant de l'index pour la correction orthographique :
+    -- chaque page indexée enrichit le dictionnaire (titre pondéré ×5).
+    CREATE TABLE IF NOT EXISTS vocab_terms (
+      term TEXT PRIMARY KEY,
+      freq INTEGER NOT NULL DEFAULT 0
+    );
+
     CREATE VIRTUAL TABLE IF NOT EXISTS search_fts USING fts5(
       doc_id UNINDEXED,
       url UNINDEXED,

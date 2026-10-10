@@ -28,6 +28,8 @@ export function rankHits(
         sourceType: h.sourceType,
         clickBoost: clickBoost(query, h.url),
         bodyLen: h.snippet.length * 8,
+        crawledAt: h.crawledAt,
+        linkCount: h.inlinks ?? 0,
       },
       query,
     );
