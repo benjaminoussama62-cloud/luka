@@ -19,8 +19,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const body = (await req.json().catch(() => ({}))) as { rounds?: number; batch?: number };
-  const rounds = Math.min(body.rounds ?? 1, 2);
-  const batch = Math.min(body.batch ?? 8, 20);
+  // Capacité calibrée pour la fenêtre maxDuration=60 : 3×15s de crawl +
+  // seeds/sitemaps en marge. Appelé toutes les 20 min par le workflow
+  // GitHub → plusieurs milliers de pages/jour contre ~240 avant.
+  const rounds = Math.min(body.rounds ?? 1, 3);
+  const batch = Math.min(body.batch ?? 8, 24);
 
   seedQueue();
   const sitemapUrls = await seedFromSitemaps(120);
@@ -28,7 +31,7 @@ export async function POST(req: Request) {
   let totalIndexed = 0;
   let totalErrors = 0;
   for (let i = 0; i < rounds; i++) {
-    const r = await runCrawlBatch(batch, { timeBudgetMs: 20_000 });
+    const r = await runCrawlBatch(batch, { timeBudgetMs: 15_000 });
     totalIndexed += r.indexed;
     totalErrors += r.errors;
   }

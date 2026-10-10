@@ -21,6 +21,8 @@ export type RankFeatures = {
   linkCount: number;
   /** Le doc a matché tous les groupes de tokens de la requête (AND strict). */
   fullMatch: number;
+  /** Un token de la requête apparaît dans le domaine — marque officielle. */
+  domainMatch: number;
 };
 
 export type MlWeights = Record<keyof RankFeatures, number>;
@@ -43,6 +45,7 @@ const DEFAULT_WEIGHTS: MlWeights = {
   hasImage: 0.02,
   linkCount: 0.05,
   fullMatch: 0.25,
+  domainMatch: 0.3,
 };
 
 export function getMlWeights(): MlWeights {
@@ -122,6 +125,16 @@ export function extractFeatures(
     hasImage: /\.(jpg|jpeg|png|webp|gif)/i.test(hit.url) ? 1 : 0,
     linkCount: Math.min((hit.linkCount ?? 0) / 50, 1),
     fullMatch: hit.fullMatch === false ? 0 : 1,
+    // Navigational : « udps » → udps.cd, « react » → react.dev. Le domaine
+    // qui EST la marque est le signal le plus fort d'une requête de marque —
+    // mais uniquement sur le PREMIER label : « ambafrance.org » ne doit pas
+    // matcher « franc », ni « musee-mali.pe » voler la requête « mali ».
+    domainMatch: (() => {
+      const firstLabel = hit.domain.toLowerCase().split(".")[0];
+      return qTokens.some((t) => t.length >= 3 && (firstLabel === t || firstLabel.startsWith(t)))
+        ? 1
+        : 0;
+    })(),
   };
 }
 

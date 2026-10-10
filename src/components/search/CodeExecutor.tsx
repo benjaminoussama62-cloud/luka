@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useAyeba } from "@/lib/store";
 
 export function CodeExecutor() {
@@ -11,25 +11,31 @@ export function CodeExecutor() {
   const [error, setError] = useState<string | undefined>(initial?.error);
   const [verified, setVerified] = useState(Boolean(initial?.verified));
 
-  useEffect(() => {
-    if (codeOpen && initial) {
+  // Nouvelle SERP → nouveau code : ajustement pendant le render (pattern
+  // React officiel — pas de setState dans un useEffect).
+  const [lastInitial, setLastInitial] = useState(initial);
+  if (initial !== lastInitial) {
+    setLastInitial(initial);
+    if (initial) {
       setCode(initial.code);
       setOutput(initial.output);
       setError(initial.error);
       setVerified(initial.verified);
     }
-  }, [codeOpen, initial]);
+  }
 
   if (!codeOpen) return null;
 
-  function run() {
+  async function run() {
     try {
       const logs: string[] = [];
       const consoleProxy = {
         log: (...args: unknown[]) => logs.push(args.map(String).join(" ")),
       };
-      const fn = new Function("console", code);
-      fn(consoleProxy);
+      // Async accepté : `return await fetch(…)` dans le code édité fonctionne.
+      const fn = new Function("console", code) as (c: typeof consoleProxy) => unknown;
+      const res = fn(consoleProxy);
+      if (res && typeof (res as Promise<unknown>).then === "function") await res;
       setOutput(logs.join("\n") || "(aucune sortie)");
       setError(undefined);
       setVerified(true);

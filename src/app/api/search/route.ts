@@ -8,10 +8,12 @@ import { recordImpressions, recordSearchEvent } from "@/lib/search-index/fts";
 import { getDbMode } from "@/lib/storage/database";
 import { signalContext } from "@/lib/http-ctx";
 import {
+  enqueueUrlsAsync,
   pushSearchHistoryAsync,
   recordImpressionsAsync,
   recordSearchEventAsync,
 } from "@/lib/storage/turso-async";
+import { enqueueUrl, querySeeds } from "@/lib/crawler/learn";
 import type { AlgorithmSliders, SearchResponse } from "@/lib/types";
 
 export const maxDuration = 60;
@@ -118,6 +120,16 @@ export async function POST(req: Request) {
           };
           if (turso) await recordSearchEventAsync(query.trim(), info);
           else recordSearchEvent(query.trim(), info);
+        }
+        // Boucle d'apprentissage temps réel : une SERP pauvre ensemence
+        // immédiatement la file du crawler — le trou se répare au prochain batch.
+        const resultCount = serp.results?.length ?? 0;
+        if (!body.privateMode && query.trim() && resultCount <= 2) {
+          const urls = querySeeds(query.trim());
+          if (urls.length) {
+            if (turso) await enqueueUrlsAsync(urls, 70);
+            else urls.forEach((u) => enqueueUrl(u, 70));
+          }
         }
       } catch (e) {
         console.warn("[search] event skipped", e);

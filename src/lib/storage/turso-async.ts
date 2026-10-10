@@ -139,6 +139,25 @@ export async function recordSearchEventAsync(
   }
 }
 
+/** Enqueue non-bloquant — la route apprend en direct sans driver sync. */
+export async function enqueueUrlsAsync(urls: string[], priority = 70): Promise<void> {
+  const client = getAsyncClient();
+  if (!client || !urls.length) return;
+  const now = new Date().toISOString();
+  try {
+    await client.batch(
+      urls.map((u) => ({
+        sql: `INSERT INTO crawl_queue (url, priority, status, scheduled_at, created_at)
+              VALUES (?, ?, 'pending', ?, ?) ON CONFLICT(url) DO NOTHING`,
+        args: [u, priority, now, now],
+      })),
+      "write",
+    );
+  } catch {
+    /* seed best-effort */
+  }
+}
+
 /** Impressions + Radar aggregates in one batch — never on the sync driver. */
 export async function recordImpressionsAsync(
   query: string,

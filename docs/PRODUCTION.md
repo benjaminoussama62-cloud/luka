@@ -54,6 +54,22 @@ Manual trigger:
 curl -H "Authorization: Bearer $CRON_SECRET" https://ayeba.app/api/cron/crawl
 ```
 
+Continuous crawl (GitHub Actions, toutes les 20 min — Hobby n'autorise que
+des crons quotidiens) :
+
+- Workflow : `.github/workflows/ayeba-crawl.yml` → POST `/api/crawl/continuous`
+- Secret repo GitHub requis : `AYEBA_CRON_SECRET` = même valeur que `CRON_SECRET`
+- Le crawler apprend aussi des requêtes réelles : les recherches qui servent
+  ≤2 résultats ensemencent automatiquement la file (articles Wikipedia).
+
+Manual trigger:
+```bash
+curl -X POST -H "Authorization: Bearer $CRON_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"rounds":3,"batch":24}' \
+  https://ayeba.app/api/crawl/continuous
+```
+
 First fill (local machine → Turso, after `vercel env pull .env.local`):
 ```bash
 npm run jobs:quick   # small batch

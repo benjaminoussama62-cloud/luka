@@ -67,6 +67,7 @@ import {
 } from "./upstream";
 import { evalMath, tryMathSnippet } from "./math";
 import { diversifyResults, rankAndFilter, relatedFrom, toResult } from "./ranking";
+import { buildCodeExecution, buildPodcastScript } from "./tools";
 import {
   ayebiKnowledgePanel,
   ayebiRichSnippet,
@@ -1058,5 +1059,8 @@ async function liveSearchCore(
         ]),
       },
     ],
+    // Outils alimentés par la SERP réelle — jamais de données fabriquées.
+    podcast: buildPodcastScript(q, results, knowledgePanel ?? wikipediaKnowledge, instantAnswers[0], newsResults),
+    code: buildCodeExecution(q, results),
   };
 }

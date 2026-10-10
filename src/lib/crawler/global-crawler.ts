@@ -1,5 +1,6 @@
 import { MEGA_SEEDS } from "./mega-seeds";
 import { canFetch, canonicalUrl } from "./robots";
+import { enqueueUrl, seedFromFailedQueries } from "./learn";
 import { indexDocument } from "../search-index/fts";
 import { indexImage } from "../verticals/images";
 import { indexProduct } from "../verticals/shopping";
@@ -13,14 +14,7 @@ export const GLOBAL_SEEDS = MEGA_SEEDS;
 
 const USER_AGENT = "AyebiBot/1.0 (+https://ayeba.app; crawl RDC-first)";
 
-export function enqueueUrl(url: string, priority = 0) {
-  const db = getDb();
-  const now = new Date().toISOString();
-  db.prepare(
-    `INSERT INTO crawl_queue (url, priority, status, scheduled_at, created_at)
-     VALUES (?, ?, 'pending', ?, ?) ON CONFLICT(url) DO NOTHING`,
-  ).run(url, priority, now, now);
-}
+export { enqueueUrl } from "./learn";
 
 /**
  * Remet en file une URL déjà connue (recrawl) : done/failed → pending.
@@ -104,6 +98,9 @@ export async function runCrawlBatch(
   seedQueue();
   try {
     enqueueStaleDocuments(40);
+    // Les requêtes récentes pauvres en résultats deviennent des graines —
+    // l'index se répare là où les utilisateurs butent réellement.
+    seedFromFailedQueries(30);
   } catch {
     /* recrawl best-effort */
   }
@@ -163,9 +160,9 @@ export async function runCrawlBatch(
     }
   };
 
-  // Pool parallèle : 6 fetch simultanés — le débit réel est limité par le
-  // réseau, pas par le CPU. ~6× plus de pages par fenêtre de cron.
-  const CONCURRENCY = 6;
+  // Pool parallèle : 8 fetch simultanés — le débit réel est limité par le
+  // réseau, pas par le CPU. Reste poli (robots.txt + UA dédié).
+  const CONCURRENCY = 8;
   for (let i = 0; i < pending.length; i += CONCURRENCY) {
     if (deadline && Date.now() >= deadline) break;
     await Promise.all(pending.slice(i, i + CONCURRENCY).map(processItem));

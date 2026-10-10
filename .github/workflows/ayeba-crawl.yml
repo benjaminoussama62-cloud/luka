@@ -1,0 +1,25 @@
+name: ayeba-crawl
+
+# Vercel Hobby n'autorise que des crons quotidiens — GitHub Actions offre
+# un scheduler gratuit toutes les 20 min. Chaque appel traite jusqu'à
+# ~72 pages ; le crawler se nourrit aussi des requêtes zéro-résultat.
+#
+# Secret requis : AYEBA_CRON_SECRET (identique à CRON_SECRET côté Vercel).
+
+on:
+  schedule:
+    - cron: "*/20 * * * *"
+  workflow_dispatch:
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Déclencher le batch de crawl continu
+        run: |
+          curl -fsS -X POST "https://ayeba.app/api/crawl/continuous" \
+            -H "Authorization: Bearer ${{ secrets.AYEBA_CRON_SECRET }}" \
+            -H "Content-Type: application/json" \
+            --max-time 90 \
+            -d '{"rounds":3,"batch":24}'

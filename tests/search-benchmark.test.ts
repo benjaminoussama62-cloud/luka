@@ -15,6 +15,7 @@ import { indexDocument, recordSearchEvent, searchIndex, searchQualityStats } fro
 import { correctSpelling, suggestFromVocabulary } from "@/lib/search-index/spell";
 import { rankHits } from "@/lib/search-index/ranking";
 import { getDb, canUseSyncDb } from "@/lib/storage/database";
+import { querySeeds, seedFromFailedQueries } from "@/lib/crawler/learn";
 import { BENCH_DOCS, BENCH_QUERIES } from "./fixtures/search-bench-data";
 
 /**
@@ -151,6 +152,26 @@ describe("benchmark qualité de recherche — index propre", () => {
     expect(stats.avgLatencyMs).toBeGreaterThan(0);
     expect(stats.degradedRate).toBeGreaterThan(0);
     expect(stats.topZeroResultQueries[0]).toBe("bench-evt-zero-a");
+  });
+
+  it("les requêtes pauvres en résultats ensemencent le crawler", () => {
+    // Boucle auto-apprenante : le journal de santé nourrit la file.
+    recordSearchEvent("province du kwango", { resultsCount: 0 });
+    recordSearchEvent("comment faire du feu", { resultsCount: 0 });
+    expect(querySeeds("province du kwango")).toEqual([
+      "https://fr.wikipedia.org/wiki/Province_du_Kwango",
+      "https://en.wikipedia.org/wiki/Province_du_Kwango",
+    ]);
+    // Requête conversationnelle → pas de slug douteux.
+    expect(querySeeds("comment faire du feu")).toEqual([]);
+
+    const n = seedFromFailedQueries(10);
+    expect(n).toBeGreaterThanOrEqual(1);
+    const row = getDb()
+      .prepare("SELECT url, priority FROM crawl_queue WHERE url LIKE '%Kwango%'")
+      .get() as { url: string; priority: number } | undefined;
+    expect(row?.url).toContain("wikipedia.org/wiki/Province_du_Kwango");
+    expect(row?.priority).toBeGreaterThanOrEqual(60);
   });
 
   it("agrégats au-dessus des seuils de régression", () => {
