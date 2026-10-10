@@ -107,3 +107,63 @@ export function correctSpelling(query: string): string | undefined {
 
   return changed ? fixed.join(" ") : undefined;
 }
+
+const freqCache = new Map<string, number>();
+
+/**
+ * Fréquence d'un terme dans l'index (vocab_terms). Utilisée pour pondérer
+ * la couverture façon IDF : matcher un terme rare vaut plus qu'un commun.
+ */
+export function termFreq(term: string): number {
+  const cached = freqCache.get(term);
+  if (cached !== undefined) return cached;
+  let f = 0;
+  if (canUseSyncDb()) {
+    const row = getDb()
+      .prepare("SELECT freq FROM vocab_terms WHERE term = ?")
+      .get(term) as { freq: number } | undefined;
+    f = row?.freq ?? 0;
+  }
+  if (freqCache.size < 50_000) freqCache.set(term, f);
+  return f;
+}
+
+/** Poids de rareté façon IDF : terme absent (freq 0) ≈ 0.7, très fréquent → ~0.15. */
+export function rarityWeight(term: string): number {
+  return 1 / Math.sqrt(1 + termFreq(term));
+}
+
+/**
+ * Autocomplete sur le vocabulaire de l'index : complète le dernier token
+ * tapé par les termes les plus fréquents de l'index — les suggestions
+ * reflètent ce que le moteur connaît vraiment, pas un dictionnaire figé.
+ * « banque com » → « banque commerciale ».
+ */
+export function suggestFromVocabulary(query: string, limit = 5): string[] {
+  if (!canUseSyncDb()) return [];
+  const q = query.trim().toLowerCase();
+  if (q.length < 2) return [];
+  const db = getDb();
+
+  const lastSpace = q.lastIndexOf(" ");
+  const head = lastSpace === -1 ? "" : q.slice(0, lastSpace + 1);
+  const tail = lastSpace === -1 ? q : q.slice(lastSpace + 1);
+  if (tail.length < 2 || /\d/.test(tail)) return [];
+
+  const safeTail = tail.replace(/[%_]/g, "");
+  if (!safeTail) return [];
+  const cands = db
+    .prepare(
+      `SELECT term FROM vocab_terms WHERE term LIKE ? ORDER BY freq DESC LIMIT ?`,
+    )
+    .all(`${safeTail}%`, limit * 4) as { term: string }[];
+
+  const out: string[] = [];
+  for (const c of cands) {
+    if (c.term === tail && head) continue;
+    const s = `${head}${c.term}`;
+    if (!out.includes(s)) out.push(s);
+    if (out.length >= limit) break;
+  }
+  return out;
+}

@@ -1,5 +1,6 @@
 import { getDb } from "../storage/database";
 import { queryTokens, tokenVariants } from "./fts-query";
+import { rarityWeight } from "./spell";
 
 export type RankFeatures = {
   fts: number;
@@ -18,6 +19,8 @@ export type RankFeatures = {
   urlDepth: number;
   hasImage: number;
   linkCount: number;
+  /** Le doc a matché tous les groupes de tokens de la requête (AND strict). */
+  fullMatch: number;
 };
 
 export type MlWeights = Record<keyof RankFeatures, number>;
@@ -39,6 +42,7 @@ const DEFAULT_WEIGHTS: MlWeights = {
   urlDepth: -0.03,
   hasImage: 0.02,
   linkCount: 0.05,
+  fullMatch: 0.25,
 };
 
 export function getMlWeights(): MlWeights {
@@ -63,6 +67,7 @@ export function extractFeatures(
     bodyLen?: number;
     crawledAt?: string;
     linkCount?: number;
+    fullMatch?: boolean;
   },
   query: string,
 ): RankFeatures {
@@ -71,11 +76,20 @@ export function extractFeatures(
   const qTokens = queryTokens(query);
   const titleLower = hit.title.toLowerCase();
   const textLower = `${hit.title} ${hit.snippet}`.toLowerCase();
-  const coverage =
-    qTokens.length === 0
+  // Couverture pondérée par rareté (IDF) : matcher « bétail » vaut beaucoup
+  // plus que matcher « rdc ». Un doc ne couvrant que les tokens communs est
+  // fortement pénalisé face au doc qui couvre le terme discriminant.
+  const tokWeights = qTokens.map(rarityWeight);
+  const totalW = tokWeights.reduce((a, b) => a + b, 0);
+  const weightedCoverage = (corpus: string) =>
+    totalW === 0
       ? 0
-      : qTokens.filter((t) => tokenVariants(t).some((v) => textLower.includes(v))).length /
-        qTokens.length;
+      : qTokens.reduce(
+          (sum, t, i) =>
+            sum + (tokenVariants(t).some((v) => corpus.includes(v)) ? tokWeights[i] : 0),
+          0,
+        ) / totalW;
+  const coverage = weightedCoverage(textLower);
 
   let freshness = 0.5;
   if (hit.crawledAt) {
@@ -92,11 +106,7 @@ export function extractFeatures(
 
   return {
     fts: Math.min(Math.abs(hit.rank ?? 0) / 10, 1),
-    titleMatch:
-      qTokens.length === 0
-        ? 0
-        : qTokens.filter((t) => tokenVariants(t).some((v) => titleLower.includes(v))).length /
-          qTokens.length,
+    titleMatch: weightedCoverage(titleLower),
     domainTrust: Math.min(hit.credibility, 1),
     localRdc: hit.localRelevant || hit.domain.endsWith(".cd") ? 1 : 0,
     clickBoost: Math.min((hit.clickBoost ?? 0) / 25, 1),
@@ -111,6 +121,7 @@ export function extractFeatures(
     urlDepth: Math.min(urlDepth / 12, 1),
     hasImage: /\.(jpg|jpeg|png|webp|gif)/i.test(hit.url) ? 1 : 0,
     linkCount: Math.min((hit.linkCount ?? 0) / 50, 1),
+    fullMatch: hit.fullMatch === false ? 0 : 1,
   };
 }
 

@@ -42,6 +42,8 @@ export type AsyncFtsHit = {
   rank: number;
   crawledAt?: string;
   inlinks?: number;
+  /** true si le doc matche tous les groupes de tokens (AND strict). */
+  fullMatch?: boolean;
 };
 
 // Parité avec le chemin sync : bm25 pondéré (titre ×10), crawled_at et
@@ -79,6 +81,7 @@ async function matchRows(
     rank: Number(r.rank ?? 0),
     crawledAt: r.crawled_at ? String(r.crawled_at) : undefined,
     inlinks: Number(r.inlinks ?? 0),
+    fullMatch: false,
   }));
 }
 
@@ -91,6 +94,7 @@ export async function searchIndexAsync(query: string, limit = 30): Promise<Async
 
   try {
     let hits = await matchRows(client, and, limit);
+    for (const h of hits) h.fullMatch = true;
     // Même rappel que le chemin sync : OR préfixé quand l'AND est vide.
     if (hits.length < Math.min(6, limit) && or !== and) {
       const seenIds = new Set(hits.map((h) => h.docId));

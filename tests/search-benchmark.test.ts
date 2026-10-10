@@ -12,6 +12,7 @@ for (const k of [
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { indexDocument, searchIndex } from "@/lib/search-index/fts";
+import { correctSpelling, suggestFromVocabulary } from "@/lib/search-index/spell";
 import { rankHits } from "@/lib/search-index/ranking";
 import { getDb, canUseSyncDb } from "@/lib/storage/database";
 import { BENCH_DOCS, BENCH_QUERIES } from "./fixtures/search-bench-data";
@@ -117,6 +118,20 @@ describe("benchmark qualité de recherche — index propre", () => {
       expect(r.rr, `aucun doc pertinent pour «${q}» — top5: ${r.top.join(", ")}`).toBeGreaterThan(0);
     },
   );
+
+  it("correctSpelling corrige sur le vocabulaire de l'index", () => {
+    expect(correctSpelling("kinshsa capitale")).toBe("kinshasa capitale");
+    expect(correctSpelling("univarsité kinshasa")).toBe("université kinshasa");
+    expect(correctSpelling("tchisekedi")).toBe("tshisekedi");
+    // Un mot déjà correct n'est jamais « corrigé ».
+    expect(correctSpelling("kinshasa population")).toBeUndefined();
+  });
+
+  it("suggestFromVocabulary complète le token en cours de frappe", () => {
+    expect(suggestFromVocabulary("kin")).toContain("kinshasa");
+    expect(suggestFromVocabulary("banque com")).toContain("banque commerciale");
+    expect(suggestFromVocabulary("")).toEqual([]);
+  });
 
   it("le spam clickbait ne sort jamais dans le top 3", () => {
     const ids = benchRanked("kinshasa").map((h) => h.docId);

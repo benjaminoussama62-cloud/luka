@@ -91,6 +91,8 @@ export type FtsHit = {
   rank: number;
   crawledAt?: string;
   inlinks?: number;
+  /** true si le doc matche tous les groupes de tokens (AND strict ou corrigé). */
+  fullMatch?: boolean;
 };
 
 type FtsRow = {
@@ -139,6 +141,7 @@ export function searchIndex(query: string, limit = 40): FtsHit[] {
 
   try {
     let rows = runMatch(and, limit);
+    const fullIds = new Set(rows.map((r) => r.doc_id));
     // Faute de frappe : l'AND échoue → la requête corrigée (vocabulaire de
     // l'index) a priorité sur le OR — sa précision est bien meilleure.
     if (rows.length < 3) {
@@ -146,7 +149,9 @@ export function searchIndex(query: string, limit = 40): FtsHit[] {
       if (corrected) {
         const seenIds = new Set(rows.map((r) => r.doc_id));
         const { and: corrAnd } = ftsMatchQueries(corrected);
-        rows = [...rows, ...runMatch(corrAnd, limit).filter((r) => !seenIds.has(r.doc_id))];
+        const corr = runMatch(corrAnd, limit).filter((r) => !seenIds.has(r.doc_id));
+        for (const r of corr) fullIds.add(r.doc_id);
+        rows = [...rows, ...corr];
       }
     }
     // Rappel : requête longue ou mot rare → l'AND strict peut être vide.
@@ -169,6 +174,7 @@ export function searchIndex(query: string, limit = 40): FtsHit[] {
       rank: r.rank,
       crawledAt: r.crawled_at ?? undefined,
       inlinks: r.inlinks ?? 0,
+      fullMatch: fullIds.has(r.doc_id),
     }));
   } catch {
     return [];

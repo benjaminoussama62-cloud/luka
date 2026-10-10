@@ -258,3 +258,27 @@ const EXPANSIONS: Record<string, string[]> = {
 export function expandToken(token: string): string[] {
   return EXPANSIONS[token.toLowerCase()] ?? [];
 }
+
+/**
+ * Variantes morphologiques françaises légères — couvre pluriels et
+ * désinences courantes sans stemmer complet. « hopital » doit matcher le
+ * doc « hôpitaux », « chaussures » le doc « chaussure ».
+ * Les variantes invalides éventuelles sont OR-donc inoffensives.
+ */
+export function morphVariants(token: string): string[] {
+  const out = new Set<string>();
+  if (token.length <= 3) return [];
+  if (token.endsWith("eaux")) out.add(token.slice(0, -1)); // eaux→eau
+  else if (token.endsWith("eau")) out.add(`${token}ux`);
+  if (token.endsWith("aux") && !token.endsWith("eaux")) {
+    out.add(`${token.slice(0, -3)}al`); // hôpitaux→hôpital
+  } else if (token.endsWith("al")) {
+    out.add(`${token.slice(0, -2)}aux`); // hôpital→hôpitaux
+  }
+  if (token.endsWith("ées")) out.add(token.slice(0, -2));
+  else if (token.endsWith("ée")) out.add(token.slice(0, -1));
+  if (token.endsWith("es")) out.add(token.slice(0, -1)); // chaussures→chaussure
+  else if (token.endsWith("s") || token.endsWith("x")) out.add(token.slice(0, -1));
+  else out.add(`${token}s`);
+  return [...out];
+}

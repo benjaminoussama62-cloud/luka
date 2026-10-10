@@ -6,6 +6,7 @@ import {
   BRAND_SEARCH_DOCS,
 } from "@/lib/sister-search";
 import { isStrongBrandQuery, meaningfulTokens, navigationalSiteForQuery } from "@/lib/search-relevance";
+import { suggestFromVocabulary } from "@/lib/search-index/spell";
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -45,11 +46,19 @@ export async function GET(req: Request) {
   }
 
   const local = suggestQueries(q, history);
+  // Suggestions issues du vocabulaire réel de l'index crawlé.
+  let fromIndex: string[] = [];
+  try {
+    fromIndex = suggestFromVocabulary(q, 5);
+  } catch {
+    /* index indisponible (turso/cold start) — suggestion best-effort */
+  }
   const merged = [
     ...new Set([
       ...navSuggest,
       ...(strongBrand ? brands : []),
       ...wiki,
+      ...fromIndex,
       ...local.slice(0, 4),
       ...(!strongBrand ? brands : []),
       ...local.slice(4),

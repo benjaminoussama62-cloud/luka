@@ -30,6 +30,7 @@ export function rankHits(
         bodyLen: h.snippet.length * 8,
         crawledAt: h.crawledAt,
         linkCount: h.inlinks ?? 0,
+        fullMatch: h.fullMatch,
       },
       query,
     );

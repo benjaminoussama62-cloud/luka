@@ -354,6 +354,16 @@ export const BENCH_DOCS: BenchDoc[] = [
 
   // ── Bruit / hors-sujet ─────────────────────────────────────────
   {
+    id: "bench-betail",
+    url: "https://elevage-rdc.example.cd/betaux",
+    domain: "elevage-rdc.example.cd",
+    title: "Les bétails du Congo — élevage",
+    body: "L'élevage des bétails en République démocratique du Congo : bovins, caprins et ovins dans les provinces. Marché du bétail congolais.",
+    sourceType: "web",
+    credibility: 0.5,
+    localRelevant: true,
+  },
+  {
     id: "bench-recette-manioc",
     url: "https://cuisine-afrique.example.fr/pondu",
     domain: "cuisine-afrique.example.fr",
@@ -430,4 +440,10 @@ export const BENCH_QUERIES: BenchQuery[] = [
   { q: "monnai rdc", category: "typo", relevant: ["bench-franc-congolais"] },
   { q: "tchisekedi président", category: "typo", relevant: ["bench-tshisekedi-wiki"] },
   { q: "republique democratike du congo", category: "typo", relevant: ["bench-rdc-wiki"] },
+
+  // Morphologie — singulier↔pluriel, désinences (al↔aux, es→e)
+  { q: "election rdc", category: "morphology", relevant: ["bench-radiookapi"] },
+  { q: "hopital public rdc", category: "morphology", relevant: ["bench-sante-gouv"] },
+  { q: "commune de kinshasa", category: "morphology", relevant: ["bench-kinshasa-wiki"] },
+  { q: "betail congolais", category: "morphology", relevant: ["bench-betail"] },
 ];

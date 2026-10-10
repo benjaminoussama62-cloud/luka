@@ -1125,6 +1125,7 @@ function seedMlWeights(db: AyebaDatabase) {
     urlDepth: -0.03,
     hasImage: 0.02,
     linkCount: 0.05,
+    fullMatch: 0.25,
   };
   if (row && row.samples > 0) return; // poids appris par clics — ne pas écraser
   db.prepare(

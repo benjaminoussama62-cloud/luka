@@ -1,4 +1,4 @@
-import { FR_STOPWORDS, expandToken } from "./query-expansion";
+import { FR_STOPWORDS, expandToken, morphVariants } from "./query-expansion";
 
 /**
  * Construction des requêtes FTS5 — partagée entre l'index web (search_fts)
@@ -29,7 +29,7 @@ export function queryTokens(query: string): string[] {
 
 /** Toutes les variantes d'un token, dédupliquées (token inclus en tête). */
 export function tokenVariants(token: string): string[] {
-  return [...new Set([token, ...expandToken(token)])];
+  return [...new Set([token, ...expandToken(token), ...morphVariants(token)])];
 }
 
 export function ftsMatchQueries(query: string): { and: string; or: string } {
