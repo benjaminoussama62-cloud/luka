@@ -1,5 +1,5 @@
 /**
- * Ayeba Money — garde-fous HTTP partagés par les routes /api/money/*.
+ * Ayeba Mbongo — garde-fous HTTP partagés par les routes /api/money/*.
  */
 import { NextResponse } from "next/server";
 import { getSessionFromCookies, type SessionUser } from "@/lib/auth-server";

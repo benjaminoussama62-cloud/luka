@@ -21,11 +21,11 @@ plugins {
 }
 
 def twaManifest = [
-    applicationId: 'app.ayeba.money',
+    applicationId: 'app.ayeba.mbongo',
     hostName: 'ayeba.app', // The domain being opened in the TWA.
     launchUrl: '/money', // The start path for the TWA. Must be relative to the domain.
-    name: 'Ayeba Money', // The application name.
-    launcherName: 'Ayeba Money', // The name shown on the Android Launcher.
+    name: 'Ayeba Mbongo', // The application name.
+    launcherName: 'Ayeba Mbongo', // The name shown on the Android Launcher.
     themeColor: '#000000', // The color used for the status bar.
     themeColorDark: '#000000', // The color used for the dark status bar.
     navigationColor: '#000000', // The color used for the navigation bar.
@@ -52,9 +52,9 @@ def twaManifest = [
 
 android {
     compileSdkVersion 36
-    namespace "app.ayeba.money"
+    namespace "app.ayeba.mbongo"
     defaultConfig {
-        applicationId "app.ayeba.money"
+        applicationId "app.ayeba.mbongo"
         minSdkVersion 21
         targetSdkVersion 36
         versionCode 1

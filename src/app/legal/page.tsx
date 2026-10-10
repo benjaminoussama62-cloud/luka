@@ -28,17 +28,17 @@ const LINKS = [
   },
   {
     href: "/privacy/money",
-    title: "Confidentialité — Ayeba Money",
+    title: "Confidentialité — Ayeba Mbongo",
     text: "Notice propre au portefeuille : soldes, transactions, PIN, partenaires de paiement.",
   },
   {
     href: "/money/conditions",
-    title: "Conditions — Ayeba Money",
+    title: "Conditions — Ayeba Mbongo",
     text: "Portefeuille virtuel, transferts internes, dépôts/retraits, code PIN, responsabilités.",
   },
   {
     href: "/money/suppression",
-    title: "Suppression — Ayeba Money",
+    title: "Suppression — Ayeba Mbongo",
     text: "Fermeture du portefeuille : procédure, données supprimées et conservées.",
   },
   {

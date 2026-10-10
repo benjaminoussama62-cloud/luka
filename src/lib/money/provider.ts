@@ -1,5 +1,5 @@
 /**
- * Ayeba Money — orchestration des providers externes (dépôt / retrait).
+ * Ayeba Mbongo — orchestration des providers externes (dépôt / retrait).
  *
  * Le ledger ne connaît aucun provider : il ne voit que des transactions
  * pending → completed/failed/reversed. Ici on traduit une intention Money
@@ -42,7 +42,7 @@ export async function startDepositCharge(tx: MoneyTransaction, input: {
       transactionId: tx.id,
       amount: minorToMajor(tx.amount_minor, tx.currency),
       currency: tx.currency,
-      description: "Dépôt Ayeba Money",
+      description: "Dépôt Ayeba Mbongo",
       customerEmail: input.userEmail,
       customerName: input.userName,
       customerPhone: input.phone,
@@ -73,7 +73,7 @@ export async function startWithdrawalPayout(tx: MoneyTransaction, input: {
       transactionId: tx.id,
       amount: minorToMajor(tx.amount_minor, tx.currency),
       currency: tx.currency,
-      description: "Retrait Ayeba Money",
+      description: "Retrait Ayeba Mbongo",
       destination: { method: "mobile_money", phone: input.phone, network: input.network },
     });
     await attachProviderToTx(tx.id, provider.name, result.providerRef);

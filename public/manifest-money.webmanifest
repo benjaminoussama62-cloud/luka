@@ -1,7 +1,7 @@
 {
-  "name": "Ayeba Money — portefeuille",
-  "short_name": "Ayeba Money",
-  "description": "Portefeuille Ayeba : soldes USD & CDF, transferts internes gratuits, Mobile Money.",
+  "name": "Ayeba Mbongo — portefeuille",
+  "short_name": "Ayeba Mbongo",
+  "description": "Portefeuille Ayeba Mbongo : soldes USD & CDF, transferts internes gratuits, Mobile Money.",
   "start_url": "/money",
   "scope": "/money",
   "id": "/money",

@@ -1,5 +1,5 @@
 /**
- * Ayeba Money — montants.
+ * Ayeba Mbongo — montants.
  * TOUT est en unités mineures entières (centimes pour USD et CDF, exposant 2).
  * Jamais de nombre à virgule pour le ledger : les floats binaires perdent des
  * centimes (0.1 + 0.2 !== 0.3). Seules les frontières (parsing/affichage/

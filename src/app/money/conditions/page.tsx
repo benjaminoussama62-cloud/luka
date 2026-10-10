@@ -3,23 +3,23 @@ import Link from "next/link";
 import { LegalDocumentShell, LegalSection } from "@/components/legal/LegalDocumentShell";
 
 export const metadata: Metadata = {
-  title: "Conditions d’utilisation — Ayeba Money",
+  title: "Conditions d’utilisation — Ayeba Mbongo",
   description:
-    "Conditions propres à Ayeba Money : portefeuille virtuel, transferts internes, dépôts et retraits via partenaires, code PIN, limites et responsabilités.",
+    "Conditions propres à Ayeba Mbongo : portefeuille virtuel, transferts internes, dépôts et retraits via partenaires, code PIN, limites et responsabilités.",
 };
 
 export default function MoneyTermsPage() {
   return (
     <LegalDocumentShell
-      title="Conditions d’utilisation — Ayeba Money"
-      subtitle="Ayeba Money est un produit distinct de l’écosystème Ayeba. Les présentes conditions régissent le portefeuille, les soldes, les transferts internes, les dépôts et les retraits. Elles complètent les conditions générales d’utilisation d’Ayeba."
+      title="Conditions d’utilisation — Ayeba Mbongo"
+      subtitle="Ayeba Mbongo est un produit distinct de l’écosystème Ayeba. Les présentes conditions régissent le portefeuille, les soldes, les transferts internes, les dépôts et les retraits. Elles complètent les conditions générales d’utilisation d’Ayeba."
       updated="Dernière mise à jour · 8 octobre 2026"
     >
       <LegalSection title="1. Nature du service">
         <p>
-          Ayeba Money est un portefeuille virtuel rattaché à votre compte Ayeba. Les soldes
+          Ayeba Mbongo est un portefeuille virtuel rattaché à votre compte Ayeba. Les soldes
           affichés en USD et CDF représentent des créances sur les fonds détenus par Ayeba auprès
-          de ses partenaires de paiement agréés. Ayeba Money n’est pas une banque : aucun intérêt,
+          de ses partenaires de paiement agréés. Ayeba Mbongo n’est pas une banque : aucun intérêt,
           découvert ni crédit n’est proposé.
         </p>
         <p>
@@ -64,7 +64,7 @@ export default function MoneyTermsPage() {
 
       <LegalSection title="4. Usages interdits">
         <p>
-          Il est interdit d’utiliser Ayeba Money pour le blanchiment, le financement du
+          Il est interdit d’utiliser Ayeba Mbongo pour le blanchiment, le financement du
           terrorisme, la fraude, les jeux de hasard interdits, la revente de services de paiement
           ou toute activité contraire à la loi applicable. Ayeba peut suspendre ou geler un
           portefeuille en cas de suspicion, conformément à la procédure de gel (motif, audit,

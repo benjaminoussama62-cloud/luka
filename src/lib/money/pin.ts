@@ -1,5 +1,5 @@
 /**
- * Ayeba Money — PIN 4 chiffres.
+ * Ayeba Mbongo — PIN 4 chiffres.
  *
  * Un PIN n'a que 10 000 combinaisons : le bcrypt seul ne suffit pas si la base
  * fuite (crackage offline en quelques secondes). On poivre donc le PIN par un

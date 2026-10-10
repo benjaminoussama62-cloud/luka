@@ -1,8 +1,8 @@
 {
-  "packageId": "app.ayeba.money",
+  "packageId": "app.ayeba.mbongo",
   "host": "ayeba.app",
-  "name": "Ayeba Money",
-  "launcherName": "Ayeba Money",
+  "name": "Ayeba Mbongo",
+  "launcherName": "Ayeba Mbongo",
   "display": "standalone",
   "themeColor": "#000000",
   "navigationColor": "#000000",

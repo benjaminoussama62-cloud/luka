@@ -1,5 +1,5 @@
 /**
- * Ayeba Money — moteur du grand livre (100% async).
+ * Ayeba Mbongo — moteur du grand livre (100% async).
  *
  * Invariants garantis par le code :
  *  1. Aucun solde ne peut devenir négatif (UPDATE gardé + CHECK >= 0).

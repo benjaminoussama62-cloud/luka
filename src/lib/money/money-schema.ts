@@ -1,5 +1,5 @@
 /**
- * Ayeba Money — schéma base de données.
+ * Ayeba Mbongo — schéma base de données.
  *
  * Modèle « grand livre » :
  *  - money_transactions = journal immuable des opérations (jamais de UPDATE

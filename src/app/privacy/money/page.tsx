@@ -3,21 +3,21 @@ import Link from "next/link";
 import { LegalDocumentShell, LegalSection } from "@/components/legal/LegalDocumentShell";
 
 export const metadata: Metadata = {
-  title: "Confidentialité — Ayeba Money",
+  title: "Confidentialité — Ayeba Mbongo",
   description:
-    "Notice de confidentialité spécifique à Ayeba Money : portefeuille, transactions, code PIN, partenaires de paiement, conservation et droits.",
+    "Notice de confidentialité spécifique à Ayeba Mbongo : portefeuille, transactions, code PIN, partenaires de paiement, conservation et droits.",
 };
 
 export default function MoneyPrivacyPage() {
   return (
     <LegalDocumentShell
-      title="Confidentialité — Ayeba Money"
-      subtitle="Ayeba Money est un produit distinct de l’écosystème Ayeba : cette notice décrit les traitements propres au portefeuille (soldes, transactions, code PIN, retraits). Elle complète la politique de confidentialité générale d’Ayeba, qui prévaut pour tout point non couvert ici."
+      title="Confidentialité — Ayeba Mbongo"
+      subtitle="Ayeba Mbongo est un produit distinct de l’écosystème Ayeba : cette notice décrit les traitements propres au portefeuille (soldes, transactions, code PIN, retraits). Elle complète la politique de confidentialité générale d’Ayeba, qui prévaut pour tout point non couvert ici."
       updated="Dernière mise à jour · 8 octobre 2026"
     >
       <LegalSection title="1. Périmètre">
         <p>
-          Ayeba Money fournit un portefeuille virtuel en USD et CDF accessible depuis
+          Ayeba Mbongo fournit un portefeuille virtuel en USD et CDF accessible depuis
           ayeba.app/money, l’application web installable (PWA) et les applications mobiles
           Android et iOS. Les traitements décrits concernent le portefeuille, les soldes, les
           transactions, le code PIN et les échanges avec les partenaires de paiement.

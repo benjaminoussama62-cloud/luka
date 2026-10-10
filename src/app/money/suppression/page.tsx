@@ -3,16 +3,16 @@ import Link from "next/link";
 import { LegalDocumentShell, LegalSection } from "@/components/legal/LegalDocumentShell";
 
 export const metadata: Metadata = {
-  title: "Supprimer votre portefeuille — Ayeba Money",
+  title: "Supprimer votre portefeuille — Ayeba Mbongo",
   description:
-    "Procédure de fermeture du portefeuille Ayeba Money : solde à zéro, demande de fermeture, données supprimées et données conservées pour obligations légales.",
+    "Procédure de fermeture du portefeuille Ayeba Mbongo : solde à zéro, demande de fermeture, données supprimées et données conservées pour obligations légales.",
 };
 
 export default function MoneyDeletePage() {
   return (
     <LegalDocumentShell
-      title="Supprimer votre portefeuille Ayeba Money"
-      subtitle="Cette page décrit la suppression de votre portefeuille Ayeba Money (application web, Android et iOS) et de ses données associées. La suppression du portefeuille n’efface pas votre compte Ayeba."
+      title="Supprimer votre portefeuille Ayeba Mbongo"
+      subtitle="Cette page décrit la suppression de votre portefeuille Ayeba Mbongo (application web, Android et iOS) et de ses données associées. La suppression du portefeuille n’efface pas votre compte Ayeba."
       updated="Dernière mise à jour · 8 octobre 2026"
     >
       <LegalSection title="1. Avant la fermeture">
@@ -71,7 +71,7 @@ export default function MoneyDeletePage() {
           </Link>{" "}
           et la{" "}
           <Link href="/privacy/money" className="text-[var(--ink)] underline">
-            notice de confidentialité Ayeba Money
+            notice de confidentialité Ayeba Mbongo
           </Link>
           .
         </p>

@@ -1,5 +1,5 @@
 /**
- * Ayeba Money — couche d'accès DB pour le grand livre.
+ * Ayeba Mbongo — couche d'accès DB pour le grand livre.
  *
  * Deux implémentations réelles, une seule interface :
  *  - local / vercel-tmp : better-sqlite3 (transactions BEGIN IMMEDIATE)

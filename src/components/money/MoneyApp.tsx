@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Ayeba Money — coquille légère, langage visuel ayeba.app.
+ * Ayeba Mbongo — coquille légère, langage visuel ayeba.app.
  * Toute la sécurité vit côté serveur ; ici : affichage + saisie.
  * Le PIN n'est jamais conservé (state locale, effacée après envoi), jamais
  * stocké dans localStorage, jamais envoyé ailleurs qu'en POST JSON.
@@ -154,7 +154,7 @@ export function MoneyApp() {
     return (
       <main className="mn-root">
         <div className="mn-center">
-          <span className="mn-kicker">Ayeba Money</span>
+          <span className="mn-kicker">Ayeba Mbongo</span>
         </div>
       </main>
     );
@@ -165,7 +165,7 @@ export function MoneyApp() {
         <div className="mn-landing">
           <div className="mn-center">
             <span className="mn-kicker">Portefeuille — écosystème Ayeba</span>
-            <h1 className="mn-title">AYEBA MONEY</h1>
+            <h1 className="mn-title">AYEBA MBONGO</h1>
             <p className="mn-sub">
               Un portefeuille à part, dans votre compte Ayeba. Soldes USD &amp; CDF, transferts
               internes instantanés et gratuits, dépôts et retraits Mobile Money.
@@ -586,7 +586,7 @@ function ReceiveSheet({ info, onClose, onCopy }: { info: WalletInfo; onClose: ()
   async function share() {
     if (navigator.share) {
       try {
-        await navigator.share({ title: "Ayeba Money", text: `Envoyez-moi de l'argent : ${identifier}`, url: payUrl });
+        await navigator.share({ title: "Ayeba Mbongo", text: `Envoyez-moi de l'argent : ${identifier}`, url: payUrl });
       } catch {
         /* annulé */
       }
@@ -750,7 +750,7 @@ function SettingsSheet({
           <section className="mn-set-group">
             <span className="mn-set-title">Produit</span>
             <div className="mn-set-links">
-              <Link href="/privacy/money">Confidentialité Ayeba Money</Link>
+              <Link href="/privacy/money">Confidentialité Ayeba Mbongo</Link>
               <Link href="/money/conditions">Conditions d&apos;utilisation</Link>
               <Link href="/support">Aide &amp; support</Link>
               <Link href="/money/suppression" className="mn-danger">Fermer le portefeuille</Link>

@@ -1,5 +1,5 @@
 /**
- * Ayeba Money — notifications email réelles (relais SMTP existant).
+ * Ayeba Mbongo — notifications email réelles (relais SMTP existant).
  *
  * Chaque événement financier envoie un email : l'utilisateur voit
  * immédiatement si quelqu'un touche son argent. Un échec d'envoi ne bloque
@@ -40,16 +40,16 @@ export async function notifyUser(
     ...lines,
     "",
     "Si vous n'êtes pas à l'origine de cette opération, changez immédiatement",
-    "votre code PIN dans Ayeba Money et contactez le support.",
+    "votre code PIN dans Ayeba Mbongo et contactez le support.",
     "",
-    "— Ayeba Money",
+    "— Ayeba Mbongo",
     "https://ayeba.app/money",
   ].join("\n");
   const res = await sendExternalMail({
     from: FROM,
-    fromName: "Ayeba Money",
+    fromName: "Ayeba Mbongo",
     to,
-    subject: `Ayeba Money — ${subject}`,
+    subject: `Ayeba Mbongo — ${subject}`,
     text,
   });
   await audit(userId, walletId, "notify_email", { subject, to: to.replace(/(.{2}).*(@.*)/, "$1***$2"), sent: res.ok, error: res.ok ? undefined : res.error });
@@ -118,8 +118,8 @@ export function notifyWithdrawalResult(
 export function notifyPinChanged(userId: string, walletId: string, changed: boolean) {
   void notifyUser(userId, walletId, changed ? "Code PIN modifié" : "Code PIN créé", [
     changed
-      ? "Votre code PIN Ayeba Money vient d'être modifié."
-      : "Votre code PIN Ayeba Money vient d'être créé — il sera demandé pour chaque mouvement.",
+      ? "Votre code PIN Ayeba Mbongo vient d'être modifié."
+      : "Votre code PIN Ayeba Mbongo vient d'être créé — il sera demandé pour chaque mouvement.",
     "Sans ce code, aucun envoi ni retrait n'est possible, même avec votre session.",
   ]);
 }

@@ -1,4 +1,4 @@
-package app.ayeba.money;
+package app.ayeba.mbongo;
 
 
 

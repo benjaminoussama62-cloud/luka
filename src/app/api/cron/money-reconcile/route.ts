@@ -47,7 +47,7 @@ async function run() {
         from: "noreply@ayeba.app",
         fromName: "Ayeba Ops",
         to: email,
-        subject: `[Ayeba Money] Réconciliation : ${driftCount} écart(s), ${staleCount} pending(s)`,
+        subject: `[Ayeba Mbongo] Réconciliation : ${driftCount} écart(s), ${staleCount} pending(s)`,
         text: `Rapport de réconciliation du ${new Date().toISOString()}\n\n${details.join("\n")}\n\nAucune correction automatique n'a été appliquée — intervention requise.`,
       });
     }

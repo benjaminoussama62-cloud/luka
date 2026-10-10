@@ -1,0 +1,68 @@
+name: Build Ayeba Mbongo Android AAB
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "mobile/android-twa/**"
+      - ".github/workflows/android-aab-mbongo.yml"
+
+jobs:
+  build-aab:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: mobile/android-twa/twa-app
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # SDK Android préinstallé sur ubuntu-latest — on complète avec la plateforme 36.
+      - name: Accept SDK licenses & install platform 36
+        run: |
+          yes | sdkmanager --licenses || true
+          sdkmanager "platforms;android-36" "build-tools;36.0.0" || true
+
+      - name: Prepare upload keystore (same key every build)
+        env:
+          KS_B64: ${{ secrets.MBONGO_KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.MBONGO_KEYSTORE_PASS }}
+        run: |
+          test -n "$KS_B64" || { echo "Missing MBONGO_KEYSTORE_BASE64 secret"; exit 1; }
+          test -n "$KS_PASS" || { echo "Missing MBONGO_KEYSTORE_PASS secret"; exit 1; }
+          echo "$KS_B64" | base64 -d > android.keystore
+          echo "Keystore loaded from GitHub secret."
+
+      - name: Build release AAB
+        run: |
+          chmod +x gradlew
+          ./gradlew bundleRelease --stacktrace
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.MBONGO_KEYSTORE_PASS }}
+          KEY_PASSWORD: ${{ secrets.MBONGO_KEYSTORE_PASS }}
+          KEY_ALIAS: ayeba-money
+
+      - name: Upload AAB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AyebaMbongo-PlayStore-aab
+          path: mobile/android-twa/twa-app/app/build/outputs/bundle/release/app-release.aab
+          retention-days: 30
+
+      - name: Publish AAB on GitHub Releases (download sans login)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: mbongo-1.0.0
+          name: Ayeba Mbongo 1.0.0
+          body: |
+            Fichier Play Store : **app-release.aab** → renommer `AyebaMbongo-1.0.0.aab`
+            Package : `app.ayeba.mbongo` — versionCode 1
+          files: mobile/android-twa/twa-app/app/build/outputs/bundle/release/app-release.aab
+          overwrite_files: true
