@@ -64,8 +64,8 @@ jobs:
           chmod +x gradlew
           ./gradlew bundleRelease --stacktrace
         env:
-          AYEBA_VERSION: "1.0.5"
-          AYEBA_VERSION_CODE: "6"
+          AYEBA_VERSION: "1.0.6"
+          AYEBA_VERSION_CODE: "7"
 
       - name: Upload AAB artifact
         uses: actions/upload-artifact@v4
@@ -77,10 +77,10 @@ jobs:
       - name: Publish AAB on GitHub Releases (download sans login)
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: mail-1.0.5
-          name: Ayeba Mail 1.0.5
+          tag_name: mail-1.0.6
+          name: Ayeba Mail 1.0.6
           body: |
-            Fichier Play Store : **app-release.aab** → renommer `AyebaMail-1.0.5.aab` (API 35)
-            Package : `app.ayeba.mail` — versionCode 6 — targetSdk 36 — offline embarquée
+            Fichier Play Store : **app-release.aab** → renommer `AyebaMail-1.0.6.aab` (API 35)
+            Package : `app.ayeba.mail` — versionCode 7 — targetSdk 36 — offline embarquée
           files: mobile/ayeba-mail/android/app/build/outputs/bundle/release/app-release.aab
           overwrite_files: true
