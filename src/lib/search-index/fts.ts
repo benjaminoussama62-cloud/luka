@@ -1,4 +1,5 @@
 import { canUseSyncDb, getDb } from "../storage/database";
+import { ftsMatchQueries } from "./fts-query";
 
 export type IndexedDoc = {
   id: string;
@@ -82,39 +83,47 @@ export type FtsHit = {
   rank: number;
 };
 
+type FtsRow = {
+  doc_id: string;
+  url: string;
+  domain: string;
+  title: string;
+  snip: string;
+  source_type: string;
+  credibility: number;
+  local_relevant: number;
+  rank: number;
+};
+
+function runMatch(matchQuery: string, limit: number): FtsRow[] {
+  const db = getDb();
+  return db
+    .prepare(
+      `SELECT doc_id, url, domain, title, snippet(body, '<b>', '</b>', '…', 10) as snip,
+              source_type, credibility, local_relevant, rank
+       FROM search_fts WHERE search_fts MATCH ? ORDER BY rank LIMIT ?`,
+    )
+    .all(matchQuery, limit) as FtsRow[];
+}
+
 export function searchIndex(query: string, limit = 40): FtsHit[] {
   // Sync Turso = blocking network per statement — callers must use the async path.
   if (!canUseSyncDb()) return [];
   const q = query.trim();
   if (!q) return [];
 
-  const db = getDb();
-  const ftsQuery = q
-    .split(/\s+/)
-    .filter((t) => t.length >= 2)
-    .map((t) => `"${t.replace(/"/g, "")}"`)
-    .join(" ");
-
-  if (!ftsQuery) return [];
+  const { and, or } = ftsMatchQueries(q);
+  if (!and) return [];
 
   try {
-    const rows = db
-      .prepare(
-        `SELECT doc_id, url, domain, title, snippet(body, '<b>', '</b>', '…', 10) as snip,
-                source_type, credibility, local_relevant, rank
-         FROM search_fts WHERE search_fts MATCH ? ORDER BY rank LIMIT ?`,
-      )
-      .all(ftsQuery, limit) as Array<{
-      doc_id: string;
-      url: string;
-      domain: string;
-      title: string;
-      snip: string;
-      source_type: string;
-      credibility: number;
-      local_relevant: number;
-      rank: number;
-    }>;
+    let rows = runMatch(and, limit);
+    // Rappel : requête longue ou mot rare → l'AND strict peut être vide.
+    // Le OR préfixé élargit, le tri bm25 natif garde les bons docs en tête.
+    if (rows.length < Math.min(6, limit) && or !== and) {
+      const seenIds = new Set(rows.map((r) => r.doc_id));
+      const extra = runMatch(or, limit).filter((r) => !seenIds.has(r.doc_id));
+      rows = [...rows, ...extra].slice(0, limit);
+    }
 
     return rows.map((r) => ({
       docId: r.doc_id,

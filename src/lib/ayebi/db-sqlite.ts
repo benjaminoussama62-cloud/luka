@@ -1,9 +1,10 @@
 import { randomUUID } from "crypto";
-import type { AyebiArticle, AyebiCategory, AyebiQuality, AyebiReference, AyebiSection } from "./types";
+import type { AyebiArticle, AyebiCategory, AyebiQuality, AyebiSection } from "./types";
 import { getDb, getDbMode } from "../storage/database";
 import { AYEBI_ARTICLES } from "./index";
 import { ECOSYSTEM_ARTICLES } from "./articles-ecosystem";
 import { extractReferences } from "./wiki-markup";
+import { ftsMatchQueries } from "../search-index/fts-query";
 
 export type AyebiRole = "reader" | "contributor" | "moderator" | "admin";
 export type PageProtection = "none" | "semi" | "full";
@@ -199,18 +200,21 @@ export function getBacklinks(slug: string, limit = 30): { slug: string; title: s
 
 export function searchAyebiFts(query: string, limit = 20): AyebiArticle[] {
   importSeedIfEmpty();
-  const tokens = query
-    .trim()
-    .split(/\s+/)
-    .filter((t) => t.length >= 2)
-    .map((t) => `"${t.replace(/"/g, "")}"`)
-    .join(" ");
-  if (!tokens) return listArticles().slice(0, limit);
+  const { and, or } = ftsMatchQueries(query.trim());
+  if (!and) return listArticles().slice(0, limit);
 
   try {
-    const slugs = getDb()
-      .prepare(`SELECT slug FROM ayebi_fts WHERE ayebi_fts MATCH ? LIMIT ?`)
-      .all(tokens, limit) as { slug: string }[];
+    const db = getDb();
+    const stmt = `SELECT slug FROM ayebi_fts WHERE ayebi_fts MATCH ? LIMIT ?`;
+    let slugs = db.prepare(stmt).all(and, limit) as { slug: string }[];
+    // Rappel identique à l'index web : OR préfixé quand l'AND strict est vide.
+    if (slugs.length < Math.min(3, limit) && or !== and) {
+      const seen = new Set(slugs.map((s) => s.slug));
+      const extra = (db.prepare(stmt).all(or, limit) as { slug: string }[]).filter(
+        (s) => !seen.has(s.slug),
+      );
+      slugs = [...slugs, ...extra].slice(0, limit);
+    }
     return slugs.map((s) => getArticle(s.slug)).filter((a): a is StoredArticle => Boolean(a));
   } catch {
     return [];

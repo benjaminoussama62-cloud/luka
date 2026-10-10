@@ -5,6 +5,7 @@
  */
 import { createClient, type Client } from "@libsql/client";
 import { ensureTursoMigrate } from "./database";
+import { ftsMatchQueries } from "../search-index/fts-query";
 
 let _client: Client | null = null;
 
@@ -41,41 +42,49 @@ export type AsyncFtsHit = {
   rank: number;
 };
 
+const FTS_SQL = `SELECT doc_id, url, domain, title, snippet(body, '<b>', '</b>', '…', 10) as snip,
+        source_type, credibility, local_relevant, rank
+ FROM search_fts WHERE search_fts MATCH ? ORDER BY rank LIMIT ?`;
+
+async function matchRows(
+  client: Client,
+  matchQuery: string,
+  limit: number,
+): Promise<AsyncFtsHit[]> {
+  const rs = await Promise.race([
+    client.execute({ sql: FTS_SQL, args: [matchQuery, limit] }),
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), 900)),
+  ]);
+  if (!rs) return [];
+  return rs.rows.map((r) => ({
+    docId: String(r.doc_id ?? ""),
+    url: String(r.url ?? ""),
+    domain: String(r.domain ?? ""),
+    title: String(r.title ?? ""),
+    snippet: String(r.snip ?? "").replace(/<\/?b>/g, ""),
+    sourceType: String(r.source_type ?? "web"),
+    credibility: Number(r.credibility ?? 0.5),
+    localRelevant: Boolean(r.local_relevant),
+    rank: Number(r.rank ?? 0),
+  }));
+}
+
 export async function searchIndexAsync(query: string, limit = 30): Promise<AsyncFtsHit[]> {
   const client = getAsyncClient();
   if (!client) return [];
 
-  const ftsQuery = query
-    .trim()
-    .split(/\s+/)
-    .filter((t) => t.length >= 2)
-    .map((t) => `"${t.replace(/"/g, "")}"`)
-    .join(" ");
-  if (!ftsQuery) return [];
+  const { and, or } = ftsMatchQueries(query.trim());
+  if (!and) return [];
 
   try {
-    const rs = await Promise.race([
-      client.execute({
-        sql: `SELECT doc_id, url, domain, title, snippet(body, '<b>', '</b>', '…', 10) as snip,
-                      source_type, credibility, local_relevant, rank
-               FROM search_fts WHERE search_fts MATCH ? ORDER BY rank LIMIT ?`,
-        args: [ftsQuery, limit],
-      }),
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), 900)),
-    ]);
-    if (!rs) return [];
-
-    return rs.rows.map((r) => ({
-      docId: String(r.doc_id ?? ""),
-      url: String(r.url ?? ""),
-      domain: String(r.domain ?? ""),
-      title: String(r.title ?? ""),
-      snippet: String(r.snip ?? "").replace(/<\/?b>/g, ""),
-      sourceType: String(r.source_type ?? "web"),
-      credibility: Number(r.credibility ?? 0.5),
-      localRelevant: Boolean(r.local_relevant),
-      rank: Number(r.rank ?? 0),
-    }));
+    let hits = await matchRows(client, and, limit);
+    // Même rappel que le chemin sync : OR préfixé quand l'AND est vide.
+    if (hits.length < Math.min(6, limit) && or !== and) {
+      const seenIds = new Set(hits.map((h) => h.docId));
+      const extra = (await matchRows(client, or, limit)).filter((h) => !seenIds.has(h.docId));
+      hits = [...hits, ...extra].slice(0, limit);
+    }
+    return hits;
   } catch {
     return [];
   }
@@ -155,29 +164,31 @@ export async function searchAyebiAsync(
   const client = getAsyncClient();
   if (!client) return [];
 
-  const ftsQuery = query
-    .trim()
-    .split(/\s+/)
-    .filter((t) => t.length >= 2)
-    .map((t) => `"${t.replace(/"/g, "")}"`)
-    .join(" ");
-  if (!ftsQuery) return [];
+  const { and, or } = ftsMatchQueries(query.trim());
+  if (!and) return [];
 
-  try {
+  const ayebiSql = `SELECT a.slug AS slug, a.title AS title, a.summary AS summary, a.tags_json AS tags_json
+        FROM ayebi_fts
+        JOIN ayebi_articles a ON a.slug = ayebi_fts.slug
+        WHERE ayebi_fts MATCH ?
+        LIMIT ?`;
+  const fetchRows = async (matchQuery: string) => {
     const rs = await Promise.race([
-      client.execute({
-        sql: `SELECT a.slug AS slug, a.title AS title, a.summary AS summary, a.tags_json AS tags_json
-              FROM ayebi_fts
-              JOIN ayebi_articles a ON a.slug = ayebi_fts.slug
-              WHERE ayebi_fts MATCH ?
-              LIMIT ?`,
-        args: [ftsQuery, limit],
-      }),
+      client.execute({ sql: ayebiSql, args: [matchQuery, limit] }),
       new Promise<null>((resolve) => setTimeout(() => resolve(null), 800)),
     ]);
-    if (!rs) return [];
+    return rs?.rows ?? [];
+  };
 
-    return rs.rows.map((r) => {
+  try {
+    let rows = await fetchRows(and);
+    if (rows.length < Math.min(3, limit) && or !== and) {
+      const extra = await fetchRows(or);
+      const seen = new Set(rows.map((r) => String(r.slug ?? "")));
+      rows = [...rows, ...extra.filter((r) => !seen.has(String(r.slug ?? "")))].slice(0, limit);
+    }
+
+    return rows.map((r) => {
       let tags: string[] = [];
       try {
         tags = JSON.parse(String(r.tags_json || "[]")) as string[];

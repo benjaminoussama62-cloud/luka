@@ -9,6 +9,11 @@ Required:
 - `JWT_SECRET` (32+ chars, different)
 - `CRON_SECRET` (random; used by cron + manual triggers)
 
+Search quality (optional but recommended):
+- `BRAVE_SEARCH_API_KEY` — Brave Search API (free tier 2 000 req/mois). Vrai index
+  indépendant ranked : c'est l'upstream qui rapproche le plus la SERP de Google.
+- `AYEBA_UPSTREAM_MS` (défaut 1500), `AYEBA_UPSTREAM_FAST_MS` (800), `AYEBA_SEARCH_WALL_MS` (3500)
+
 Durable DB (required for real index / users / Ayebi):
 1. Create DB at https://turso.tech
 2. `TURSO_DATABASE_URL=libsql://….turso.io`

@@ -53,6 +53,8 @@ export type SearchResult = {
   region?: "global" | "africa" | "rdc" | "europe" | "americas" | "asia";
   keywords: string[];
   rankScore?: number;
+  /** Position (0-based) renvoyée par l'index amont réel (Brave, Bing…) — signal d'ordre. */
+  upstreamPosition?: number;
   sitelinks?: SiteLink[];
   rating?: number;
   price?: string;

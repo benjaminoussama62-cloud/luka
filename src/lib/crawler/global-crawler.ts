@@ -5,6 +5,7 @@ import { indexImage } from "../verticals/images";
 import { indexProduct } from "../verticals/shopping";
 import { getDb } from "../storage/database";
 import { SISTER_SEARCH_DOCS } from "../sister-search";
+import { domainAuthority } from "../real-search/authority";
 import * as cheerio from "cheerio";
 
 /** Graines mondiales + RDC — file extensible vers milliards via queue */
@@ -47,6 +48,25 @@ export function seedQueue() {
   }
 }
 
+/**
+ * Recrawl planifié : les documents dont recrawl_after est dépassé retournent
+ * en file — un index qui ne rafraîchit jamais sert des résultats périmés.
+ * Priorité basse : la découverte passe avant la maintenance.
+ */
+export function enqueueStaleDocuments(limit = 60): number {
+  const db = getDb();
+  const now = new Date().toISOString();
+  const stale = db
+    .prepare(
+      `SELECT url FROM crawl_documents WHERE recrawl_after < ? ORDER BY recrawl_after ASC LIMIT ?`,
+    )
+    .all(now, limit) as { url: string }[];
+  for (const s of stale) {
+    enqueueUrl(s.url, 1);
+  }
+  return stale.length;
+}
+
 export function queueStats() {
   const db = getDb();
   return {
@@ -63,6 +83,11 @@ export async function runCrawlBatch(
   opts?: { timeBudgetMs?: number },
 ): Promise<CrawlResult> {
   seedQueue();
+  try {
+    enqueueStaleDocuments(40);
+  } catch {
+    /* recrawl best-effort */
+  }
   const db = getDb();
   let indexed = 0;
   let errors = 0;
@@ -119,9 +144,9 @@ export async function runCrawlBatch(
     }
   };
 
-  // Pool parallèle : 5 fetch simultanés — le débit réel est limité par le
-  // réseau, pas par le CPU. ~5× plus de pages par fenêtre de cron.
-  const CONCURRENCY = 5;
+  // Pool parallèle : 6 fetch simultanés — le débit réel est limité par le
+  // réseau, pas par le CPU. ~6× plus de pages par fenêtre de cron.
+  const CONCURRENCY = 6;
   for (let i = 0; i < pending.length; i += CONCURRENCY) {
     if (deadline && Date.now() >= deadline) break;
     await Promise.all(pending.slice(i, i + CONCURRENCY).map(processItem));
@@ -251,23 +276,10 @@ function parseHtml(html: string, url: string) {
     title: title.slice(0, 200),
     body: body || title,
     sourceType,
-    credibility: domain.endsWith(".cd") ? 0.85 : TRUST[domain] ?? 0.55,
+    credibility: domain.endsWith(".cd") ? 0.85 : domainAuthority(domain) / 100,
     localRelevant: local,
     outLinks: [...new Set(outLinks)],
     images,
     products,
   };
 }
-
-const TRUST: Record<string, number> = {
-  "bbc.com": 0.92,
-  "reuters.com": 0.93,
-  "worldbank.org": 0.9,
-  "imf.org": 0.9,
-  "un.org": 0.88,
-  "nature.com": 0.9,
-  "arxiv.org": 0.88,
-  "developer.mozilla.org": 0.87,
-  "radiookapi.net": 0.9,
-  "bcc.cd": 0.92,
-};
