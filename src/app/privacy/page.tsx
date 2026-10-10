@@ -242,6 +242,13 @@ export default function PrivacyPage() {
           . Une vérification d’identité peut être demandée afin d’éviter toute divulgation ou
           suppression abusive.
         </p>
+        <p>
+          Suppression du compte et des données associées : procédure en ligne sur{" "}
+          <Link href="/suppression-compte" className="text-[var(--ink)] underline">
+            ayeba.app/suppression-compte
+          </Link>{" "}
+          (libre-service depuis Compte → Sécurité, ou demande par e-mail).
+        </p>
       </LegalSection>
 
       <LegalSection title="13. Sécurité">

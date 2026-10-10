@@ -176,6 +176,32 @@ export async function findUserById(id: string) {
   return users.find((u) => u.id === id) ?? null;
 }
 
+/**
+ * Suppression définitive d'un compte — utilisée par DELETE /api/account et
+ * par la procédure de suppression sur demande (Play Store « Data safety »).
+ * Retire aussi les données personnelles associées ; le contenu public
+ * éventuel (contributions Ayebi) reste mais n'est plus rattaché à un compte.
+ */
+export async function deleteUserById(id: string) {
+  const db = getDb();
+  db.prepare("DELETE FROM users WHERE id = ?").run(id);
+  for (const table of ["user_security", "user_preferences"]) {
+    try {
+      db.prepare(`DELETE FROM ${table} WHERE user_id = ?`).run(id);
+    } catch {
+      /* table absente ou schéma différent — non bloquant */
+    }
+  }
+  if (getDbMode() === "local") {
+    const data = await readJson<UsersFile>("users.json", { users: [] });
+    if (data.users.some((u) => u.id === id)) {
+      await writeJson<UsersFile>("users.json", {
+        users: data.users.filter((u) => u.id !== id),
+      });
+    }
+  }
+}
+
 export async function getCrawlIndex(): Promise<CrawlDoc[]> {
   const data = await readJson<CrawlFile>("crawl-index.json", { docs: [] });
   return data.docs;

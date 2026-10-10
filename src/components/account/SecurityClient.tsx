@@ -12,6 +12,7 @@ export function SecurityClient() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [needsLogin, setNeedsLogin] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   useEffect(() => {
     void fetch("/api/account/security/totp")
@@ -143,6 +144,60 @@ export function SecurityClient() {
         ) : null}
 
         {error ? <p className="oauth-consent-error mt-3">{error}</p> : null}
+      </section>
+
+      <section className="ayeba-panel p-6 border border-red-500/30">
+        <h2 className="text-lg font-semibold text-red-400">Zone dangereuse</h2>
+        <p className="mt-2 text-sm text-[var(--muted)]">
+          La suppression de votre compte est définitive : identité, préférences, sécurité et
+          autorisations associées seront effacées. Cette action est irréversible.
+        </p>
+        {confirmDelete ? (
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <p className="text-sm text-red-300">Confirmer la suppression définitive ?</p>
+            <button
+              type="button"
+              className="px-4 py-2 text-sm rounded-lg bg-red-600 text-white hover:bg-red-500 disabled:opacity-50"
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true);
+                const res = await fetch("/api/account", { method: "DELETE" });
+                setBusy(false);
+                if (res.ok) {
+                  window.location.href = "/";
+                } else {
+                  setError("Suppression impossible pour le moment — réessayez ou contactez privacy@ayeba.app");
+                  setConfirmDelete(false);
+                }
+              }}
+            >
+              Oui, supprimer mon compte
+            </button>
+            <button
+              type="button"
+              className="ayeba-ghost text-sm"
+              disabled={busy}
+              onClick={() => setConfirmDelete(false)}
+            >
+              Annuler
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="mt-4 px-4 py-2 text-sm rounded-lg border border-red-500/50 text-red-300 hover:bg-red-500/10"
+            onClick={() => setConfirmDelete(true)}
+          >
+            Supprimer mon compte
+          </button>
+        )}
+        <p className="mt-3 text-xs text-[var(--faint)]">
+          Autre moyen : demande écrite à privacy@ayeba.app — voir{" "}
+          <Link href="/suppression-compte" className="underline">
+            la procédure de suppression
+          </Link>
+          .
+        </p>
       </section>
     </div>
   );

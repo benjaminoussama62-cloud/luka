@@ -59,7 +59,14 @@ Réponds comme ça — sous-déclarer = rejet, sur-déclarer = badge moche :
 | **Performances** — journaux de plantage (Sentry) | Collecté, finalité *analyse*, partagé : **non** |
 | Localisation / contacts / photos / fichiers / santé / finances | **Non collectées** |
 | Données chiffrées en transit ? | **Oui** (HTTPS partout) |
-| L'utilisateur peut demander la suppression ? | **Oui** — `https://ayeba.app/compte` ou contact@ayeba.app |
+| L'utilisateur peut demander la suppression ? | **Oui** |
+| **URL de suppression de compte (champ dédié)** | `https://ayeba.app/suppression-compte` |
+
+La page `/suppression-compte` documente les deux procédures réelles implémentées :
+libre-service (Compte → Sécurité → « Supprimer mon compte », `DELETE /api/account`
+supprime le compte + sécurité/préférences et ferme la session) et demande écrite
+à privacy@ayeba.app. La déclaration « suppression possible » n'est cochée **que
+parce que ce mécanisme existe** — ne pas déclarer Oui ailleurs sans l'implémenter.
 | Suivi publicitaire / profilage | **Non** |
 | Annonces dans l'app ? | **Non** |
 
