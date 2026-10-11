@@ -310,11 +310,7 @@ export function MailApp() {
 
   // ── États ──
   if (loading || !ready) {
-    return (
-      <div className="mail-root">
-        <div className="mail-loading">AYEBA MAIL — CHARGEMENT</div>
-      </div>
-    );
+    return <Landing onSignup={() => {}} onSignin={() => {}} />;
   }
 
   if (!account) {
