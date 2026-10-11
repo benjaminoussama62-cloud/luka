@@ -42,6 +42,7 @@ const STATIC_PATHS = [
   "/privacy/mail",
   "/privacy/mbongo",
   "/privacy/navigateur",
+  "/studio",
   "/opensearch",
   "/mentions-legales",
 ];
@@ -65,7 +66,20 @@ export async function GET(req: Request) {
     const slugs = stored.length > 0
       ? stored.map((a) => a.slug)
       : AYEBI_ARTICLES.map((a) => a.slug);
-    for (const s of slugs) add(`/ayebi/${s}`, "weekly", "0.8");
+    for (const s of slugs) {
+      add(`/ayebi/${s}`, "weekly", "0.8");
+      add(`/ayebi/${s}/discussion`, "weekly", "0.4");
+      add(`/ayebi/${s}/historique`, "weekly", "0.4");
+    }
+    // Profils publics des contributeurs Ayebi (/ayebi/utilisateur/<nom>).
+    const contributors = new Set<string>();
+    for (const a of stored) {
+      if (a.createdByName) contributors.add(a.createdByName);
+      if (a.updatedByName) contributors.add(a.updatedByName);
+    }
+    for (const name of contributors) {
+      add(`/ayebi/utilisateur/${encodeURIComponent(name)}`, "weekly", "0.5");
+    }
     for (const p of listPortals()) add(`/ayebi/portail/${p.id}`, "weekly", "0.6");
     for (const c of AYEBI_CATEGORIES) add(`/ayebi/categorie/${c.id}`, "weekly", "0.6");
   } catch {
