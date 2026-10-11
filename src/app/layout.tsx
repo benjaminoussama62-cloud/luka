@@ -46,9 +46,7 @@ export const metadata: Metadata = {
     "AYEBA trouve tout sur le web : pages, actualités, Ayebi, marchés. Recherche mondiale — le monde entier, une requête. ayeba.app",
   applicationName: "AYEBA",
   manifest: "/manifest.webmanifest",
-  alternates: {
-    canonical: "https://ayeba.app",
-  },
+
   keywords: [
     "AYEBA",
     "moteur de recherche",

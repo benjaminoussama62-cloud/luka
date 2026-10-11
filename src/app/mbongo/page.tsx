@@ -6,7 +6,8 @@ export const metadata: Metadata = {
   title: "Ayeba Mbongo — votre portefeuille",
   description:
     "Portefeuille Ayeba : soldes USD & CDF, transferts internes instantanés et gratuits, dépôts et retraits Mobile Money.",
-  manifest: "/manifest-money.webmanifest",
+  manifest: "/manifest-mbongo.webmanifest",
+  alternates: { canonical: "/mbongo" },
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
