@@ -2,8 +2,16 @@ import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs/config";
 
 const nextConfig: NextConfig = {
+  devIndicators: false,
   allowedDevOrigins: ["127.0.0.1", "localhost", "192.168.100.5"],
   serverExternalPackages: ["libsql", "@libsql/client", "better-sqlite3"],
+  async redirects() {
+    return [
+      { source: "/money", destination: "/mbongo", permanent: true },
+      { source: "/money/:path*", destination: "/mbongo/:path*", permanent: true },
+      { source: "/privacy/money", destination: "/privacy/mbongo", permanent: true },
+    ];
+  },
   async headers() {
     return [
       {

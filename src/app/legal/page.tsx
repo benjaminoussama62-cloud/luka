@@ -27,17 +27,17 @@ const LINKS = [
     text: "Données locales, recherches et absence de télémétrie dans les apps Ayeba.",
   },
   {
-    href: "/privacy/money",
+    href: "/privacy/mbongo",
     title: "Confidentialité — Ayeba Mbongo",
     text: "Notice propre au portefeuille : soldes, transactions, PIN, partenaires de paiement.",
   },
   {
-    href: "/money/conditions",
+    href: "/mbongo/conditions",
     title: "Conditions — Ayeba Mbongo",
     text: "Portefeuille virtuel, transferts internes, dépôts/retraits, code PIN, responsabilités.",
   },
   {
-    href: "/money/suppression",
+    href: "/mbongo/suppression",
     title: "Suppression — Ayeba Mbongo",
     text: "Fermeture du portefeuille : procédure, données supprimées et conservées.",
   },

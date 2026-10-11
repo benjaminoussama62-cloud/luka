@@ -109,7 +109,7 @@ export default function MoneyPrivacyPage() {
           </Link>{" "}
           : accès, rectification, opposition. L’effacement du portefeuille suit la procédure de la
           page{" "}
-          <Link href="/money/suppression" className="text-[var(--ink)] underline">
+          <Link href="/mbongo/suppression" className="text-[var(--ink)] underline">
             Suppression du compte Money
           </Link>
           , sous réserve des durées de conservation légales ci-dessus. Contact :{" "}

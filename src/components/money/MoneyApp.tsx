@@ -106,10 +106,10 @@ export function MoneyApp() {
 
   const refresh = useCallback(async () => {
     try {
-      const w = (await api("/api/money/wallet")) as WalletInfo;
+      const w = (await api("/api/mbongo/wallet")) as WalletInfo;
       setInfo(w);
       setAuth("ok");
-      const t = (await api("/api/money/transactions")) as { transactions: Tx[]; nextCursor: number | null };
+      const t = (await api("/api/mbongo/transactions")) as { transactions: Tx[]; nextCursor: number | null };
       setTxs(t.transactions);
       setNextCursor(t.nextCursor);
     } catch (e) {
@@ -126,7 +126,7 @@ export function MoneyApp() {
     if (!nextCursor || loadingMore) return;
     setLoadingMore(true);
     try {
-      const t = (await api(`/api/money/transactions?cursor=${nextCursor}`)) as {
+      const t = (await api(`/api/mbongo/transactions?cursor=${nextCursor}`)) as {
         transactions: Tx[];
         nextCursor: number | null;
       };
@@ -184,7 +184,7 @@ export function MoneyApp() {
                 <small>Dépôt et retrait vers votre compte — recrédité automatiquement si échec.</small>
               </div>
             </div>
-            <a className="mn-btn-primary" href="/compte?next=/money">
+            <a className="mn-btn-primary" href="/compte?next=/mbongo">
               Se connecter avec Ayeba
             </a>
             <small className="mn-landing-note">Un compte Ayeba suffit — le PIN est créé au premier accès.</small>
@@ -291,7 +291,7 @@ export function MoneyApp() {
               <div className="mn-history-head">
                 <span className="mn-kicker">Activité</span>
                 <div className="mn-history-tools">
-                  <a className="mn-btn mn-btn-mini" href="/api/money/statement" download>
+                  <a className="mn-btn mn-btn-mini" href="/api/mbongo/statement" download>
                     <IconFile /> Relevé CSV
                   </a>
                 </div>
@@ -477,9 +477,9 @@ function IconShare() {
 function LegalFooter() {
   return (
     <footer className="mn-legal">
-      <Link href="/privacy/money">Confidentialité</Link>
-      <Link href="/money/conditions">Conditions</Link>
-      <Link href="/money/suppression">Suppression</Link>
+      <Link href="/privacy/mbongo">Confidentialité</Link>
+      <Link href="/mbongo/conditions">Conditions</Link>
+      <Link href="/mbongo/suppression">Suppression</Link>
       <Link href="/support">Support</Link>
       <span className="mn-legal-tag">Produit distinct — écosystème Ayeba</span>
     </footer>
@@ -515,7 +515,7 @@ function PinSetup({ onDone }: { onDone: () => void }) {
     setBusy(true);
     setError("");
     try {
-      await api("/api/money/pin", { method: "POST", body: JSON.stringify({ pin }) });
+      await api("/api/mbongo/pin", { method: "POST", body: JSON.stringify({ pin }) });
       onDone();
     } catch (e) {
       setError((e as Error).message);
@@ -741,7 +741,7 @@ function SettingsSheet({
                 <b>Relevé de compte</b>
                 <small>Toutes vos écritures au format CSV — date, référence, montant, solde après.</small>
               </div>
-              <a href="/api/money/statement" download className="mn-btn">
+              <a href="/api/mbongo/statement" download className="mn-btn">
                 <IconFile /> Télécharger
               </a>
             </div>
@@ -750,10 +750,10 @@ function SettingsSheet({
           <section className="mn-set-group">
             <span className="mn-set-title">Produit</span>
             <div className="mn-set-links">
-              <Link href="/privacy/money">Confidentialité Ayeba Mbongo</Link>
-              <Link href="/money/conditions">Conditions d&apos;utilisation</Link>
+              <Link href="/privacy/mbongo">Confidentialité Ayeba Mbongo</Link>
+              <Link href="/mbongo/conditions">Conditions d&apos;utilisation</Link>
               <Link href="/support">Aide &amp; support</Link>
-              <Link href="/money/suppression" className="mn-danger">Fermer le portefeuille</Link>
+              <Link href="/mbongo/suppression" className="mn-danger">Fermer le portefeuille</Link>
             </div>
           </section>
         </div>
@@ -774,7 +774,7 @@ function PinChange({ onDone }: { onDone: () => void }) {
     setBusy(true);
     setError("");
     try {
-      await api("/api/money/pin", { method: "POST", body: JSON.stringify({ pin: next, currentPin: current }) });
+      await api("/api/mbongo/pin", { method: "POST", body: JSON.stringify({ pin: next, currentPin: current }) });
       setOpen(false);
       setCurrent("");
       setNext("");
@@ -828,7 +828,7 @@ function HandleClaim({ onDone }: { onDone: (h: string) => void }) {
     setBusy(true);
     setError("");
     try {
-      const r = (await api("/api/money/handle", { method: "POST", body: JSON.stringify({ handle: value }) })) as { handle: string };
+      const r = (await api("/api/mbongo/handle", { method: "POST", body: JSON.stringify({ handle: value }) })) as { handle: string };
       onDone(r.handle);
     } catch (e) {
       setError((e as Error).message);
@@ -888,14 +888,14 @@ function MovePanel({
     setError("");
     try {
       if (kind === "send") {
-        const r = (await api("/api/money/transfer", {
+        const r = (await api("/api/mbongo/transfer", {
           method: "POST",
           headers: { "Idempotency-Key": idemKey.current },
           body: JSON.stringify({ to, amount, currency, pin }),
         })) as { transaction: { status: string } };
         onClose(true, r.transaction.status === "completed" ? "Envoyé instantanément" : "Transfert en cours");
       } else if (kind === "deposit") {
-        const r = (await api("/api/money/deposit", {
+        const r = (await api("/api/mbongo/deposit", {
           method: "POST",
           headers: { "Idempotency-Key": idemKey.current },
           body: JSON.stringify({ amount, currency, phone }),
@@ -904,7 +904,7 @@ function MovePanel({
         onClose(true, url ? "Validez le paiement sur la page du partenaire" : "Validez le dépôt sur votre téléphone");
         if (url) window.open(url, "_blank", "noopener");
       } else {
-        await api("/api/money/withdraw", {
+        await api("/api/mbongo/withdraw", {
           method: "POST",
           headers: { "Idempotency-Key": idemKey.current },
           body: JSON.stringify({ amount, currency, phone, pin }),

@@ -43,7 +43,7 @@ export async function notifyUser(
     "votre code PIN dans Ayeba Mbongo et contactez le support.",
     "",
     "— Ayeba Mbongo",
-    "https://ayeba.app/money",
+    "https://ayeba.app/mbongo",
   ].join("\n");
   const res = await sendExternalMail({
     from: FROM,

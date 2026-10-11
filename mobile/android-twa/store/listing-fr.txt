@@ -1,0 +1,34 @@
+=== NOM DE L'APPLICATION (max 30) ===
+Ayeba Mbongo
+
+=== BRÈVE DESCRIPTION (max 80) ===
+Portefeuille Ayeba : soldes USD & CDF, transferts gratuits, Mobile Money.
+
+=== DESCRIPTION COMPLÈTE (max 4000) ===
+Ayeba Mbongo — votre argent, dans votre compte Ayeba.
+
+Un portefeuille virtuel à part, pensé pour la RDC : soldes en dollars et en francs congolais, transferts instantanés entre utilisateurs Ayeba, dépôts et retraits via Mobile Money.
+
+PORTEFEUILLE USD & CDF
+• Deux soldes distincts : dollars américains et francs congolais
+• Aperçu clair des mouvements, historique complet
+• Code PIN à 4 chiffres demandé pour chaque opération sensible
+
+TRANSFERTS INTERNES GRATUITS
+• Envoyez à un email, un téléphone ou un @pseudo Ayeba
+• Instantané, zéro frais entre utilisateurs
+• Le destinataire est notifié immédiatement
+
+MOBILE MONEY
+• Déposez et retirez via les opérateurs Mobile Money partenaires
+• Confirmation de transaction et suivi de statut en temps réel
+• Les frais des opérateurs s'appliquent uniquement aux dépôts/retraits, jamais aux transferts internes
+
+SÉCURITÉ
+• Chaque compte Mbongo est rattaché à votre compte Ayeba
+• PIN personnel, créé par vous au premier accès
+• Vos données sont chiffrées en transit, suppression possible à tout moment
+
+Ayeba Mbongo n'est pas une banque : c'est un portefeuille virtuel adossé à des partenaires de paiement agréés. Aucun intérêt, aucun placement.
+
+Ayeba Mbongo — l'argent simple, dans l'écosystème Ayeba.

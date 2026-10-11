@@ -70,7 +70,7 @@ export default function MoneyDeletePage() {
             Vos droits
           </Link>{" "}
           et la{" "}
-          <Link href="/privacy/money" className="text-[var(--ink)] underline">
+          <Link href="/privacy/mbongo" className="text-[var(--ink)] underline">
             notice de confidentialité Ayeba Mbongo
           </Link>
           .

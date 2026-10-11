@@ -8,11 +8,11 @@
   "navigationColor": "#000000",
   "navigationColorDark": "#000000",
   "backgroundColor": "#000000",
-  "startUrl": "/money",
+  "startUrl": "/mbongo",
   "iconUrl": "https://ayeba.app/brand/ayeba-mark.png",
   "maskableIconUrl": "https://ayeba.app/apple-icon.png",
   "appVersionName": "1.0.0",
-  "webManifestUrl": "https://ayeba.app/manifest-money.webmanifest",
+  "webManifestUrl": "https://ayeba.app/manifest-mbongo.webmanifest",
   "enableNotifications": false,
   "signingKey": {
     "path": "./android.keystore",

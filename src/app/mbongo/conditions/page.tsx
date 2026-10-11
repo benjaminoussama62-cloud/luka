@@ -86,7 +86,7 @@ export default function MoneyTermsPage() {
         <p>
           Vous pouvez demander la fermeture de votre portefeuille à tout moment selon la procédure
           de la page{" "}
-          <Link href="/money/suppression" className="text-[var(--ink)] underline">
+          <Link href="/mbongo/suppression" className="text-[var(--ink)] underline">
             Suppression du compte Money
           </Link>
           . Le solde restant doit être retiré au préalable. La fermeture du portefeuille ne supprime
