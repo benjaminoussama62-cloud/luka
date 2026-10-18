@@ -705,7 +705,7 @@
         ? "Téléchargement interrompu"
         : `${pct}% · ${formatBytes(d.received)}`;
     row.innerHTML = `
-      <div class="dl-icon${failed ? " fail" : isExe && !done ? " warn" : ""}">${fileIcon(d.filename)}</div>
+      <div class="dl-icon${failed ? " fail" : isExe && !done ? " warn" : ""}">${d.icon ? `<img class="dl-file-icon" src="${d.icon}" alt="">` : fileIcon(d.filename)}</div>
       <div class="dl-meta">
         <strong>${escapeHtml(d.filename || "Fichier")}</strong>
         <span>${escapeHtml(status)}</span>

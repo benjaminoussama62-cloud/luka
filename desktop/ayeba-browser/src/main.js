@@ -567,6 +567,7 @@ function createBrowserWindow(isPrivate = false) {
         state: d.state,
         received: d.received,
         total: d.total,
+        icon: d.icon || "",
         at: d.at,
       })),
     });
@@ -1546,6 +1547,20 @@ function bindPermissions(ses) {
 }
 
 const downloadBoundSessions = new WeakSet();
+let downloadPushTimer = null;
+function pushDownloadsSoon() {
+  if (downloadPushTimer) return;
+  downloadPushTimer = setTimeout(() => {
+    downloadPushTimer = null;
+    pushAllChrome();
+  }, 300);
+}
+async function attachFileIcon(entry, filePath) {
+  try {
+    const icon = await app.getFileIcon(filePath, { size: "normal" });
+    if (!icon.isEmpty()) entry.icon = icon.toDataURL();
+  } catch {}
+}
 function bindDownloads(ses) {
   if (downloadBoundSessions.has(ses)) return;
   downloadBoundSessions.add(ses);
@@ -1578,12 +1593,17 @@ function bindDownloads(ses) {
       entry.state = state;
       entry.received = item.getReceivedBytes();
       entry.total = item.getTotalBytes();
-      pushAllChrome();
+      pushDownloadsSoon();
     });
-    item.on("done", (_e, state) => {
+    item.on("done", async (_e, state) => {
       entry.state = state;
       entry.path = item.getSavePath();
       entry.received = item.getTotalBytes();
+      if (state === "completed") await attachFileIcon(entry, entry.path);
+      if (downloadPushTimer) {
+        clearTimeout(downloadPushTimer);
+        downloadPushTimer = null;
+      }
       pushAllChrome();
     });
     pushAllChrome();
