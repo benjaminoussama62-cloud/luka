@@ -180,13 +180,15 @@ export function AyebaProvider({ children }: { children: ReactNode }) {
 
   const setSlider = useCallback(
     (key: keyof AlgorithmSliders, value: number) => {
-      setSliders((prev) => {
-        const next = { ...prev, [key]: value };
-        if (hasSearched && query.trim()) void applySearch(query, next);
-        return next;
-      });
+      // Garde anti-boucle : valeur identique -> aucun setState
+      // (MobileAppBootstrap depend de setSlider dans un useEffect).
+      if (sliders[key] === value) return;
+      const next = { ...sliders, [key]: value };
+      setSliders(next);
+      // Side-effect HORS de l'updater — sinon React StrictMode le joue deux fois.
+      if (hasSearched && query.trim()) void applySearch(query, next);
     },
-    [hasSearched, query, applySearch],
+    [sliders, hasSearched, query, applySearch],
   );
 
   const value = useMemo<AyebaState>(

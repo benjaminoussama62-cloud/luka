@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { CursorGradient } from "@/components/effects/CursorGradient";
 import { GradientStage } from "@/components/effects/GradientStage";
@@ -417,7 +417,13 @@ function AyebaAppBody() {
   const { hasSearched, response, searching, searchError, search, tab, setTab, splitScreen, resetHome, setDeepResearchOpen } = useAyeba();
   const { t } = useI18n();
   const { tabs, activeTab, activateTab, openHomeTab, openWebTab, navigateWebTab, webGoBack, webGoForward, syncWebTab } = useBrowserShell();
-  const inApp = typeof window !== "undefined" && isMobileApp();
+  // isMobileApp() lit window.URL — evalue apres montage pour eviter
+  // tout mismatch d'hydratation (serveur : false toujours).
+  const [inApp, setInApp] = useState(false);
+  useEffect(() => {
+    const t = window.setTimeout(() => setInApp(isMobileApp()), 0);
+    return () => window.clearTimeout(t);
+  }, []);
   const showTabBar = !inApp && tabs.length > 1;
 
   useEffect(() => {
@@ -528,7 +534,7 @@ function AyebaAppBody() {
               <SearchBar />
             </div>
             <div className="ayeba-serp-actions flex shrink-0 items-center gap-1.5 sm:gap-2">
-              {typeof window !== "undefined" && isMobileApp() ? (
+              {inApp ? (
                 <>
                   <Link href="/ayebi" className="ayeba-ghost px-2 py-1.5 text-xs">
                     Ayebi
@@ -610,7 +616,7 @@ function AyebaAppBody() {
             {tab === "shopping" && response ? (
               response.shopping.length ? <NativeShoppingPanel items={response.shopping} /> : <EmptyVertical label="produit" />
             ) : null}
-            {response && tab === "web" && !isMobileApp() ? (
+            {response && tab === "web" && !inApp ? (
               <button type="button" onClick={() => setDeepResearchOpen(true)} className="ayeba-ghost mt-6 px-4 py-2 text-xs">
                 Recherche profonde
               </button>
