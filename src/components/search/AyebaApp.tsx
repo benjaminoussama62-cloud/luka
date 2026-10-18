@@ -482,7 +482,7 @@ function AyebaAppBody() {
 
   if (activeTab.kind === "web") {
     return (
-      <div className="flex min-h-dvh flex-col">
+      <div className="flex min-h-svh flex-col">
         {showTabBar ? <AppTabBar /> : null}
         <InAppBrowser
           url={activeTab.url}
@@ -507,7 +507,7 @@ function AyebaAppBody() {
     return (
       <>
         <Stage home />
-        <div className="relative z-10 flex min-h-dvh flex-col">
+        <div className="relative z-10 flex min-h-svh flex-col">
           {showTabBar ? <AppTabBar /> : null}
           <AnnouncementBanner />
           <main className="ayeba-home-shell mx-auto flex w-full flex-1 flex-col px-3 pb-10 sm:max-w-xl sm:px-4 sm:pb-12">
@@ -531,7 +531,7 @@ function AyebaAppBody() {
   return (
     <>
       <Stage />
-      <div className="relative z-10 min-h-dvh pb-12">
+      <div className="relative z-10 min-h-svh pb-12">
         {showTabBar ? <AppTabBar /> : null}
         <header className="ayeba-chrome-header ayeba-serp-header">
           <div className="ayeba-serp-header-inner">

@@ -52,7 +52,7 @@ export function MarketsHubPage() {
       <GradientStage />
       <div className="ayeba-vignette ayeba-vignette-soft" aria-hidden />
 
-      <div className="relative z-10 min-h-dvh px-4 py-8 sm:py-12">
+      <div className="relative z-10 min-h-svh px-4 py-8 sm:py-12">
         <div className="mx-auto max-w-5xl">
           <header className="mb-8 flex flex-wrap items-center justify-between gap-4">
             <Link href="/" aria-label="AYEBA">

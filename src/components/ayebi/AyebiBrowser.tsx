@@ -36,7 +36,7 @@ export function AyebiBrowser({ articles }: { articles: AyebiArticle[] }) {
   }, [q, cat, articles]);
 
   return (
-    <div className="relative z-10 min-h-dvh px-4 py-8 sm:py-12">
+    <div className="relative z-10 min-h-svh px-4 py-8 sm:py-12">
       <div className="mx-auto max-w-6xl">
         <header className="mb-10 flex flex-wrap items-start justify-between gap-6">
           <div>

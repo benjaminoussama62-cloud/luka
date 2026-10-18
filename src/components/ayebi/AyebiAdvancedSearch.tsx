@@ -28,7 +28,7 @@ export function AyebiAdvancedSearch() {
   }, [q, category, sortBy, stub]);
 
   return (
-    <div className="relative z-10 min-h-dvh px-4 py-10">
+    <div className="relative z-10 min-h-svh px-4 py-10">
       <div className="mx-auto max-w-4xl">
         <Link href="/ayebi" className="ayeba-ghost px-3 py-1.5 text-xs">← Ayebi</Link>
         <h1 className="mt-4 font-[family-name:var(--font-display)] text-3xl text-white">Recherche avancée</h1>

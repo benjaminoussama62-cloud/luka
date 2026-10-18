@@ -41,12 +41,53 @@ body {
   min-height: 100%;
 }
 
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  overscroll-behavior-y: none;
+}
+
+html,
+body {
+  overflow-x: clip;
+}
+
 body {
   margin: 0;
   color: var(--ink);
   background: #000;
   font-family: var(--font-body), system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+a,
+button,
+input,
+select,
+textarea,
+label,
+[role="button"],
+[role="tab"],
+[role="link"] {
+  touch-action: manipulation;
+}
+
+img,
+svg,
+video,
+canvas,
+iframe {
+  max-width: 100%;
+}
+
+/* iOS zoome sur les inputs < 16px au focus — on force 16px au tactile */
+@media (pointer: coarse) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
 }
 
 ::selection {
@@ -54,9 +95,9 @@ body {
 }
 
 .ayeba-shell {
-  min-height: 100dvh;
+  min-height: 100svh;
   position: relative;
-  overflow-x: hidden;
+  overflow-x: clip;
 }
 
 /* ——— RDC silhouette glow (Gargantua-style) ——— */
@@ -1107,7 +1148,7 @@ select option {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: calc(100dvh - 2rem);
+  min-height: calc(100svh - 2rem);
   padding-top: 3rem;
 }
 
@@ -1440,7 +1481,7 @@ select option {
 }
 
 .ayeba-home-intro .ayeba-splash-stage {
-  min-height: calc(100dvh - 4rem);
+  min-height: calc(100svh - 4rem);
   cursor: pointer;
 }
 
@@ -2756,7 +2797,7 @@ select option {
   position: relative;
   z-index: 10;
   display: flex;
-  min-height: 100dvh;
+  min-height: 100svh;
   align-items: center;
   justify-content: center;
   padding: 2rem 1rem;
@@ -4217,7 +4258,7 @@ body.ayeba-mobile-chrome .ayeba-home-shell {
   z-index: 10;
   display: flex;
   flex-direction: column;
-  min-height: 100dvh;
+  min-height: 100svh;
   width: 100%;
 }
 .st-topbar {
@@ -4278,7 +4319,7 @@ body.ayeba-mobile-chrome .ayeba-home-shell {
   overflow-y: auto;
   position: sticky;
   top: 52px;
-  height: calc(100dvh - 52px);
+  height: calc(100svh - 52px);
 }
 .st-nav-group { margin-bottom: 4px; }
 .st-nav-item {

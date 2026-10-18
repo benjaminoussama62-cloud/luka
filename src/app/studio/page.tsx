@@ -42,7 +42,7 @@ export default function StudioLandingPage() {
   return (
     <>
       <GradientStage />
-      <div className="relative z-10 mx-auto flex min-h-dvh w-full max-w-5xl flex-col px-4 pb-16 pt-8 sm:px-6">
+      <div className="relative z-10 mx-auto flex min-h-svh w-full max-w-5xl flex-col px-4 pb-16 pt-8 sm:px-6">
         <header className="mb-12 flex items-center justify-between gap-4">
           <Link href="/" className="opacity-90 transition hover:opacity-100" aria-label="Accueil Ayeba">
             <AyebaWordmark size="sm" />

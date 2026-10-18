@@ -21,7 +21,7 @@ type Props = {
 export function DevelopersShell({ children, activePath, kicker, title, wide }: Props) {
   return (
     <div
-      className={`relative z-10 mx-auto flex min-h-dvh w-full flex-col px-4 pb-16 pt-8 sm:px-6 dev-console-shell ${wide ? "max-w-6xl" : "max-w-5xl"}`}
+      className={`relative z-10 mx-auto flex min-h-svh w-full flex-col px-4 pb-16 pt-8 sm:px-6 dev-console-shell ${wide ? "max-w-6xl" : "max-w-5xl"}`}
     >
       <header className="mb-8 flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
         <Link href="/" className="opacity-90 transition hover:opacity-100" aria-label="Accueil Ayeba">

@@ -126,7 +126,7 @@ export function AyebiArticleView({
   return (
     <article
       ref={articleRef}
-      className={`relative z-10 min-h-dvh px-4 py-8 sm:py-12 ${readMode ? "ayeba-read-mode" : ""}`}
+      className={`relative z-10 min-h-svh px-4 py-8 sm:py-12 ${readMode ? "ayeba-read-mode" : ""}`}
     >
       <div className={`mx-auto gap-8 ${readMode ? "max-w-3xl" : "grid max-w-6xl lg:grid-cols-[1fr_300px]"}`}>
         <div className="min-w-0">

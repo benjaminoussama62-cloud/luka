@@ -19,7 +19,7 @@ export function AccountShell({ children, activePath, title }: Props) {
   return (
     <>
       <GradientStage />
-      <div className="relative z-10 mx-auto flex min-h-dvh w-full max-w-4xl flex-col px-4 pb-16 pt-8 sm:px-6 account-shell">
+      <div className="relative z-10 mx-auto flex min-h-svh w-full max-w-4xl flex-col px-4 pb-16 pt-8 sm:px-6 account-shell">
         <header className="mb-8 flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
           <Link href="/" className="opacity-90 transition hover:opacity-100" aria-label="Accueil Ayeba">
             <AyebaWordmark size="sm" />
