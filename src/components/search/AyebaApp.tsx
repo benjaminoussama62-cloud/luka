@@ -421,7 +421,12 @@ function AyebaAppBody() {
   // tout mismatch d'hydratation (serveur : false toujours).
   const [inApp, setInApp] = useState(false);
   useEffect(() => {
-    const t = window.setTimeout(() => setInApp(isMobileApp()), 0);
+    // window.self === top : pas de chrome imbrique si AyebaApp tourne dans
+    // l'iframe d'un onglet (page d'accueil ouverte en tant que site web).
+    const t = window.setTimeout(
+      () => setInApp(isMobileApp() && window.self === window.top),
+      0,
+    );
     return () => window.clearTimeout(t);
   }, []);
   const showTabBar = !inApp && tabs.length > 1;
@@ -439,23 +444,26 @@ function AyebaAppBody() {
     return () => window.removeEventListener("keydown", onKey);
   }, [resetHome, openHomeTab]);
 
-  // Dans l'app, tout lien externe s'ouvre dans un onglet navigateur Ayeba —
-  // jamais une navigation du WebView entier qui ferait perdre l'application.
+  // Dans l'app, TOUT lien http(s) s'ouvre dans un onglet navigateur Ayeba —
+  // internes compris (XFO SAMEORIGIN : nos pages s'affichent en iframe).
+  // Comme Safari : cliquer un lien ne quitte jamais le navigateur.
   useEffect(() => {
     if (!inApp) return;
     const onClick = (e: MouseEvent) => {
       if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey) return;
       const anchor = (e.target as HTMLElement | null)?.closest?.("a[href]");
-      if (!anchor) return;
-      const href = anchor.getAttribute("href") ?? "";
-      if (!/^https?:\/\//i.test(href)) return;
+      if (!anchor || anchor.hasAttribute("download")) return;
+      const raw = anchor.getAttribute("href") ?? "";
+      if (!raw || raw.startsWith("#") || raw.startsWith("javascript:")) return;
+      let url: URL;
       try {
-        if (new URL(href).origin === window.location.origin) return;
+        url = new URL(raw, window.location.href);
       } catch {
         return;
       }
+      if (url.protocol !== "http:" && url.protocol !== "https:") return;
       e.preventDefault();
-      openWebTab(href, anchor.textContent?.trim().slice(0, 80) || undefined);
+      openWebTab(url.href, anchor.textContent?.trim().slice(0, 80) || undefined);
     };
     document.addEventListener("click", onClick, true);
     return () => document.removeEventListener("click", onClick, true);

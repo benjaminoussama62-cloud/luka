@@ -42,6 +42,8 @@ export function InAppBrowser({
   onNewTab,
 }: Props) {
   const [nonce, setNonce] = useState(0);
+  const [frameUrl, setFrameUrl] = useState(url);
+  const navUrl = useRef(url);
   const [busy, setBusy] = useState(true);
   const [progress, setProgress] = useState(0);
   const [sslIssue, setSslIssue] = useState<SslIssue | null>(null);
@@ -152,6 +154,16 @@ export function InAppBrowser({
 
   /* ---------------- Fallback iframe (web classique) ---------------- */
 
+  // Navigation demandee par le shell (omnibox, favoris...) -> remount.
+  // La navigation INTERNE de l'iframe met a jour navUrl sans reload.
+  useEffect(() => {
+    if (url !== navUrl.current) {
+      navUrl.current = url;
+      setFrameUrl(url);
+      setNonce((n) => n + 1);
+    }
+  }, [url]);
+
   useEffect(() => {
     if (native) return;
     const t1 = window.setTimeout(() => setBusy(true), 0);
@@ -160,7 +172,7 @@ export function InAppBrowser({
       window.clearTimeout(t1);
       window.clearTimeout(t2);
     };
-  }, [url, nonce, native]);
+  }, [nonce, native]);
 
   function reload() {
     if (native) {
@@ -170,6 +182,10 @@ export function InAppBrowser({
     }
     setNonce((n) => n + 1);
     onReload?.();
+  }
+
+  function iframeKey() {
+    return `${tabId ?? "tab"}:${nonce}`;
   }
 
   const sslText =
@@ -272,13 +288,31 @@ export function InAppBrowser({
           </>
         ) : (
           <iframe
-            key={`${url}:${nonce}`}
+            key={iframeKey()}
             title={title}
-            src={url}
+            src={frameUrl}
             className="ayeba-inapp-frame"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
             referrerPolicy="origin-when-cross-origin"
-            onLoad={() => setBusy(false)}
+            onLoad={(e) => {
+              setBusy(false);
+              // Same-origin uniquement : synchronise l'URL/titre de l'onglet
+              // avec la navigation interne de l'iframe (pages Ayeba).
+              try {
+                const loc = e.currentTarget.contentWindow?.location;
+                const doc = e.currentTarget.contentDocument;
+                if (loc && loc.href && loc.href !== "about:blank" && loc.href !== navUrl.current) {
+                  navUrl.current = loc.href;
+                  onNativeNav?.({
+                    url: loc.href,
+                    title: doc?.title || undefined,
+                    loading: false,
+                  });
+                }
+              } catch {
+                /* cross-origin : opaque par design */
+              }
+            }}
           />
         )}
       </div>
