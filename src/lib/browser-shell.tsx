@@ -37,12 +37,15 @@ type BrowserShellApi = {
   webGoBack: () => void;
   webGoForward: () => void;
   webGoTo: (index: number) => void;
+  /** Reconciliation quand la WebView native navigue (liens, back natif...). */
+  syncWebTab: (nav: NativeNav) => void;
   activateTab: (id: string) => void;
   closeTab: (id: string) => void;
   closeAllTabs: () => void;
 };
 
 import { recordHistory } from "@/lib/browser-history";
+import { nativeBrowser, nativeBrowserAvailable, type NativeNav } from "@/lib/native-browser";
 
 const BrowserShellContext = createContext<BrowserShellApi | null>(null);
 const TABS_KEY = "ayeba.browser.tabs.v2";
@@ -174,6 +177,10 @@ export function BrowserShellProvider({ children }: { children: ReactNode }) {
   }, [activeId, tabs]);
 
   const webGoBack = useCallback(() => {
+    if (nativeBrowserAvailable()) {
+      void nativeBrowser()?.goBack();
+      return;
+    }
     setTabs((prev) =>
       prev.map((t) => {
         if (t.id !== activeId || t.kind !== "web" || t.historyIndex <= 0) return t;
@@ -184,6 +191,10 @@ export function BrowserShellProvider({ children }: { children: ReactNode }) {
   }, [activeId]);
 
   const webGoForward = useCallback(() => {
+    if (nativeBrowserAvailable()) {
+      void nativeBrowser()?.goForward();
+      return;
+    }
     setTabs((prev) =>
       prev.map((t) => {
         if (t.id !== activeId || t.kind !== "web" || t.historyIndex >= t.history.length - 1) return t;
@@ -194,6 +205,10 @@ export function BrowserShellProvider({ children }: { children: ReactNode }) {
   }, [activeId]);
 
   const webGoTo = useCallback((index: number) => {
+    if (nativeBrowserAvailable()) {
+      void nativeBrowser()?.goToIndex({ index });
+      return;
+    }
     setTabs((prev) =>
       prev.map((t) => {
         if (t.id !== activeId || t.kind !== "web") return t;
@@ -202,6 +217,38 @@ export function BrowserShellProvider({ children }: { children: ReactNode }) {
       }),
     );
   }, [activeId]);
+
+  /** La WebView native a navigue -> on cale l'etat JS sur la pile reelle. */
+  const syncWebTab = useCallback(
+    (nav: NativeNav) => {
+      if (nav.loading) return;
+      const url = nav.url;
+      if (!url || url === "about:blank") return;
+      setTabs((prev) =>
+        prev.map((t) => {
+          if (t.id !== activeId || t.kind !== "web") return t;
+          const history =
+            nav.historyList && nav.historyList.length ? nav.historyList : t.history;
+          const historyIndex =
+            typeof nav.historyIndex === "number" && nav.historyIndex >= 0
+              ? nav.historyIndex
+              : history.length - 1;
+          return {
+            ...t,
+            url,
+            title: nav.title?.trim() || hostnameTitle(url),
+            history,
+            historyIndex,
+          };
+        }),
+      );
+      const tab = tabs.find((t) => t.id === activeId);
+      if (tab?.kind === "web" && !tab.private) {
+        recordHistory(url, nav.title?.trim() || hostnameTitle(url));
+      }
+    },
+    [activeId, tabs],
+  );
 
   const activateTab = useCallback((id: string) => setActiveId(id), []);
 
@@ -226,6 +273,7 @@ export function BrowserShellProvider({ children }: { children: ReactNode }) {
           ].slice(0, 20),
         );
       }
+      if (nativeBrowserAvailable()) void nativeBrowser()?.removeTab({ id });
       const next = prev.filter((t) => t.id !== id);
       setActiveId((cur) => {
         if (cur !== id) return cur;
@@ -264,11 +312,12 @@ export function BrowserShellProvider({ children }: { children: ReactNode }) {
       webGoBack,
       webGoForward,
       webGoTo,
+      syncWebTab,
       activateTab,
       closeTab,
       closeAllTabs,
     }),
-    [tabs, activeTab, privateMode, recentlyClosed, restoreClosedTab, openHomeTab, openWebTab, navigateWebTab, webGoBack, webGoForward, webGoTo, activateTab, closeTab, closeAllTabs],
+    [tabs, activeTab, privateMode, recentlyClosed, restoreClosedTab, openHomeTab, openWebTab, navigateWebTab, webGoBack, webGoForward, webGoTo, syncWebTab, activateTab, closeTab, closeAllTabs],
   );
 
   return <BrowserShellContext.Provider value={value}>{children}</BrowserShellContext.Provider>;

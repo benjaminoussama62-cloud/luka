@@ -416,7 +416,7 @@ export function AyebaApp() {
 function AyebaAppBody() {
   const { hasSearched, response, searching, searchError, search, tab, setTab, splitScreen, resetHome, setDeepResearchOpen } = useAyeba();
   const { t } = useI18n();
-  const { tabs, activeTab, activateTab, openHomeTab, openWebTab, navigateWebTab, webGoBack, webGoForward } = useBrowserShell();
+  const { tabs, activeTab, activateTab, openHomeTab, openWebTab, navigateWebTab, webGoBack, webGoForward, syncWebTab } = useBrowserShell();
   const inApp = typeof window !== "undefined" && isMobileApp();
   const showTabBar = !inApp && tabs.length > 1;
 
@@ -473,6 +473,7 @@ function AyebaAppBody() {
         <InAppBrowser
           url={activeTab.url}
           title={activeTab.title}
+          tabId={activeTab.id}
           canGoBack={activeTab.historyIndex > 0}
           canGoForward={activeTab.historyIndex < activeTab.history.length - 1}
           onBack={webGoBack}
@@ -480,6 +481,8 @@ function AyebaAppBody() {
           onNavigate={navigateWebTab}
           onSearch={onOmniSearch}
           onHome={goHomeTab}
+          onNativeNav={syncWebTab}
+          onNewTab={(u) => openWebTab(u)}
         />
         {inApp ? <MobileBrowserChrome onSearch={onOmniSearch} /> : null}
       </div>

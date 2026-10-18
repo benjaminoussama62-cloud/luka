@@ -4,6 +4,11 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import { useBrowserShell } from "@/lib/browser-shell";
 import { useBrowserFavs } from "@/lib/browser-favs";
 import { normalizeOmniInput } from "@/lib/search-engine-prefs";
+import {
+  addNativeListener,
+  nativeBrowser,
+  nativeBrowserAvailable,
+} from "@/lib/native-browser";
 import { MobileTabsOverview } from "./MobileTabsOverview";
 
 type Props = {
@@ -38,12 +43,85 @@ export function MobileBrowserChrome({ onSearch }: Props) {
   const [historyOpen, setHistoryOpen] = useState<"back" | "forward" | null>(null);
   const [favsOpen, setFavsOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [pageMenuOpen, setPageMenuOpen] = useState(false);
+  const [findOpen, setFindOpen] = useState(false);
+  const [findQuery, setFindQuery] = useState("");
+  const [findInfo, setFindInfo] = useState<{ active: number; matches: number } | null>(null);
+  const [desktopMode, setDesktopMode] = useState(false);
+  const [chromeHidden, setChromeHidden] = useState(false);
+  const [toast, setToast] = useState("");
   const lpTimer = useRef<number | null>(null);
+  const scrollAccum = useRef(0);
+  const native = typeof window !== "undefined" && nativeBrowserAvailable();
 
   useEffect(() => {
     document.body.classList.add("ayeba-mobile-chrome");
     return () => document.body.classList.remove("ayeba-mobile-chrome");
   }, []);
+
+  // WebView native masquee quand un overlay HTML couvre la page
+  // (sheet omnibox, grille d'onglets, favoris, menus).
+  const overlayOpen = omniOpen || tabsOpen || favsOpen || pageMenuOpen || historyOpen !== null;
+  useEffect(() => {
+    if (!native) return;
+    void nativeBrowser()?.setHidden({ hidden: overlayOpen });
+  }, [native, overlayOpen]);
+
+  // Barres immersives : scroll vers le bas -> chrome cache, vers le haut -> visible.
+  useEffect(() => {
+    const onScroll = (e: Event) => {
+      const { dy, y } = (e as CustomEvent<{ dy: number; y: number }>).detail;
+      scrollAccum.current = y <= 8 ? 0 : scrollAccum.current + dy;
+      if (y <= 8) setChromeHidden(false);
+      else if (scrollAccum.current > 40) {
+        setChromeHidden(true);
+        scrollAccum.current = 0;
+      } else if (scrollAccum.current < -40) {
+        setChromeHidden(false);
+        scrollAccum.current = 0;
+      }
+    };
+    window.addEventListener("ayeba:browser-scroll", onScroll);
+    return () => window.removeEventListener("ayeba:browser-scroll", onScroll);
+  }, []);
+
+  // Toasts (telechargements natifs...).
+  useEffect(() => {
+    const onToast = (e: Event) => {
+      setToast((e as CustomEvent<string>).detail);
+      window.setTimeout(() => setToast(""), 2600);
+    };
+    window.addEventListener("ayeba:toast", onToast);
+    return () => window.removeEventListener("ayeba:toast", onToast);
+  }, []);
+
+  // Find in page natif : compteur de resultats + decalage du frame.
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent("ayeba:findbar", { detail: { open: findOpen } }));
+    if (!findOpen) void nativeBrowser()?.clearFind();
+  }, [findOpen]);
+
+  function closeFind() {
+    setFindInfo(null);
+    setFindQuery("");
+    setFindOpen(false);
+  }
+
+  useEffect(() => {
+    if (!native) return;
+    return addNativeListener<{ active: number; matches: number }>("findResult", (d) =>
+      setFindInfo({ active: d.active + 1, matches: d.matches }),
+    ) ?? undefined;
+  }, [native]);
+
+  useEffect(() => {
+    if (!findOpen || !native) return;
+    const q = findQuery.trim();
+    const t = window.setTimeout(() => {
+      void nativeBrowser()?.find({ query: q, forward: true });
+    }, 250);
+    return () => window.clearTimeout(t);
+  }, [findQuery, findOpen, native]);
 
   // Suggestions omnibox : moteur + vocabulaire index, comme la barre Safari.
   useEffect(() => {
@@ -219,6 +297,85 @@ export function MobileBrowserChrome({ onSearch }: Props) {
         <div className="ayeba-mobile-pop-scrim" onClick={() => setHistoryOpen(null)} aria-hidden />
       ) : null}
 
+      {pageMenuOpen ? (
+        <>
+          <div className="ayeba-mobile-pop-scrim" onClick={() => setPageMenuOpen(false)} aria-hidden />
+          <div className="ayeba-mobile-pagemenu" role="menu">
+            <div className="ayeba-mobile-pagemenu-host">{hostOf(url)}</div>
+            <button
+              type="button"
+              role="menuitem"
+              disabled={!native}
+              onClick={() => {
+                setPageMenuOpen(false);
+                setFindOpen(true);
+              }}
+            >
+              🔎 Rechercher dans la page{native ? "" : " (app requise)"}
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              disabled={!native}
+              onClick={() => {
+                const next = !desktopMode;
+                setDesktopMode(next);
+                void nativeBrowser()?.setDesktop({ enabled: next });
+              }}
+            >
+              {desktopMode ? "📱 Version mobile" : "🖥 Demander la version bureau"}
+              {native ? "" : " (app requise)"}
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setPageMenuOpen(false);
+                if (native) void nativeBrowser()?.reload();
+                else navigateWebTab(url);
+              }}
+            >
+              ↻ Recharger la page
+            </button>
+            <div className="ayeba-mobile-pagemenu-note">🔒 Connexion HTTPS sécurisée</div>
+          </div>
+        </>
+      ) : null}
+
+      {findOpen ? (
+        <div className="ayeba-mobile-findbar">
+          <input
+            value={findQuery}
+            onChange={(e) => setFindQuery(e.target.value)}
+            placeholder="Rechercher dans la page"
+            autoFocus
+            enterKeyHint="search"
+          />
+          <span className="ayeba-mobile-findbar-count" aria-live="polite">
+            {findInfo && findQuery.trim() ? `${findInfo.active}/${findInfo.matches}` : ""}
+          </span>
+          <button
+            type="button"
+            aria-label="Précédent"
+            onClick={() => void nativeBrowser()?.find({ query: "", forward: false })}
+          >
+            ↑
+          </button>
+          <button
+            type="button"
+            aria-label="Suivant"
+            onClick={() => void nativeBrowser()?.find({ query: "", forward: true })}
+          >
+            ↓
+          </button>
+          <button type="button" className="ayeba-mobile-findbar-done" onClick={closeFind}>
+            OK
+          </button>
+        </div>
+      ) : null}
+
+      {toast ? <div className="ayeba-mobile-toast" role="status">{toast}</div> : null}
+
       {favsOpen ? (
         <div className="ayeba-mobile-omni-sheet" role="dialog" aria-label="Favoris">
           <div className="ayeba-mobile-omni-panel">
@@ -261,7 +418,10 @@ export function MobileBrowserChrome({ onSearch }: Props) {
         </div>
       ) : null}
 
-      <div className="ayeba-mobile-browser" data-web={isWeb || undefined}>
+      <div
+        className={`ayeba-mobile-browser${chromeHidden ? " is-hidden" : ""}`}
+        data-web={isWeb || undefined}
+      >
         <button
           type="button"
           className="ayeba-mobile-omni-pill"
@@ -309,6 +469,15 @@ export function MobileBrowserChrome({ onSearch }: Props) {
             aria-label="Suivant (appui long : historique)"
           >
             →
+          </button>
+          <button
+            type="button"
+            disabled={!isWeb}
+            onClick={() => setPageMenuOpen(true)}
+            aria-label="Options de la page"
+            className="ayeba-mobile-pagemenu-btn"
+          >
+            aA
           </button>
           <button type="button" disabled={!isWeb} onClick={() => void onShare()} aria-label="Partager">
             ⤴

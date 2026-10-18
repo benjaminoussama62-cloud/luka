@@ -4490,3 +4490,167 @@ body.ayeba-mobile-chrome .ayeba-home-shell {
   outline: none;
 }
 .ayeba-tabsoverview-search:focus { border-color: rgba(0, 180, 255, 0.5); }
+
+/* WebView native : progression reelle, avertissements, page menu, find-bar */
+.ayeba-native-progress {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #7df0ff, #00b4ff);
+  border-radius: 0 2px 2px 0;
+  transition: width 0.2s ease, opacity 0.3s ease;
+  z-index: 5;
+}
+.ayeba-native-warning {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  padding: 2rem;
+  background: #0a0a0e;
+  text-align: center;
+  z-index: 6;
+}
+.ayeba-native-warning h2 { margin: 0; font-size: 1.15rem; color: var(--ink); }
+.ayeba-native-warning p { margin: 0; font-size: 0.88rem; color: var(--muted); max-width: 26rem; }
+.ayeba-native-warning-icon { font-size: 2rem; color: #f59e0b; }
+.ayeba-native-warning.is-danger .ayeba-native-warning-icon { color: #f87171; }
+.ayeba-native-warning-host {
+  font-family: ui-monospace, monospace;
+  color: #7df0ff !important;
+  word-break: break-all;
+}
+.ayeba-native-warning-actions { display: flex; gap: 0.6rem; margin-top: 0.6rem; }
+.ayeba-native-warning-actions button {
+  border: 1px solid rgba(125, 240, 255, 0.4);
+  border-radius: 0.7rem;
+  background: rgba(0, 180, 255, 0.12);
+  color: #7df0ff;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 700;
+  padding: 0.6rem 1rem;
+  cursor: pointer;
+}
+.ayeba-native-warning-actions button.ayeba-ghost {
+  border-color: rgba(148, 163, 184, 0.3);
+  background: transparent;
+  color: var(--muted);
+}
+
+.ayeba-mobile-pagemenu {
+  position: fixed;
+  left: 0.7rem;
+  right: 0.7rem;
+  bottom: calc(6.2rem + env(safe-area-inset-bottom, 0px));
+  z-index: 60;
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  background: rgba(14, 15, 22, 0.98);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  padding: 0.5rem;
+  display: grid;
+  gap: 0.15rem;
+}
+.ayeba-mobile-pagemenu button {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  border: 0;
+  border-radius: 0.7rem;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.92rem;
+  padding: 0.75rem 0.8rem;
+  text-align: left;
+  cursor: pointer;
+}
+.ayeba-mobile-pagemenu button:active { background: rgba(0, 212, 255, 0.1); }
+.ayeba-mobile-pagemenu button:disabled { opacity: 0.45; }
+.ayeba-mobile-pagemenu-host {
+  padding: 0.55rem 0.8rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.ayeba-mobile-pagemenu-note {
+  padding: 0.55rem 0.8rem;
+  color: #7df0ff;
+  font-size: 0.78rem;
+  border-top: 1px solid var(--line);
+}
+.ayeba-mobile-pagemenu-btn { font-size: 0.82rem !important; font-weight: 800; letter-spacing: -0.02em; }
+
+.ayeba-mobile-findbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: calc(0.4rem + env(safe-area-inset-top, 0px));
+  z-index: 65;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.4rem 0.55rem;
+  border-bottom: 1px solid var(--line);
+  background: rgba(8, 8, 12, 0.97);
+  backdrop-filter: blur(14px);
+}
+.ayeba-mobile-findbar input {
+  flex: 1;
+  min-width: 0;
+  height: 2.1rem;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 0.55rem;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.88rem;
+  padding: 0 0.7rem;
+  outline: none;
+}
+.ayeba-mobile-findbar input:focus { border-color: rgba(0, 180, 255, 0.55); }
+.ayeba-mobile-findbar-count { color: var(--muted); font-size: 0.78rem; min-width: 2.4rem; text-align: center; }
+.ayeba-mobile-findbar button {
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 1rem;
+  padding: 0.4rem 0.6rem;
+  border-radius: 0.5rem;
+}
+.ayeba-mobile-findbar button:active { background: rgba(255, 255, 255, 0.1); }
+.ayeba-mobile-findbar-done { color: #7df0ff !important; font-weight: 700; font-size: 0.88rem !important; }
+
+.ayeba-mobile-browser {
+  transition: transform 0.25s ease;
+}
+.ayeba-mobile-browser.is-hidden {
+  transform: translateY(110%);
+}
+.ayeba-mobile-toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(7rem + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 90;
+  background: rgba(20, 22, 32, 0.97);
+  border: 1px solid rgba(125, 240, 255, 0.3);
+  border-radius: 999px;
+  color: var(--ink);
+  font-size: 0.82rem;
+  padding: 0.55rem 1.1rem;
+  white-space: nowrap;
+  max-width: 92vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
