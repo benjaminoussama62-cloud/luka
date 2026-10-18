@@ -405,7 +405,7 @@ function revealWindow(win) {
   win.focus();
 }
 
-function createBrowserWindow(isPrivate = false) {
+function createBrowserWindow(isPrivate = false, initialUrl = HOME_URL) {
   ensureData();
   log(`createBrowserWindow execPath=${process.execPath} private=${isPrivate}`);
   if (isPrivate) {
@@ -788,72 +788,148 @@ function createBrowserWindow(isPrivate = false) {
       pushChromeState();
     });
 
-    // Real browser context menu (Edge-style right click on pages).
+    // Menu contextuel complet façon Chrome : variantes selon la cible
+    // (lien, image, média, champ éditable, sélection, page).
     wc.on("context-menu", (_e, params) => {
+      const ses = wc.session;
+      const pageURL = params.pageURL || wc.getURL() || "";
       const items = [];
+
+      // Suggestions orthographiques en tête dans un champ éditable (Chrome).
+      if (params.isEditable && params.misspelledWord) {
+        const sugg = (params.dictionarySuggestions || []).slice(0, 3);
+        if (sugg.length) {
+          for (const s of sugg) {
+            items.push({ label: s, click: () => wc.replaceMisspelling(s) });
+          }
+        } else {
+          items.push({ label: "Aucune suggestion", enabled: false });
+        }
+        items.push(
+          {
+            label: "Ajouter au dictionnaire",
+            click: () => ses.addWordToSpellCheckerDictionary(params.misspelledWord),
+          },
+          { type: "separator" },
+        );
+      }
+
       if (params.linkURL) {
         items.push(
-          {
-            label: "Ouvrir le lien dans un nouvel onglet",
-            click: () => createTab(params.linkURL, true),
-          },
-          {
-            label: "Copier l'adresse du lien",
-            click: () => require("electron").clipboard.writeText(params.linkURL),
-          },
+          { label: "Ouvrir le lien dans un nouvel onglet", click: () => createTab(params.linkURL, true) },
+          { label: "Ouvrir le lien dans un nouvel onglet en arrière-plan", click: () => createTab(params.linkURL, false) },
+          { label: "Ouvrir le lien dans une nouvelle fenêtre", click: () => createBrowserWindow(false, params.linkURL) },
+          { type: "separator" },
+          { label: "Enregistrer le lien sous…", click: () => ses.downloadURL(params.linkURL) },
+          { label: "Copier l'adresse du lien", click: () => clipboard.writeText(params.linkURL) },
           { type: "separator" },
         );
+        if (!state.isPrivate) {
+          items.push(
+            { label: "Ouvrir le lien dans une fenêtre privée", click: () => createBrowserWindow(true, params.linkURL) },
+            { type: "separator" },
+          );
+        }
       }
+
       if (params.mediaType === "image" && params.srcURL) {
         items.push(
-          {
-            label: "Ouvrir l'image dans un nouvel onglet",
-            click: () => createTab(params.srcURL, true),
-          },
-          {
-            label: "Copier l'adresse de l'image",
-            click: () => require("electron").clipboard.writeText(params.srcURL),
-          },
+          { label: "Ouvrir l'image dans un nouvel onglet", click: () => createTab(params.srcURL, true) },
+          { label: "Enregistrer l'image sous…", click: () => ses.downloadURL(params.srcURL) },
+          { label: "Copier l'image", click: () => wc.copyImageAt(params.x, params.y) },
+          { label: "Copier l'adresse de l'image", click: () => clipboard.writeText(params.srcURL) },
           { type: "separator" },
         );
       }
+
+      if ((params.mediaType === "video" || params.mediaType === "audio") && params.srcURL) {
+        const kind = params.mediaType === "video" ? "la vidéo" : "l'audio";
+        items.push(
+          { label: `Enregistrer ${kind} sous…`, click: () => ses.downloadURL(params.srcURL) },
+          { label: `Copier l'adresse de ${kind}`, click: () => clipboard.writeText(params.srcURL) },
+          { type: "separator" },
+        );
+      }
+
       if (params.isEditable) {
         items.push(
-          { role: "undo", label: "Annuler" },
-          { role: "redo", label: "Rétablir" },
+          { role: "undo", label: "Annuler", enabled: params.editFlags?.canUndo },
+          { role: "redo", label: "Rétablir", enabled: params.editFlags?.canRedo },
           { type: "separator" },
-          { role: "cut", label: "Couper" },
-          { role: "copy", label: "Copier" },
-          { role: "paste", label: "Coller" },
+          { role: "cut", label: "Couper", enabled: params.editFlags?.canCut },
+          { role: "copy", label: "Copier", enabled: params.editFlags?.canCopy },
+          { role: "paste", label: "Coller", enabled: params.editFlags?.canPaste },
+          { role: "pasteAndMatchStyle", label: "Coller sans mise en forme", enabled: params.editFlags?.canPaste },
+          { label: "Supprimer", enabled: params.editFlags?.canDelete, click: () => wc.delete() },
+          { type: "separator" },
           { role: "selectAll", label: "Tout sélectionner" },
           { type: "separator" },
         );
-      } else if (params.selectionText) {
+      } else if (params.selectionText && params.selectionText.trim()) {
+        const sel = String(params.selectionText).trim();
         items.push(
           { role: "copy", label: "Copier" },
           {
-            label: `Rechercher « ${String(params.selectionText).slice(0, 40)} » avec Ayeba`,
+            label: `Rechercher « ${sel.slice(0, 40)} » avec Ayeba`,
+            click: () => createTab(buildSearchUrl(sel, readSettings().searchEngine), true),
+          },
+          {
+            label: "Traduire la sélection",
             click: () =>
-              createTab(buildSearchUrl(String(params.selectionText), readSettings().searchEngine), true),
+              createTab(`https://translate.google.com/?sl=auto&tl=fr&text=${encodeURIComponent(sel)}`, true),
           },
           { type: "separator" },
         );
       }
+
       items.push(
-        {
-          label: "Précédent",
-          enabled: canBack(wc),
-          click: () => wc.goBack(),
-        },
-        {
-          label: "Suivant",
-          enabled: canForward(wc),
-          click: () => wc.goForward(),
-        },
+        { label: "Précédent", enabled: canBack(wc), click: () => wc.goBack() },
+        { label: "Suivant", enabled: canForward(wc), click: () => wc.goForward() },
         { label: "Actualiser", click: () => wc.reload() },
         { type: "separator" },
-        { label: "Inspecter", click: () => wc.openDevTools({ mode: "detach" }) },
       );
+
+      if (!params.isEditable && /^https?:/.test(pageURL)) {
+        items.push(
+          {
+            label: "Enregistrer sous…",
+            click: async () => {
+              try {
+                const { canceled, filePath } = await dialog.showSaveDialog(win, {
+                  title: "Enregistrer sous",
+                  defaultPath: path.join(
+                    app.getPath("downloads"),
+                    `${hostOf(pageURL) || "page"}.html`,
+                  ),
+                });
+                if (!canceled && filePath) await wc.savePage(filePath, "HTMLComplete");
+              } catch (err) {
+                log(`savePage: ${err?.message || err}`);
+              }
+            },
+          },
+          { label: "Imprimer…", click: () => wc.print({}) },
+          {
+            label: "Traduire en français",
+            click: () =>
+              createTab(
+                `https://translate.google.com/translate?sl=auto&tl=fr&u=${encodeURIComponent(pageURL)}`,
+                true,
+              ),
+          },
+          { type: "separator" },
+        );
+      }
+
+      items.push(
+        {
+          label: "Afficher le code source de la page",
+          enabled: /^https?:/.test(pageURL),
+          click: () => createTab(`view-source:${pageURL}`, true),
+        },
+        { label: "Inspecter", click: () => wc.inspectElement(params.x, params.y) },
+      );
+
       Menu.buildFromTemplate(items).popup({ window: win });
     });
   }
@@ -1379,7 +1455,7 @@ function createBrowserWindow(isPrivate = false) {
   };
 
   windows.add(state);
-  createTab(HOME_URL, true);
+  createTab(initialUrl || HOME_URL, true);
   return state;
 }
 
