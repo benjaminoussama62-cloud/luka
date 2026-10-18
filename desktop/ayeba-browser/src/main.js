@@ -172,6 +172,8 @@ const RAIL_W = 52;
 /** Téléchargements récents (Edge-like flyout). */
 const downloadLog = [];
 
+let updateState = { status: "idle", version: "", progress: 0 };
+
 function pushAllChrome() {
   for (const state of windows) {
     if (state.pushChromeState) state.pushChromeState();
@@ -570,6 +572,7 @@ function createBrowserWindow(isPrivate = false) {
         icon: d.icon || "",
         at: d.at,
       })),
+      update: updateState,
     });
     if (state.rail && !state.rail.webContents.isDestroyed()) {
       state.rail.webContents.send("rail:state", {
@@ -1219,6 +1222,9 @@ function createBrowserWindow(isPrivate = false) {
       }
       return { version: app.getVersion() };
     },
+    "update:install": () => {
+      if (updateState.status === "ready") autoUpdater.quitAndInstall();
+    },
     "settings:set": (_e, patch) => writeSettings(patch || {}),
     "settings:search-url": (_e, query) => {
       const { searchEngine } = readSettings();
@@ -1641,19 +1647,44 @@ app.whenReady().then(() => {
   bindIpc();
 
   if (app.isPackaged) {
-    autoUpdater.on("error", (error) => log(`auto-update error: ${error?.message || error}`));
-    autoUpdater.on("update-downloaded", async () => {
+    // Le provider "github" lit /releases/latest, qui n'est pas forcément une
+    // release navigateur (le repo héberge plusieurs apps) → on passe par un
+    // endpoint générique hébergé sur ayeba.app qui résout le tag browser-v*.
+    autoUpdater.setFeedURL({
+      provider: "generic",
+      url: "https://ayeba.app/browser-updates",
+    });
+    autoUpdater.autoDownload = true;
+    autoUpdater.autoInstallOnAppQuit = true;
+    autoUpdater.on("update-available", (info) => {
+      updateState = { status: "downloading", version: info?.version || "", progress: 0 };
+      pushAllChrome();
+    });
+    autoUpdater.on("download-progress", (p) => {
+      updateState = { ...updateState, status: "downloading", progress: Math.round(p?.percent || 0) };
+      pushDownloadsSoon();
+    });
+    autoUpdater.on("update-downloaded", async (info) => {
+      updateState = { status: "ready", version: info?.version || updateState.version, progress: 100 };
+      pushAllChrome();
       const result = await dialog.showMessageBox({
         type: "info",
         buttons: ["Redémarrer maintenant", "Plus tard"],
         defaultId: 0,
         cancelId: 1,
         title: "Mise à jour AYEBA disponible",
-        message: "La mise à jour est prête à être installée.",
+        message: `AYEBA ${updateState.version} est prête. Elle s'installera au prochain redémarrage.`,
       });
       if (result.response === 0) autoUpdater.quitAndInstall();
     });
-    autoUpdater.checkForUpdatesAndNotify().catch((error) => log(`auto-update check failed: ${error?.message || error}`));
+    autoUpdater.on("error", (error) => {
+      updateState = { status: "idle", version: "", progress: 0 };
+      log(`auto-update error: ${error?.message || error}`);
+    });
+    const checkUpdates = () =>
+      autoUpdater.checkForUpdates().catch((error) => log(`auto-update check failed: ${error?.message || error}`));
+    void checkUpdates();
+    setInterval(checkUpdates, 6 * 60 * 60 * 1000).unref();
   }
 
   bindDownloads(session.defaultSession);

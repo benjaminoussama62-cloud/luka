@@ -509,6 +509,28 @@ span.tab-fav { background: var(--surface-2); }
   border-bottom-color: var(--line);
 }
 .menu-flyout > button:hover .mi-svg { color: var(--orange); opacity: 1; }
+/* Badge de mise à jour — point orange sur le bouton menu, façon Edge. */
+.icon-btn.has-update::after {
+  content: "";
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--orange);
+  box-shadow: 0 0 6px rgba(232, 93, 4, 0.8);
+}
+.menu-flyout > button.menu-update {
+  background: rgba(232, 93, 4, 0.12);
+  border: 1px solid rgba(232, 93, 4, 0.35);
+  border-radius: 6px;
+  color: var(--orange);
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.menu-flyout > button.menu-update .mi-svg { color: var(--orange); }
+.menu-flyout > button.menu-update .shortcut { color: var(--orange); opacity: 0.8; }
 .menu-flyout .shortcut {
   margin-left: auto;
   font-family: var(--mono);

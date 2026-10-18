@@ -244,8 +244,31 @@
     renderFavList(favCache, filter);
   }
 
+  function renderUpdate() {
+    const u = state.update || { status: "idle" };
+    els.btnMenu?.classList.toggle("has-update", u.status === "downloading" || u.status === "ready");
+    let row = els.menu?.querySelector("#menuUpdateRow");
+    if (u.status !== "downloading" && u.status !== "ready") {
+      row?.remove();
+      return;
+    }
+    if (!row) {
+      row = document.createElement("button");
+      row.type = "button";
+      row.id = "menuUpdateRow";
+      row.className = "menu-update";
+      row.dataset.act = "update";
+      els.menu?.prepend(row);
+    }
+    row.innerHTML =
+      u.status === "ready"
+        ? `<svg class="mi-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13.5V4M6 8l4-4 4 4"/><path d="M4 16h12"/></svg>Mettre à jour AYEBA ${escapeHtml(u.version || "")} — redémarrer<span class="shortcut">Prête</span>`
+        : `<svg class="mi-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 4v9.5M6.5 9.5 10 13.5l3.5-4M4 16.5h12"/></svg>Mise à jour en cours…<span class="shortcut">${u.progress || 0}%</span>`;
+  }
+
   function renderChrome() {
     renderTabs();
+    renderUpdate();
     // Si le panneau Téléchargements est ouvert, rafraîchir la progression.
     if (openOverlay === "panel" && els.panelTitle.textContent === "Téléchargements") {
       const holder = els.panelBody.querySelector("#dlPanelList");
@@ -1104,6 +1127,7 @@
       await api.invoke("data:clear", { cookies: true, siteData: true, cache: true, history: true });
     }
     if (act === "about") api.invoke("app:about");
+    if (act === "update") api.invoke("update:install");
     if (!["favorites", "history", "find", "settings", "downloads", "extensions", "passwords"].includes(act)) closeAllOverlays();
   });
 
