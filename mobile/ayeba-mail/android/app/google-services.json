@@ -1,0 +1,90 @@
+{
+  "project_info": {
+    "project_number": "508328631175",
+    "project_id": "sombatekapro",
+    "storage_bucket": "sombatekapro.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:508328631175:android:679faac5cd4964f08b1122",
+        "android_client_info": {
+          "package_name": "app.ayeba.mail"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "508328631175-2gpdu705sfbqa8anhj71m42tsf9dpk5p.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBj3Jqk2Gs3WTp_97-o6eR_1R87cW296vE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "508328631175-2gpdu705sfbqa8anhj71m42tsf9dpk5p.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "508328631175-5jmppm3fui8fdifd4u5n5gs8lkk4416q.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.sombateka.st"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:508328631175:android:74f7d3402508b59b8b1122",
+        "android_client_info": {
+          "package_name": "com.sombateka.st"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "508328631175-s74u30lar3127ck7p0umeqp56khpmmnv.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.sombateka.st",
+            "certificate_hash": "5e128f4174508fd461d032d6d881637c5b9c87b1"
+          }
+        },
+        {
+          "client_id": "508328631175-2gpdu705sfbqa8anhj71m42tsf9dpk5p.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBj3Jqk2Gs3WTp_97-o6eR_1R87cW296vE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "508328631175-2gpdu705sfbqa8anhj71m42tsf9dpk5p.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "508328631175-5jmppm3fui8fdifd4u5n5gs8lkk4416q.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.sombateka.st"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
