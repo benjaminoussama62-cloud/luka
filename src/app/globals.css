@@ -3374,54 +3374,251 @@ select option {
 .ayeba-engine-option.is-active { border-color: rgba(0, 180, 255, 0.45); }
 
 /* Mobile Safari-like browser chrome */
+/* ——— Chrome mobile façon Safari : pill omnibox + barre d'actions ——— */
 .ayeba-inapp-browser.is-mobile .ayeba-inapp-frame-wrap {
-  padding-bottom: calc(3.35rem + env(safe-area-inset-bottom, 0px));
+  padding-bottom: calc(5.9rem + env(safe-area-inset-bottom, 0px));
 }
-.ayeba-mobile-browser-bar {
+body.ayeba-mobile-chrome .ayeba-serp-body,
+body.ayeba-mobile-chrome .ayeba-home-shell {
+  padding-bottom: calc(6rem + env(safe-area-inset-bottom, 0px));
+}
+.ayeba-mobile-browser {
   position: fixed;
   left: 0;
   right: 0;
   bottom: 0;
   z-index: 50;
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  padding: 0.35rem 0.45rem calc(0.35rem + env(safe-area-inset-bottom, 0px));
+  padding: 0.4rem 0.55rem calc(0.4rem + env(safe-area-inset-bottom, 0px));
   border-top: 1px solid var(--line);
   background: rgba(8, 8, 12, 0.96);
-  backdrop-filter: blur(12px);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
 }
-.ayeba-mobile-browser-bar button,
-.ayeba-mobile-ayebi-btn {
-  flex: 0 0 auto;
-  min-width: 2.1rem;
-  height: 2.1rem;
-  display: grid;
-  place-items: center;
-  border: 0;
-  border-radius: 0.55rem;
-  background: rgba(255, 255, 255, 0.06);
+.ayeba-mobile-omni-pill {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  width: 100%;
+  height: 2.35rem;
+  margin: 0 0 0.4rem;
+  padding: 0 0.85rem;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 0.7rem;
+  background: rgba(255, 255, 255, 0.07);
   color: var(--ink);
-  font-size: 0.78rem;
-  text-decoration: none;
-  cursor: pointer;
+  font-size: 0.8rem;
+  cursor: text;
 }
-.ayeba-mobile-browser-bar button:disabled { opacity: 0.35; }
-.ayeba-mobile-omni-chip {
-  flex: 1;
+.ayeba-mobile-omni-lock { font-size: 0.72rem; opacity: 0.8; flex: 0 0 auto; }
+.ayeba-mobile-omni-text {
   min-width: 0;
-  height: 2.1rem;
-  padding: 0 0.65rem;
-  border: 0;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
+  flex: 1;
+  text-align: center;
   color: var(--muted);
-  font-size: 0.72rem;
   text-overflow: ellipsis;
   overflow: hidden;
   white-space: nowrap;
+}
+.ayeba-mobile-browser[data-web] .ayeba-mobile-omni-text { color: var(--ink); }
+.ayeba-mobile-browser-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.25rem;
+}
+.ayeba-mobile-browser-bar button {
+  flex: 1 1 0;
+  height: 2.4rem;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 0.6rem;
+  background: transparent;
+  color: var(--ink);
+  font-size: 1.05rem;
+  text-decoration: none;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+.ayeba-mobile-browser-bar button:active { background: rgba(255, 255, 255, 0.1); }
+.ayeba-mobile-browser-bar button:disabled { opacity: 0.3; }
+.ayeba-mobile-browser-bar button.is-starred { color: #7df0ff; }
+.ayeba-mobile-tabs-btn { position: relative; }
+.ayeba-mobile-tabs-count {
+  position: absolute;
+  top: 0.1rem;
+  right: 0.45rem;
+  min-width: 0.95rem;
+  height: 0.95rem;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: #00b4ff;
+  color: #050507;
+  font-size: 0.6rem;
+  font-weight: 700;
+}
+
+/* Vue d'ensemble des onglets (grille Safari) */
+.ayeba-tabsoverview {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  background: rgba(6, 6, 10, 0.97);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+.ayeba-tabsoverview-head,
+.ayeba-tabsoverview-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.8rem 1rem;
+}
+.ayeba-tabsoverview-head {
+  padding-top: calc(0.8rem + env(safe-area-inset-top, 0px));
+  border-bottom: 1px solid var(--line);
+}
+.ayeba-tabsoverview-foot {
+  padding-bottom: calc(0.8rem + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--line);
+}
+.ayeba-tabsoverview-count { color: var(--muted); font-size: 0.85rem; }
+.ayeba-tabsoverview-done,
+.ayeba-tabsoverview-closeall {
+  border: 0;
+  background: transparent;
+  color: #7df0ff;
+  font-size: 0.95rem;
+  font-weight: 600;
+  padding: 0.4rem 0.6rem;
   cursor: pointer;
 }
+.ayeba-tabsoverview-closeall { color: #ff7a7a; }
+.ayeba-tabsoverview-closeall:disabled { opacity: 0.35; }
+.ayeba-tabsoverview-new {
+  width: 2.6rem;
+  height: 2.6rem;
+  border-radius: 50%;
+  border: 1px solid rgba(125, 240, 255, 0.4);
+  background: rgba(0, 180, 255, 0.12);
+  color: #7df0ff;
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.ayeba-tabsoverview-grid {
+  flex: 1;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+  gap: 0.9rem;
+  padding: 1rem;
+  align-content: start;
+}
+.ayeba-tabscard {
+  border-radius: 0.9rem;
+  border: 1px solid var(--line);
+  background: #101017;
+  overflow: hidden;
+  cursor: pointer;
+}
+.ayeba-tabscard.active { border-color: rgba(0, 180, 255, 0.55); }
+.ayeba-tabscard-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 0.6rem;
+}
+.ayeba-tabscard-fav {
+  flex: 0 0 auto;
+  width: 1.5rem;
+  height: 1.5rem;
+  display: grid;
+  place-items: center;
+  border-radius: 0.4rem;
+  background: rgba(0, 180, 255, 0.14);
+  color: #7df0ff;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+.ayeba-tabscard-meta { min-width: 0; flex: 1; }
+.ayeba-tabscard-title {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--ink);
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.ayeba-tabscard-host {
+  display: block;
+  font-size: 0.66rem;
+  color: var(--faint);
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.ayeba-tabscard-close {
+  flex: 0 0 auto;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--muted);
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.ayeba-tabscard-thumb {
+  height: 8.5rem;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(160deg, #0a0d14, #0d1019);
+  font-size: 2.2rem;
+  opacity: 0.75;
+}
+
+/* Popover historique (appui long ← / →) */
+.ayeba-mobile-history-pop {
+  position: fixed;
+  left: 0.6rem;
+  right: 0.6rem;
+  bottom: calc(6.4rem + env(safe-area-inset-bottom, 0px));
+  z-index: 75;
+  max-height: 55dvh;
+  overflow-y: auto;
+  border-radius: 0.9rem;
+  border: 1px solid var(--line);
+  background: #0d0d13;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+}
+.ayeba-mobile-history-pop button {
+  display: block;
+  width: 100%;
+  padding: 0.8rem 1rem;
+  border: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  background: transparent;
+  color: var(--ink);
+  font-size: 0.85rem;
+  text-align: left;
+  cursor: pointer;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.ayeba-mobile-pop-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 74;
+}
+
+/* Sheet omnibox + favoris */
 .ayeba-mobile-omni-sheet {
   position: fixed;
   inset: 0;
@@ -3429,19 +3626,24 @@ select option {
   display: grid;
   place-items: end center;
   padding: 1rem;
+  padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
   background: rgba(0, 0, 0, 0.55);
 }
-.ayeba-mobile-omni-sheet form {
+.ayeba-mobile-omni-panel {
   width: min(100%, 28rem);
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.45rem;
-  padding: 0.75rem;
+  max-height: 70dvh;
+  overflow-y: auto;
   border-radius: 1rem;
   border: 1px solid var(--line);
   background: #0c0c10;
 }
-.ayeba-mobile-omni-sheet input {
+.ayeba-mobile-omni-panel form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  padding: 0.75rem;
+}
+.ayeba-mobile-omni-panel input {
   flex: 1 1 100%;
   height: 2.75rem;
   padding: 0 0.85rem;
@@ -3449,6 +3651,99 @@ select option {
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.05);
   color: var(--ink);
+  font-size: 0.95rem;
+}
+.ayeba-mobile-omni-panel form button {
+  height: 2.4rem;
+  padding: 0 1rem;
+  border-radius: 0.6rem;
+  border: 1px solid rgba(0, 180, 255, 0.4);
+  background: rgba(0, 180, 255, 0.12);
+  color: #9fdcf0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ayeba-mobile-omni-panel form button.ayeba-ghost {
+  border-color: var(--line);
+  background: transparent;
+  color: var(--muted);
+}
+.ayeba-mobile-omni-actions {
+  display: flex;
+  flex-direction: column;
+  padding: 0 0.75rem 0.75rem;
+}
+.ayeba-mobile-omni-actions button {
+  padding: 0.75rem 0.4rem;
+  border: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  background: transparent;
+  color: var(--ink);
+  font-size: 0.88rem;
+  text-align: left;
+  cursor: pointer;
+}
+.ayeba-mobile-favs-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.9rem 1rem;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+}
+.ayeba-mobile-favs-head .ayeba-ghost {
+  border: 0;
+  background: transparent;
+  color: #7df0ff;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ayeba-mobile-favs-empty {
+  padding: 1.2rem 1rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.ayeba-mobile-favs-list { list-style: none; margin: 0; padding: 0.3rem 0; }
+.ayeba-mobile-favs-list li {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+.ayeba-mobile-favs-list li > button:first-child {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.7rem 1rem;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.ayeba-mobile-favs-title {
+  color: var(--ink);
+  font-size: 0.85rem;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.ayeba-mobile-favs-host {
+  color: var(--faint);
+  font-size: 0.7rem;
+}
+.ayeba-mobile-favs-del {
+  flex: 0 0 auto;
+  width: 2.2rem;
+  height: 2.2rem;
+  margin-right: 0.5rem;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  font-size: 1.1rem;
+  cursor: pointer;
 }
 
 .ayeba-cite-num {

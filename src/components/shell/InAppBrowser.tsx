@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { isMobileApp } from "@/lib/mobile-app";
-import { MobileBrowserChrome } from "./MobileBrowserChrome";
 
 type Props = {
   url: string;
@@ -25,9 +24,6 @@ export function InAppBrowser({
   onBack,
   onForward,
   onReload,
-  onNavigate,
-  onSearch,
-  onHome,
 }: Props) {
   const [nonce, setNonce] = useState(0);
   const [busy, setBusy] = useState(true);
@@ -90,20 +86,6 @@ export function InAppBrowser({
           onLoad={() => setBusy(false)}
         />
       </div>
-      {mobile && onBack && onForward && onHome ? (
-        <MobileBrowserChrome
-          url={url}
-          title={title}
-          canGoBack={canGoBack}
-          canGoForward={canGoForward}
-          onBack={onBack}
-          onForward={onForward}
-          onReload={reload}
-          onNavigate={onNavigate ?? (() => {})}
-          onSearch={onSearch ?? (() => {})}
-          onHome={onHome}
-        />
-      ) : null}
     </div>
   );
 }

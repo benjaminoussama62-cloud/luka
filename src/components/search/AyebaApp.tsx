@@ -29,6 +29,7 @@ import { PodcastPlayer } from "./PodcastPlayer";
 import { RelatedSearches } from "./RelatedSearches";
 import { ResultCard } from "./ResultCard";
 import { AppTabBar } from "@/components/shell/AppTabBar";
+import { MobileBrowserChrome } from "@/components/shell/MobileBrowserChrome";
 import { InAppBrowser } from "@/components/shell/InAppBrowser";
 import { SearchBar } from "./SearchBar";
 import { ToolsMenu } from "./ToolsMenu";
@@ -417,7 +418,7 @@ function AyebaAppBody() {
   const { t } = useI18n();
   const { tabs, activeTab, activateTab, openHomeTab, openWebTab, navigateWebTab, webGoBack, webGoForward } = useBrowserShell();
   const inApp = typeof window !== "undefined" && isMobileApp();
-  const showTabBar = inApp || tabs.length > 1;
+  const showTabBar = !inApp && tabs.length > 1;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -480,6 +481,7 @@ function AyebaAppBody() {
           onSearch={onOmniSearch}
           onHome={goHomeTab}
         />
+        {inApp ? <MobileBrowserChrome onSearch={onOmniSearch} /> : null}
       </div>
     );
   }
@@ -503,6 +505,7 @@ function AyebaAppBody() {
             />
           </main>
         </div>
+        {inApp ? <MobileBrowserChrome onSearch={onOmniSearch} /> : null}
         <Modals />
       </>
     );
@@ -619,6 +622,7 @@ function AyebaAppBody() {
           ) : null}
         </div>
       </div>
+      {inApp ? <MobileBrowserChrome onSearch={onOmniSearch} /> : null}
       <Modals />
     </>
   );

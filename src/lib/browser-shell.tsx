@@ -29,8 +29,10 @@ type BrowserShellApi = {
   navigateWebTab: (url: string, title?: string) => void;
   webGoBack: () => void;
   webGoForward: () => void;
+  webGoTo: (index: number) => void;
   activateTab: (id: string) => void;
   closeTab: (id: string) => void;
+  closeAllTabs: () => void;
 };
 
 const BrowserShellContext = createContext<BrowserShellApi | null>(null);
@@ -171,7 +173,22 @@ export function BrowserShellProvider({ children }: { children: ReactNode }) {
     );
   }, [activeId]);
 
+  const webGoTo = useCallback((index: number) => {
+    setTabs((prev) =>
+      prev.map((t) => {
+        if (t.id !== activeId || t.kind !== "web") return t;
+        if (index < 0 || index >= t.history.length) return t;
+        return { ...t, historyIndex: index, url: t.history[index] };
+      }),
+    );
+  }, [activeId]);
+
   const activateTab = useCallback((id: string) => setActiveId(id), []);
+
+  const closeAllTabs = useCallback(() => {
+    setTabs(defaultTabs());
+    setActiveId("home");
+  }, []);
 
   const closeTab = useCallback((id: string) => {
     setTabs((prev) => {
@@ -200,10 +217,12 @@ export function BrowserShellProvider({ children }: { children: ReactNode }) {
       navigateWebTab,
       webGoBack,
       webGoForward,
+      webGoTo,
       activateTab,
       closeTab,
+      closeAllTabs,
     }),
-    [tabs, activeTab, openHomeTab, openWebTab, navigateWebTab, webGoBack, webGoForward, activateTab, closeTab],
+    [tabs, activeTab, openHomeTab, openWebTab, navigateWebTab, webGoBack, webGoForward, webGoTo, activateTab, closeTab, closeAllTabs],
   );
 
   return <BrowserShellContext.Provider value={value}>{children}</BrowserShellContext.Provider>;
