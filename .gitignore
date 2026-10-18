@@ -63,3 +63,5 @@ mobile/**/twa-app/app/build/
 mobile/**/twa-app/.gradle/
 mobile/**/twa-app/build/
 mobile/**/keystore-credentials.txt
+AYEBA_KEYSTORE_BASE64.txt
+MBONGO_KEYSTORE_BASE64.txt

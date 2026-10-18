@@ -99,6 +99,15 @@ CREATE TABLE IF NOT EXISTS mail_attachments (
 
 CREATE INDEX IF NOT EXISTS idx_mail_att_msg ON mail_attachments(message_id);
 CREATE INDEX IF NOT EXISTS idx_mail_att_acc ON mail_attachments(account_id, id);
+
+CREATE TABLE IF NOT EXISTS mail_push_tokens (
+  token TEXT PRIMARY KEY,
+  account_id TEXT NOT NULL,
+  platform TEXT NOT NULL DEFAULT 'android',
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_mail_push_acc ON mail_push_tokens(account_id);
 `;
 
 // Colonnes ajoutées après coup — ALTER idempotent via try/catch.

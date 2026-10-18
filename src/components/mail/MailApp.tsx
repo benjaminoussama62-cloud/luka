@@ -155,6 +155,40 @@ export function MailApp() {
     if (account) void loadMessages(folder, q);
   }, [account, folder, q, loadMessages]);
 
+  // Push FCM — dans le shell Android Capacitor, on enregistre le token
+  // de l'appareil pour être notifié à chaque mail entrant.
+  useEffect(() => {
+    if (!account) return;
+    type PushPlugin = {
+      requestPermissions(): Promise<{ receive: string }>;
+      register(): Promise<void>;
+      addListener(event: string, cb: (t: { value: string }) => void): void;
+    };
+    const cap = (
+      window as unknown as {
+        Capacitor?: { isNativePlatform?: () => boolean; Plugins?: { PushNotifications?: PushPlugin } };
+      }
+    ).Capacitor;
+    const push = cap?.Plugins?.PushNotifications;
+    if (!cap?.isNativePlatform?.() || !push) return;
+    let dead = false;
+    void (async () => {
+      const perm = await push.requestPermissions();
+      if (dead || perm.receive !== "granted") return;
+      push.addListener("registration", (t) => {
+        void fetch("/api/mail/push-token", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ token: t.value, platform: "android" }),
+        });
+      });
+      await push.register();
+    })();
+    return () => {
+      dead = true;
+    };
+  }, [account]);
+
   useEffect(() => {
     if (!vault) return;
     let cancel = false;

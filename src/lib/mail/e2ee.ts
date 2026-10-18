@@ -241,6 +241,52 @@ export async function sealText(
   return { subjectCipher, bodyCipher, wrap };
 }
 
+/** PJ scellée côté serveur (mail entrant) — même clé de contenu que le message. */
+export type SealedInboundAttachment = {
+  nameIv: string;
+  nameCt: string;
+  fileIv: string;
+  byteSize: number;
+  data: Uint8Array;
+};
+
+/**
+ * Scelle sujet + corps + pièces jointes sous UNE clé de contenu, enveloppée
+ * via ECDH vers la clé publique du coffre. Utilisé pour la réception externe :
+ * le serveur chiffre pour le compte sans jamais voir la phrase secrète.
+ */
+export async function sealMessage(
+  recipientSpkiB64: string,
+  subject: string,
+  body: string,
+  files: { name: string; mime: string; bytes: Uint8Array }[] = [],
+): Promise<{
+  subjectCipher: CipherPack;
+  bodyCipher: CipherPack;
+  wrap: KeyWrap;
+  attachments: SealedInboundAttachment[];
+}> {
+  const raw = globalThis.crypto.getRandomValues(new Uint8Array(32));
+  const key = await importContentKey(raw);
+  const subjectCipher = await encryptUtf8(key, subject);
+  const bodyCipher = await encryptUtf8(key, body);
+  const attachments: SealedInboundAttachment[] = [];
+  for (const f of files) {
+    const meta = await encryptUtf8(key, JSON.stringify({ name: f.name, mime: f.mime }));
+    const enc = await encryptBytes(key, f.bytes);
+    attachments.push({
+      nameIv: meta.iv,
+      nameCt: meta.ct,
+      fileIv: enc.iv,
+      byteSize: f.bytes.length,
+      data: enc.ct,
+    });
+  }
+  const wrap = await wrapContentKey(recipientSpkiB64, raw);
+  raw.fill(0);
+  return { subjectCipher, bodyCipher, wrap, attachments };
+}
+
 async function publicFromPrivateJwk(jwk: JsonWebKey, alg: "ECDH" | "ECDSA"): Promise<string> {
   const pub: JsonWebKey = { kty: jwk.kty, crv: jwk.crv, x: jwk.x, y: jwk.y };
   const key = await subtle().importKey(

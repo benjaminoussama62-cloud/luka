@@ -14,6 +14,7 @@ import {
   type CipherPack,
   type KeyWrap,
   type PassWrap,
+  sealMessage,
   sealText,
 } from "@/lib/mail/e2ee";
 
@@ -644,6 +645,7 @@ export async function receiveExternalMail(opts: {
   body: string;
   html?: string;
   messageId?: string;
+  attachments?: { name: string; mime: string; bytes: Uint8Array }[];
 }): Promise<{ delivered: string[]; dropped: string[] }> {
   const delivered: string[] = [];
   const dropped: string[] = [];
@@ -651,6 +653,16 @@ export async function receiveExternalMail(opts: {
   const subj = String(opts.subject || "(sans objet)").slice(0, 300);
   const body = String(opts.body || "").slice(0, 200_000);
   const threadId = opts.messageId ? `ext-${opts.messageId.slice(0, 80)}` : uid();
+  // Pièces jointes : même garde-fou que l'envoi (max 3, taille plafonnée),
+  // uniquement pour les comptes avec coffre (elles sont scellées pour lui).
+  const files = (opts.attachments || [])
+    .filter((f) => f.bytes && f.bytes.length > 0 && f.bytes.length <= MAX_CIPHER_BYTES)
+    .slice(0, MAX_ATTACHMENTS)
+    .map((f) => ({
+      name: String(f.name || "piece-jointe").slice(0, 200),
+      mime: String(f.mime || "application/octet-stream").slice(0, 100),
+      bytes: f.bytes,
+    }));
 
   for (const raw of opts.to || []) {
     const addr = String(raw).trim().toLowerCase();
@@ -662,8 +674,8 @@ export async function receiveExternalMail(opts: {
     }
     const pub = vaultPublicKey(acc.id);
     if (pub) {
-      const sealed = await sealText(pub, subj, body);
-      insertSealed({
+      const sealed = await sealMessage(pub, subj, body, files);
+      const messageId = insertSealed({
         threadId,
         accountId: acc.id,
         folder: "inbox",
@@ -675,6 +687,26 @@ export async function receiveExternalMail(opts: {
         wrap: sealed.wrap,
         kind: "mail",
       });
+      for (const a of sealed.attachments) {
+        db()
+          .prepare(
+            `INSERT INTO mail_attachments
+             (id, message_id, account_id, name_iv, name_ct, file_iv, byte_size, sha256, data, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          )
+          .run(
+            uid(),
+            messageId,
+            acc.id,
+            a.nameIv,
+            a.nameCt,
+            a.fileIv,
+            a.byteSize,
+            crypto.createHash("sha256").update(a.data).digest("hex"),
+            Buffer.from(a.data),
+            now(),
+          );
+      }
     } else {
       insertMessage({
         threadId,
@@ -689,6 +721,7 @@ export async function receiveExternalMail(opts: {
       });
     }
     delivered.push(addr);
+    void notifyAccountPush(acc.id, String(opts.fromName || from), subj).catch(() => {});
   }
   return { delivered, dropped };
 }
@@ -883,6 +916,38 @@ function listAttachmentMeta(messageId: string): MailAttachmentMeta[] {
     nameIv: r.name_iv,
     nameCt: r.name_ct,
   }));
+}
+
+// ── Push notifications (FCM) ────────────────────────────────────────────────
+
+export function registerPushToken(accountId: string, token: string, platform: string) {
+  db()
+    .prepare(
+      `INSERT INTO mail_push_tokens (token, account_id, platform, created_at)
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT(token) DO UPDATE SET account_id = excluded.account_id, platform = excluded.platform`,
+    )
+    .run(token, accountId, platform, now());
+}
+
+export function unregisterPushToken(token: string) {
+  db().prepare("DELETE FROM mail_push_tokens WHERE token = ?").run(token);
+}
+
+/** Notifie tous les appareils du compte qu'un mail externe vient d'arriver. */
+async function notifyAccountPush(accountId: string, fromName: string, subject: string) {
+  const { fcmConfigured, sendPush } = await import("@/lib/mail/fcm");
+  if (!fcmConfigured()) return;
+  const rows = db()
+    .prepare("SELECT token FROM mail_push_tokens WHERE account_id = ?")
+    .all(accountId) as { token: string }[];
+  for (const r of rows) {
+    const res = await sendPush(r.token, {
+      title: `✉ ${fromName || "Nouveau message"}`,
+      body: subject.slice(0, 120),
+    });
+    if (!res.ok && /UNREGISTERED|404/.test(res.error || "")) unregisterPushToken(r.token);
+  }
 }
 
 export type VaultRecord = {

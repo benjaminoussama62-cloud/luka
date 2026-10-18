@@ -46,6 +46,16 @@ export async function POST(req: Request) {
         parsed.messageId ||
         (parsed.headers instanceof Map ? parsed.headers.get("message-id") : undefined) ||
         "",
+      attachments: (parsed.attachments || [])
+        .filter((a) => a.disposition !== "inline")
+        .map((a) => ({
+          name: a.filename || "piece-jointe",
+          mime: a.mimeType || "application/octet-stream",
+          bytes:
+            typeof a.content === "string"
+              ? new TextEncoder().encode(a.content)
+              : new Uint8Array(a.content || []),
+        })),
     };
   } else {
     body = (await req.json().catch(() => null)) as
@@ -57,6 +67,7 @@ export async function POST(req: Request) {
         text?: string;
         html?: string;
         messageId?: string;
+        attachments?: { name?: string; mime?: string; bytes?: Uint8Array }[];
       }
     | null;
   }
@@ -91,6 +102,7 @@ export async function POST(req: Request) {
     body: text || "(message vide)",
     html: body.html,
     messageId: body.messageId,
+    attachments: body.attachments,
   });
 
   return NextResponse.json({ ok: true, ...result });

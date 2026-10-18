@@ -1,6 +1,6 @@
 {
   "name": "ayeba-mail-mobile",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "private": true,
   "description": "Ayeba Mail — application mobile offline (Capacitor)",
   "scripts": {
@@ -19,6 +19,7 @@
     "@capacitor/android": "^6.2.0",
     "@capacitor/core": "^6.2.0",
     "@capacitor/ios": "^6.2.0",
+    "@capacitor/push-notifications": "^6.0.5",
     "@capacitor/splash-screen": "^6.0.3",
     "@capacitor/status-bar": "^6.0.2"
   },
