@@ -4654,3 +4654,269 @@ body.ayeba-mobile-chrome .ayeba-home-shell {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* ===== Chrome navigateur : passe design premium ===== */
+
+.ayeba-mobile-browser {
+  padding: 0.45rem 0.6rem calc(0.45rem + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow: 0 -1px 0 rgba(125, 240, 255, 0.06), 0 -14px 34px rgba(0, 0, 0, 0.45);
+  background: linear-gradient(180deg, rgba(16, 17, 25, 0.88), rgba(9, 10, 15, 0.92));
+  backdrop-filter: blur(22px) saturate(160%);
+  -webkit-backdrop-filter: blur(22px) saturate(160%);
+}
+
+.ayeba-mobile-omni-pill {
+  height: 2.5rem;
+  border-radius: 0.85rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.055);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), inset 0 -1px 2px rgba(0, 0, 0, 0.25);
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+.ayeba-mobile-omni-pill:active {
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(0, 180, 255, 0.35);
+}
+.ayeba-mobile-omni-lock {
+  color: #7df0ff;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+}
+.ayeba-mobile-omni-text {
+  font-size: 0.84rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+
+.ayeba-mobile-browser-bar { gap: 0.1rem; }
+.ayeba-mobile-browser-bar button {
+  height: 2.6rem;
+  color: rgba(232, 236, 246, 0.9);
+  transition: background 0.15s ease, transform 0.1s ease, color 0.15s ease;
+}
+.ayeba-mobile-browser-bar button:active {
+  background: rgba(125, 240, 255, 0.12);
+  transform: scale(0.94);
+}
+.ayeba-mobile-browser-bar button.is-starred { color: #7df0ff; }
+.ayeba-mobile-pagemenu-btn svg { display: block; }
+
+.ayeba-mobile-tabs-count {
+  top: 0.05rem;
+  right: 0.35rem;
+  min-width: 1rem;
+  height: 1rem;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #7df0ff, #00b4ff);
+  color: #04060a;
+  font-size: 0.6rem;
+  font-weight: 800;
+  box-shadow: 0 0 0 2px rgba(8, 8, 12, 0.9);
+}
+
+/* --- Sheet omnibox --- */
+.ayeba-mobile-omni-sheet {
+  align-items: flex-end;
+  background: rgba(4, 5, 8, 0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.ayeba-mobile-omni-panel {
+  border-radius: 1.1rem 1.1rem 0 0;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-bottom: 0;
+  background: rgba(13, 14, 21, 0.97);
+  box-shadow: 0 -20px 50px rgba(0, 0, 0, 0.5);
+}
+.ayeba-mobile-omni-panel::before {
+  content: "";
+  display: block;
+  width: 2.2rem;
+  height: 0.28rem;
+  margin: 0.55rem auto 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+}
+.ayeba-mobile-omni-panel form button,
+.ayeba-mobile-omni-actions button {
+  border-radius: 0.7rem;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--ink);
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 0.6rem 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+}
+.ayeba-mobile-omni-panel form button[type="submit"] {
+  border-color: rgba(0, 180, 255, 0.45);
+  background: rgba(0, 140, 255, 0.16);
+  color: #7df0ff;
+}
+.ayeba-mobile-omni-suggests li + li { border-top: 1px solid rgba(148, 163, 184, 0.08); }
+.ayeba-mobile-omni-suggests button {
+  padding: 0.7rem 0.75rem;
+  border-radius: 0;
+  color: var(--ink);
+}
+.ayeba-mobile-omni-suggests button svg { opacity: 0.5; flex: 0 0 auto; }
+
+/* --- Vue onglets --- */
+.ayeba-tabsoverview {
+  background:
+    radial-gradient(120% 60% at 50% -10%, rgba(0, 140, 255, 0.1), transparent 60%),
+    rgba(6, 7, 11, 0.98);
+}
+.ayeba-tabsoverview-count {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.ayeba-tabsoverview-private {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  padding: 0.35rem 0.7rem;
+  transition: color 0.2s, border-color 0.2s, background 0.2s;
+}
+.ayeba-tabsoverview-private.on {
+  color: #c4b5fd;
+  border-color: rgba(167, 139, 250, 0.5);
+  background: rgba(139, 92, 246, 0.14);
+}
+
+.ayeba-tabscard {
+  border-radius: 0.9rem;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  background: rgba(255, 255, 255, 0.035);
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  transition: border-color 0.2s ease, transform 0.15s ease;
+}
+.ayeba-tabscard:active { transform: scale(0.97); }
+.ayeba-tabscard.active {
+  border-color: rgba(0, 180, 255, 0.6);
+  box-shadow: 0 0 0 1px rgba(0, 180, 255, 0.35), 0 10px 30px rgba(0, 140, 255, 0.15);
+}
+.ayeba-tabscard-fav {
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 0.4rem;
+  display: grid;
+  place-items: center;
+  font-size: 0.62rem;
+  font-weight: 800;
+  background: linear-gradient(135deg, rgba(125, 240, 255, 0.22), rgba(0, 180, 255, 0.12));
+  color: #7df0ff;
+  flex: 0 0 auto;
+}
+.ayeba-tabscard-close {
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--muted);
+  cursor: pointer;
+}
+.ayeba-tabscard-close:active { background: rgba(248, 113, 113, 0.25); color: #fca5a5; }
+.ayeba-tabscard-thumb {
+  border-top: 1px solid rgba(148, 163, 184, 0.1);
+  min-height: 6rem;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(90% 90% at 20% 0%, rgba(125, 240, 255, 0.14), transparent 55%),
+    radial-gradient(90% 90% at 90% 100%, rgba(0, 110, 255, 0.12), transparent 55%),
+    rgba(10, 11, 17, 0.6);
+}
+.ayeba-tabscard-thumb-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  color: rgba(125, 240, 255, 0.5);
+}
+.ayeba-tabscard-thumb-host {
+  font-size: 0.68rem;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+}
+.ayeba-tabscard.private .ayeba-tabscard-thumb {
+  background:
+    radial-gradient(90% 90% at 20% 0%, rgba(167, 139, 250, 0.16), transparent 55%),
+    rgba(12, 10, 20, 0.65);
+}
+.ayeba-tabscard.private .ayeba-tabscard-thumb-inner { color: rgba(196, 181, 253, 0.55); }
+
+.ayeba-tabsoverview-footbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.ayeba-tabsoverview-new {
+  border-radius: 999px;
+  border: 1px solid rgba(0, 180, 255, 0.4);
+  background: rgba(0, 140, 255, 0.14);
+  color: #7df0ff;
+}
+
+/* --- Menu page, find bar, toasts --- */
+.ayeba-mobile-pagemenu {
+  padding: 0.4rem;
+  border-radius: 1.05rem;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
+}
+.ayeba-mobile-pagemenu button svg { flex: 0 0 auto; opacity: 0.85; }
+.ayeba-mobile-pagemenu-note {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.ayeba-mobile-pagemenu-note svg { color: #7df0ff; }
+
+.ayeba-mobile-findbar {
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+}
+.ayeba-mobile-findbar button { display: grid; place-items: center; }
+
+/* --- Appui long historique --- */
+.ayeba-mobile-history-pop {
+  border-radius: 0.9rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(14, 15, 22, 0.98);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.55);
+  padding: 0.3rem;
+}
+.ayeba-mobile-history-pop button {
+  border-radius: 0.6rem;
+  font-size: 0.85rem;
+}
+.ayeba-mobile-history-pop button:active { background: rgba(0, 212, 255, 0.12); }
+
+/* Corrections sheet omnibox (panel flottant arrondi + actions en liste) */
+.ayeba-mobile-omni-panel {
+  border-radius: 1.1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+}
+.ayeba-mobile-omni-actions {
+  gap: 0.4rem;
+}
+.ayeba-mobile-omni-actions button {
+  border-top: 0;
+  justify-content: flex-start;
+  padding: 0.7rem 0.85rem;
+  font-size: 0.88rem;
+  font-weight: 500;
+}
+.ayeba-mobile-omni-actions button svg { opacity: 0.7; }

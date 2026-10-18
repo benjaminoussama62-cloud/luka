@@ -4,6 +4,15 @@ import { useState } from "react";
 import { useBrowserShell } from "@/lib/browser-shell";
 import { useBrowserHistory } from "@/lib/browser-history";
 import { useAyeba } from "@/lib/store";
+import {
+  IconClock,
+  IconClose,
+  IconGlobe,
+  IconHome,
+  IconPlus,
+  IconRestore,
+  IconShield,
+} from "./icons";
 
 function hostOf(url?: string) {
   if (!url) return "";
@@ -62,7 +71,7 @@ export function MobileTabsOverview({ onClose }: { onClose: () => void }) {
           className={`ayeba-tabsoverview-private${privateMode ? " on" : ""}`}
           onClick={togglePrivate}
         >
-          {privateMode ? "🕶 Privé" : "Privé"}
+          <IconShield size={14} /> Privé
         </button>
         <span className="ayeba-tabsoverview-count">
           {view === "history"
@@ -105,7 +114,13 @@ export function MobileTabsOverview({ onClose }: { onClose: () => void }) {
               >
                 <div className="ayeba-tabscard-head">
                   <span className="ayeba-tabscard-fav" aria-hidden>
-                    {tab.private ? "🕶" : tab.kind === "home" ? "A" : label.slice(0, 1).toUpperCase()}
+                    {tab.private ? (
+                      <IconShield size={11} />
+                    ) : tab.kind === "home" ? (
+                      "A"
+                    ) : (
+                      label.slice(0, 1).toUpperCase()
+                    )}
                   </span>
                   <div className="ayeba-tabscard-meta">
                     <span className="ayeba-tabscard-title">{tab.title}</span>
@@ -120,11 +135,22 @@ export function MobileTabsOverview({ onClose }: { onClose: () => void }) {
                       closeTab(tab.id);
                     }}
                   >
-                    ×
+                    <IconClose size={13} strokeWidth={2.2} />
                   </button>
                 </div>
                 <div className="ayeba-tabscard-thumb" aria-hidden>
-                  <span>{tab.private ? "🕶" : tab.kind === "home" ? "⌂" : "🌐"}</span>
+                  <div className="ayeba-tabscard-thumb-inner">
+                    {tab.private ? (
+                      <IconShield size={30} strokeWidth={1.4} />
+                    ) : tab.kind === "home" ? (
+                      <IconHome size={30} strokeWidth={1.4} />
+                    ) : (
+                      <>
+                        <IconGlobe size={30} strokeWidth={1.4} />
+                        <span className="ayeba-tabscard-thumb-host">{hostOf(tab.url)}</span>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
             );
@@ -166,7 +192,7 @@ export function MobileTabsOverview({ onClose }: { onClose: () => void }) {
                     aria-label="Supprimer"
                     onClick={() => removeEntry(e.url)}
                   >
-                    ×
+                    <IconClose size={13} strokeWidth={2.2} />
                   </button>
                 </div>
               ))}
@@ -211,14 +237,14 @@ export function MobileTabsOverview({ onClose }: { onClose: () => void }) {
           className="ayeba-tabsoverview-footbtn"
           onClick={() => setView(view === "history" ? "tabs" : "history")}
         >
-          🕘 Historique
+          <IconClock size={14} /> Historique
         </button>
         <button
           type="button"
           className="ayeba-tabsoverview-footbtn"
           onClick={() => setView(view === "closed" ? "tabs" : "closed")}
         >
-          ↺ Récents
+          <IconRestore size={14} /> Récents
         </button>
         <button
           type="button"
@@ -230,7 +256,7 @@ export function MobileTabsOverview({ onClose }: { onClose: () => void }) {
             onClose();
           }}
         >
-          +
+          <IconPlus size={20} strokeWidth={2} />
         </button>
         <button
           type="button"

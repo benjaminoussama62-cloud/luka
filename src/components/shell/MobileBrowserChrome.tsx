@@ -9,6 +9,25 @@ import {
   nativeBrowser,
   nativeBrowserAvailable,
 } from "@/lib/native-browser";
+import {
+  IconBack,
+  IconBook,
+  IconBookFilled,
+  IconChevronDown,
+  IconChevronUp,
+  IconCopy,
+  IconDesktop,
+  IconDoc,
+  IconForward,
+  IconLock,
+  IconPhone,
+  IconReload,
+  IconSearch,
+  IconShare,
+  IconShield,
+  IconTabs,
+  IconTextSize,
+} from "./icons";
 import { MobileTabsOverview } from "./MobileTabsOverview";
 
 type Props = {
@@ -255,7 +274,7 @@ export function MobileBrowserChrome({ onSearch }: Props) {
                         }
                       }}
                     >
-                      <span aria-hidden>🔍</span> {s}
+                      <IconSearch size={15} /> {s}
                     </button>
                   </li>
                 ))}
@@ -263,10 +282,15 @@ export function MobileBrowserChrome({ onSearch }: Props) {
             ) : null}
             {isWeb ? (
               <div className="ayeba-mobile-omni-actions">
-                <button type="button" onClick={onCopy}>{copied ? "Copié ✓" : "Copier l'adresse"}</button>
-                <button type="button" onClick={() => void onShare()}>Partager</button>
+                <button type="button" onClick={onCopy}>
+                  <IconCopy size={15} /> {copied ? "Copié ✓" : "Copier l'adresse"}
+                </button>
+                <button type="button" onClick={() => void onShare()}>
+                  <IconShare size={15} /> Partager
+                </button>
                 <button type="button" onClick={() => toggleFav(url, title)}>
-                  {starred ? "★ Retirer des favoris" : "☆ Ajouter aux favoris"}
+                  {starred ? <IconBookFilled size={15} /> : <IconBook size={15} />}
+                  {starred ? "Retirer des favoris" : "Ajouter aux favoris"}
                 </button>
               </div>
             ) : null}
@@ -311,7 +335,7 @@ export function MobileBrowserChrome({ onSearch }: Props) {
                 setFindOpen(true);
               }}
             >
-              🔎 Rechercher dans la page{native ? "" : " (app requise)"}
+              <IconDoc size={17} /> Rechercher dans la page{native ? "" : " (app requise)"}
             </button>
             <button
               type="button"
@@ -323,7 +347,8 @@ export function MobileBrowserChrome({ onSearch }: Props) {
                 void nativeBrowser()?.setDesktop({ enabled: next });
               }}
             >
-              {desktopMode ? "📱 Version mobile" : "🖥 Demander la version bureau"}
+              {desktopMode ? <IconPhone size={17} /> : <IconDesktop size={17} />}
+              {desktopMode ? "Version mobile" : "Demander la version bureau"}
               {native ? "" : " (app requise)"}
             </button>
             <button
@@ -335,9 +360,11 @@ export function MobileBrowserChrome({ onSearch }: Props) {
                 else navigateWebTab(url);
               }}
             >
-              ↻ Recharger la page
+              <IconReload size={17} /> Recharger la page
             </button>
-            <div className="ayeba-mobile-pagemenu-note">🔒 Connexion HTTPS sécurisée</div>
+            <div className="ayeba-mobile-pagemenu-note">
+              <IconLock size={13} /> Connexion HTTPS sécurisée
+            </div>
           </div>
         </>
       ) : null}
@@ -359,14 +386,14 @@ export function MobileBrowserChrome({ onSearch }: Props) {
             aria-label="Précédent"
             onClick={() => void nativeBrowser()?.find({ query: "", forward: false })}
           >
-            ↑
+            <IconChevronUp size={18} />
           </button>
           <button
             type="button"
             aria-label="Suivant"
             onClick={() => void nativeBrowser()?.find({ query: "", forward: true })}
           >
-            ↓
+            <IconChevronDown size={18} />
           </button>
           <button type="button" className="ayeba-mobile-findbar-done" onClick={closeFind}>
             OK
@@ -432,7 +459,13 @@ export function MobileBrowserChrome({ onSearch }: Props) {
           aria-label="Adresse ou recherche"
         >
           <span className="ayeba-mobile-omni-lock" aria-hidden>
-            {activeTab.private ? "🕶" : isWeb ? "🔒" : "🔍"}
+            {activeTab.private ? (
+              <IconShield size={14} />
+            ) : isWeb ? (
+              <IconLock size={13} />
+            ) : (
+              <IconSearch size={15} />
+            )}
           </span>
           <span className="ayeba-mobile-omni-text">
             {isWeb ? hostOf(url) : activeTab.private ? "Navigation privée" : "Rechercher ou saisir une adresse"}
@@ -453,7 +486,7 @@ export function MobileBrowserChrome({ onSearch }: Props) {
             }}
             aria-label="Précédent (appui long : historique)"
           >
-            ←
+            <IconBack size={22} strokeWidth={2} />
           </button>
           <button
             type="button"
@@ -468,7 +501,7 @@ export function MobileBrowserChrome({ onSearch }: Props) {
             }}
             aria-label="Suivant (appui long : historique)"
           >
-            →
+            <IconForward size={22} strokeWidth={2} />
           </button>
           <button
             type="button"
@@ -477,10 +510,10 @@ export function MobileBrowserChrome({ onSearch }: Props) {
             aria-label="Options de la page"
             className="ayeba-mobile-pagemenu-btn"
           >
-            aA
+            <IconTextSize size={20} />
           </button>
           <button type="button" disabled={!isWeb} onClick={() => void onShare()} aria-label="Partager">
-            ⤴
+            <IconShare size={21} />
           </button>
           <button
             type="button"
@@ -492,7 +525,7 @@ export function MobileBrowserChrome({ onSearch }: Props) {
             aria-label={starred ? "Favori actif (appui long : liste)" : "Favoris"}
             className={starred ? "is-starred" : undefined}
           >
-            {starred ? "★" : "☆"}
+            {starred ? <IconBookFilled size={21} /> : <IconBook size={21} />}
           </button>
           <button
             type="button"
@@ -500,7 +533,8 @@ export function MobileBrowserChrome({ onSearch }: Props) {
             onClick={() => setTabsOpen(true)}
             aria-label={`Onglets (${tabs.length})`}
           >
-            ⿻<span className="ayeba-mobile-tabs-count">{tabs.length}</span>
+            <IconTabs size={22} />
+            <span className="ayeba-mobile-tabs-count">{tabs.length}</span>
           </button>
         </nav>
       </div>
