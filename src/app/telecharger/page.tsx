@@ -16,11 +16,11 @@ export const metadata: Metadata = {
   },
 };
 
-const VERSION = process.env.NEXT_PUBLIC_BROWSER_VERSION || "1.2.3";
+const VERSION = process.env.NEXT_PUBLIC_BROWSER_VERSION || "1.2.2";
 const FILENAME = `AYEBA-Setup-${VERSION}.exe`;
 const SETUP_URL =
   process.env.NEXT_PUBLIC_BROWSER_SETUP_URL ||
-  `https://github.com/benjaminoussama62-cloud/luka/releases/latest/download/${FILENAME}`;
+  `https://github.com/benjaminoussama62-cloud/luka/releases/download/browser-v${VERSION}/${FILENAME}`;
 
 const PLAY_STORE_URL = process.env.NEXT_PUBLIC_PLAY_STORE_URL;
 const APP_STORE_URL = process.env.NEXT_PUBLIC_APP_STORE_URL;
