@@ -86,11 +86,14 @@ jobs:
 
       - name: Publish AAB on GitHub Releases (download sans login)
         uses: softprops/action-gh-release@v2
+        env:
+          AYEBA_VERSION: "1.0.5"
+          AYEBA_VERSION_CODE: "6"
         with:
-          tag_name: mobile-1.0.4
-          name: AYEBA Mobile 1.0.4
+          tag_name: mobile-${{ env.AYEBA_VERSION }}
+          name: AYEBA Mobile ${{ env.AYEBA_VERSION }}
           body: |
-            Fichier Play Store : **app-release.aab** → renommer `AYEBA-1.0.4.aab` (API 36)
-            Package : `app.ayeba.mobile` — versionCode 5
+            Fichier Play Store : **app-release.aab** → renommer `AYEBA-${{ env.AYEBA_VERSION }}.aab` (API 36)
+            Package : `app.ayeba.mobile` — versionCode ${{ env.AYEBA_VERSION_CODE }}
           files: mobile/ayeba-app/android/app/build/outputs/bundle/release/app-release.aab
           overwrite_files: true
