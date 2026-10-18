@@ -36,12 +36,16 @@ export async function POST(req: Request) {
     body = {
       from: parsed.from?.address,
       fromName: parsed.from?.name || "",
-      to: (parsed.to || []).map((t) => t.address),
+      to: (parsed.to || [])
+        .map((t) => t.address)
+        .filter((a): a is string => Boolean(a)),
       subject: parsed.subject || "",
       text: parsed.text || "",
       html: parsed.html || "",
       messageId:
-        parsed.messageId || parsed.headers?.["message-id"] || "",
+        parsed.messageId ||
+        (parsed.headers instanceof Map ? parsed.headers.get("message-id") : undefined) ||
+        "",
     };
   } else {
     body = (await req.json().catch(() => null)) as
@@ -55,6 +59,7 @@ export async function POST(req: Request) {
         messageId?: string;
       }
     | null;
+  }
   if (!body?.from || !body?.to) {
     return NextResponse.json({ error: "from et to requis" }, { status: 400 });
   }
