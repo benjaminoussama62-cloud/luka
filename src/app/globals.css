@@ -4375,3 +4375,118 @@ body.ayeba-mobile-chrome .ayeba-home-shell {
   font-size: 0.72rem;
   font-variant-numeric: tabular-nums;
 }
+
+/* Navigateur mobile : suggestions omnibox, mode privé, historique */
+.ayeba-mobile-omni-suggests {
+  list-style: none;
+  margin: 0;
+  padding: 0.25rem 0.6rem 0.5rem;
+  display: grid;
+  gap: 0.12rem;
+}
+.ayeba-mobile-omni-suggests button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.65rem 0.6rem;
+  border: 0;
+  border-radius: 0.65rem;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.88rem;
+  text-align: left;
+  cursor: pointer;
+}
+.ayeba-mobile-omni-suggests button:active { background: rgba(0, 212, 255, 0.1); }
+.ayeba-mobile-omni-suggests button span { opacity: 0.55; font-size: 0.8rem; }
+
+.ayeba-tabsoverview-private {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.4rem 0.4rem;
+  cursor: pointer;
+}
+.ayeba-tabsoverview-private.on { color: #c4b5fd; }
+.ayeba-tabscard.private {
+  border-color: rgba(167, 139, 250, 0.42);
+  background: rgba(139, 92, 246, 0.09);
+}
+
+.ayeba-tabsoverview-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.65rem 0.9rem;
+  display: grid;
+  align-content: start;
+  gap: 0.4rem;
+}
+.ayeba-tabsoverview-empty {
+  margin: 2.5rem 0 0;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+.ayeba-tabsoverview-row {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 0.8rem;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 0.25rem 0.5rem 0.25rem 0.25rem;
+}
+.ayeba-tabsoverview-row-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  padding: 0.5rem 0.6rem;
+  cursor: pointer;
+  min-width: 0;
+}
+.ayeba-tabsoverview-clear {
+  margin-top: 0.6rem;
+  width: 100%;
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  border-radius: 0.7rem;
+  background: rgba(248, 113, 113, 0.08);
+  color: #fca5a5;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+  padding: 0.65rem;
+  cursor: pointer;
+}
+.ayeba-tabsoverview-footbtn {
+  border: 0;
+  background: transparent;
+  color: #7df0ff;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.4rem 0.5rem;
+  cursor: pointer;
+}
+.ayeba-tabsoverview-search {
+  width: 100%;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 0.7rem;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.88rem;
+  padding: 0.6rem 0.8rem;
+  outline: none;
+}
+.ayeba-tabsoverview-search:focus { border-color: rgba(0, 180, 255, 0.5); }

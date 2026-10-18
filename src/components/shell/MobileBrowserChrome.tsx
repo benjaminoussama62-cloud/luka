@@ -33,6 +33,7 @@ export function MobileBrowserChrome({ onSearch }: Props) {
 
   const [omniOpen, setOmniOpen] = useState(false);
   const [omni, setOmni] = useState("");
+  const [suggests, setSuggests] = useState<string[]>([]);
   const [tabsOpen, setTabsOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState<"back" | "forward" | null>(null);
   const [favsOpen, setFavsOpen] = useState(false);
@@ -43,6 +44,23 @@ export function MobileBrowserChrome({ onSearch }: Props) {
     document.body.classList.add("ayeba-mobile-chrome");
     return () => document.body.classList.remove("ayeba-mobile-chrome");
   }, []);
+
+  // Suggestions omnibox : moteur + vocabulaire index, comme la barre Safari.
+  useEffect(() => {
+    if (!omniOpen) return;
+    const q = omni.trim();
+    const t = window.setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/suggest?q=${encodeURIComponent(q)}`);
+        if (!res.ok) return;
+        const data = (await res.json()) as { suggestions?: string[] };
+        setSuggests((data.suggestions ?? []).filter((s) => s.toLowerCase() !== q.toLowerCase()).slice(0, 6));
+      } catch {
+        /* ignore */
+      }
+    }, 220);
+    return () => window.clearTimeout(t);
+  }, [omni, omniOpen]);
 
   const isWeb = activeTab.kind === "web";
   const url = isWeb ? activeTab.url : "";
@@ -140,6 +158,31 @@ export function MobileBrowserChrome({ onSearch }: Props) {
                 Fermer
               </button>
             </form>
+            {suggests.length ? (
+              <ul className="ayeba-mobile-omni-suggests">
+                {suggests.map((s) => (
+                  <li key={s}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOmni(s);
+                        setOmniOpen(false);
+                        const looksLikeAddr = /^https?:\/\//i.test(s) || (!s.includes(" ") && s.includes("."));
+                        if (looksLikeAddr) {
+                          const target = normalizeOmniInput(s);
+                          if (isWeb) navigateWebTab(target);
+                          else openWebTab(target);
+                        } else {
+                          onSearch(s);
+                        }
+                      }}
+                    >
+                      <span aria-hidden>🔍</span> {s}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
             {isWeb ? (
               <div className="ayeba-mobile-omni-actions">
                 <button type="button" onClick={onCopy}>{copied ? "Copié ✓" : "Copier l'adresse"}</button>
@@ -229,10 +272,10 @@ export function MobileBrowserChrome({ onSearch }: Props) {
           aria-label="Adresse ou recherche"
         >
           <span className="ayeba-mobile-omni-lock" aria-hidden>
-            {isWeb ? "🔒" : "🔍"}
+            {activeTab.private ? "🕶" : isWeb ? "🔒" : "🔍"}
           </span>
           <span className="ayeba-mobile-omni-text">
-            {isWeb ? hostOf(url) : "Rechercher ou saisir une adresse"}
+            {isWeb ? hostOf(url) : activeTab.private ? "Navigation privée" : "Rechercher ou saisir une adresse"}
           </span>
         </button>
 
