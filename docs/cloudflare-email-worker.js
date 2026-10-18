@@ -5,35 +5,22 @@
  * Installation : voir docs/mail-externe-setup.md
  * Secret : variable d'environnement MAIL_INBOUND_SECRET sur le Worker.
  *
- * Dépendance : PostalMime (parser MIME dans les Workers)
- *   import PostalMime from "postal-mime" — cf. wrangler.toml ci-dessous.
+ * AUCUNE dépendance : le worker forwarde le message MIME brut
+ * (content-type: message/rfc822) — le parsing se fait côté serveur
+ * dans /api/mail/inbound via postal-mime.
  */
 
-import PostalMime from "postal-mime";
-
 export default {
-  async email(message, env, ctx) {
-    const raw = await new Response(message.raw).arrayBuffer();
-    const parsed = await PostalMime.parse(raw);
-
-    const to = (parsed.to || []).map((t) => t.address);
-    const fromAddr = parsed.from?.address || message.from;
+  async email(message, env) {
+    const raw = await new Response(message.raw).text();
 
     const res = await fetch("https://ayeba.app/api/mail/inbound", {
       method: "POST",
       headers: {
-        "content-type": "application/json",
+        "content-type": "message/rfc822",
         "x-inbound-secret": env.MAIL_INBOUND_SECRET,
       },
-      body: JSON.stringify({
-        from: fromAddr,
-        fromName: parsed.from?.name || "",
-        to,
-        subject: parsed.subject || "",
-        text: parsed.text || "",
-        html: parsed.html || "",
-        messageId: parsed.messageId || message.headers.get("message-id") || "",
-      }),
+      body: raw,
     });
 
     if (!res.ok) {

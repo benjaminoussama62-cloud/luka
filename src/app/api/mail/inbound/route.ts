@@ -26,7 +26,25 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  const body = (await req.json().catch(() => null)) as
+  // Deux formats acceptés : JSON déjà parsé, ou MIME brut (message/rfc822)
+  // — le worker Cloudflare sans dépendances forwarde le raw tel quel.
+  let body;
+  if ((req.headers.get("content-type") || "").includes("message/rfc822")) {
+    const { default: PostalMime } = await import("postal-mime");
+    const raw = Buffer.from(await req.arrayBuffer());
+    const parsed = await PostalMime.parse(raw);
+    body = {
+      from: parsed.from?.address,
+      fromName: parsed.from?.name || "",
+      to: (parsed.to || []).map((t) => t.address),
+      subject: parsed.subject || "",
+      text: parsed.text || "",
+      html: parsed.html || "",
+      messageId:
+        parsed.messageId || parsed.headers?.["message-id"] || "",
+    };
+  } else {
+    body = (await req.json().catch(() => null)) as
     | {
         from?: string;
         fromName?: string;
