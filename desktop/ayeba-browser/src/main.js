@@ -1247,19 +1247,45 @@ function createBrowserWindow(isPrivate = false, initialUrl = HOME_URL) {
     },
     "window:new": () => createBrowserWindow(),
     "window:new-private": () => createBrowserWindow(true),
-    "app:about": () => {
-      dialog.showMessageBox(win, {
+    "app:about": async () => {
+      const current = app.getVersion();
+      const buttons = ["OK"];
+      let message = `Version ${current}\n\nNavigateur + recherche mondiale.\nhttps://ayeba.app\n\nOnglets Chromium réels — comme Edge, pensé Ayeba.\nAyebi : encyclopédie RDC — toujours sur ayeba.app/ayebi`;
+
+      if (app.isPackaged) {
+        buttons.push("Vérifier les mises à jour");
+      }
+
+      const result = await dialog.showMessageBox(win, {
         type: "info",
         title: "À propos d’AYEBA",
         message: "AYEBA Browser",
-        detail:
-          `Version ${app.getVersion()}\n` +
-          "Navigateur + recherche mondiale.\n" +
-          "https://ayeba.app\n\n" +
-          "Onglets Chromium réels — comme Edge, pensé Ayeba.\n" +
-          "Ayebi : encyclopédie RDC — toujours sur ayeba.app/ayebi",
-        buttons: ["OK"],
+        detail: message,
+        buttons,
+        defaultId: 0,
+        cancelId: 0,
       });
+
+      if (result.response === 1 && app.isPackaged) {
+        const info = await autoUpdater.checkForUpdates();
+        if (info?.updateInfo) {
+          await dialog.showMessageBox(win, {
+            type: "info",
+            title: "Mise à jour",
+            message: `Version ${info.updateInfo.version} disponible`,
+            detail: info.updateInfo.releaseNotes || "Une nouvelle version est prête à être téléchargée.",
+            buttons: ["OK"],
+          });
+        } else {
+          await dialog.showMessageBox(win, {
+            type: "info",
+            title: "Mise à jour",
+            message: "AYEBA est à jour",
+            detail: `Vous utilisez déjà la dernière version (${current}).`,
+            buttons: ["OK"],
+          });
+        }
+      }
     },
     "settings:get": () => ({
       ...readSettings(),
@@ -1723,12 +1749,13 @@ app.whenReady().then(() => {
   bindIpc();
 
   if (app.isPackaged) {
-    // Le provider "github" lit /releases/latest, qui n'est pas forcément une
-    // release navigateur (le repo héberge plusieurs apps) → on passe par un
-    // endpoint générique hébergé sur ayeba.app qui résout le tag browser-v*.
+    // Provider GitHub avec filtrage par tag "browser-v*" pour distinguer les
+    // releases navigateur des releases mobile dans le même repo.
     autoUpdater.setFeedURL({
-      provider: "generic",
-      url: "https://ayeba.app/browser-updates",
+      provider: "github",
+      owner: "benjaminoussama62-cloud",
+      repo: "luka",
+      vPrefixedTagName: false,
     });
     autoUpdater.autoDownload = true;
     autoUpdater.autoInstallOnAppQuit = true;

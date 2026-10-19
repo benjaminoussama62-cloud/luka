@@ -42,7 +42,8 @@
       "provider": "github",
       "owner": "benjaminoussama62-cloud",
       "repo": "luka",
-      "releaseType": "release"
+      "releaseType": "release",
+      "vPrefixedTagName": false
     },
     "nsis": {
       "oneClick": false,

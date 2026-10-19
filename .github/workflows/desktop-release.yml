@@ -1,0 +1,51 @@
+name: Desktop Release
+
+on:
+  push:
+    tags:
+      - 'browser-v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        working-directory: ./desktop/ayeba-browser
+        run: npm ci
+
+      - name: Build NSIS installer
+        working-directory: ./desktop/ayeba-browser
+        run: npm run dist
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          $TAG = "${{ github.ref_name }}"
+          $VERSION = $TAG -replace 'browser-v', ''
+          echo "version=$VERSION" >> $env:GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: AYEBA Desktop ${{ steps.version.outputs.version }}
+          body: |
+            Mise à jour d'AYEBA Desktop (Windows).
+            Changements : voir le commit.
+          files: |
+            desktop/ayeba-browser/dist/AYEBA-Setup-*.exe
+            desktop/ayeba-browser/dist/AYEBA-Setup-*.exe.blockmap
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
