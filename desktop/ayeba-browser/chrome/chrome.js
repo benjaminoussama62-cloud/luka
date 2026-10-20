@@ -436,13 +436,13 @@
         content.insertAdjacentHTML(
           "beforeend",
           `<div class="settings-group-title">Moteur de recherche par défaut</div>
-           <p class="panel-lead" style="padding:2px 4px 10px">Ayebi (encyclopédie RDC) reste toujours accessible sur ayeba.app/ayebi — distinct de Wikipedia.</p>`,
+           <p class="panel-lead" style="padding:2px 4px 10px">Choisissez le moteur de recherche utilisé dans la barre d'adresse.</p>`,
         );
         for (const eng of engines) {
           const b = document.createElement("button");
           b.type = "button";
           b.className = `panel-item settings-engine${eng.id === current ? " active" : ""}`;
-          b.innerHTML = `<strong>${escapeHtml(eng.name)}</strong><span>${eng.id === "ayeba" ? "Recherche mondiale + Ayebi + Wikipedia séparés" : "Moteur externe — Ayebi toujours disponible"}</span>`;
+          b.innerHTML = `<strong>${escapeHtml(eng.name)}</strong><span>${eng.id === "ayeba" ? "Moteur de recherche AYEBA" : "Moteur externe"}</span>`;
           b.addEventListener("click", async () => {
             await api.invoke("settings:set", { searchEngine: eng.id });
           });
@@ -528,7 +528,7 @@
         content.innerHTML = `
           <div class="about-card">
             <div class="about-mark"><svg width="24" height="24" viewBox="0 0 512 512"><defs><linearGradient id="smk" x1="20%" y1="10%" x2="80%" y2="90%"><stop offset="0%" stop-color="#7df0ff"/><stop offset="45%" stop-color="#00b4ff"/><stop offset="100%" stop-color="#e85d04"/></linearGradient></defs><path fill="url(#smk)" d="M256 96 L392 400 H332 L302 324 H210 L180 400 H120 L256 96 Z M228 268 H284 L256 196 Z"/></svg></div>
-            <div><strong>AYEBA Browser</strong><p>Version ${escapeHtml(data.version || "")} — navigateur + recherche mondiale.<br/>Moteur : ${escapeHtml(engineLabel(current))} · ayeba.app</p></div>
+            <div><strong>AYEBA Browser</strong><p>Version ${escapeHtml(data.version || "")}<br/>Moteur de recherche : ${escapeHtml(engineLabel(current))}<br/>https://ayeba.app</p></div>
           </div>`;
         content.appendChild(
           actionRow("Mises à jour", "Rechercher une nouvelle version du navigateur.", "Vérifier", async () => {
@@ -1118,7 +1118,6 @@
     if (act === "extensions") showExtensions(130, "right");
     if (act === "passwords") showPasswords(130, "right");
     if (act === "quit") api.invoke("app:quit");
-    if (act === "ayebi") api.invoke("nav:ayebi");
     if (act === "downloads") showDownloadsPanel(140, "right");
     if (act === "find") openFind();
     if (act === "print") api.invoke("page:print");

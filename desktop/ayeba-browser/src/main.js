@@ -1250,7 +1250,12 @@ function createBrowserWindow(isPrivate = false, initialUrl = HOME_URL) {
     "app:about": async () => {
       const current = app.getVersion();
       const buttons = ["OK"];
-      let message = `Version ${current}\n\nNavigateur + recherche mondiale.\nhttps://ayeba.app\n\nOnglets Chromium réels — comme Edge, pensé Ayeba.\nAyebi : encyclopédie RDC — toujours sur ayeba.app/ayebi`;
+      const message =
+        `Version ${current}\n\n` +
+        "AYEBA est un navigateur web et moteur de recherche intégré,\n" +
+        "conçu pour offrir une expérience de navigation rapide, privée et centrée sur l'utilisateur.\n\n" +
+        "© 2025 Ayeba. Tous droits réservés.\n" +
+        "https://ayeba.app";
 
       if (app.isPackaged) {
         buttons.push("Vérifier les mises à jour");
@@ -1331,10 +1336,6 @@ function createBrowserWindow(isPrivate = false, initialUrl = HOME_URL) {
     "settings:search-url": (_e, query) => {
       const { searchEngine } = readSettings();
       return buildSearchUrl(query, searchEngine);
-    },
-    "nav:ayebi": () => {
-      const t = activeTab();
-      if (t) t.view.webContents.loadURL("https://ayeba.app/ayebi").catch(() => {});
     },
     "chrome:overlay": (_e, open) => {
       state.overlayOpen = !!open;
@@ -1526,7 +1527,6 @@ function bindIpc() {
     "settings:get",
     "settings:set",
     "settings:search-url",
-    "nav:ayebi",
     "chrome:overlay",
     "rail:action",
     "ext:list",
