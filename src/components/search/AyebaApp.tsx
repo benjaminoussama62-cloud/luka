@@ -81,7 +81,7 @@ function KnowledgeCard() {
         <div className="h-1.5 w-full bg-gradient-to-r from-[var(--red)] via-[#8a8a96] to-transparent" />
       )}
       <div className="p-5">
-        <p className="ayeba-kicker ayeba-kicker-accent">{isAyebi ? "Ayebi · encyclopédie RDC" : t("context")}</p>
+        <p className="ayeba-kicker ayeba-kicker-accent">{isAyebi ? "Ayebi · encyclopédie" : t("context")}</p>
         <h3 className="mt-3 font-[family-name:var(--font-display)] text-[24px] font-medium tracking-[-0.03em] text-[var(--ink)]">{k.title}</h3>
         <p className="mt-1 text-sm text-[var(--faint)]">{k.subtitle}</p>
         <p className="mt-4 text-[14px] leading-[1.75] text-[var(--muted)]">{k.summary}</p>

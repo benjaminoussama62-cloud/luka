@@ -82,7 +82,7 @@ export function AyebiSerpRail() {
   return (
     <section className="ayeba-panel mb-8 p-5 animate-rise">
       <div className="mb-4 flex items-center justify-between">
-        <p className="ayeba-kicker ayeba-kicker-accent">Ayebi · encyclopédie RDC</p>
+        <p className="ayeba-kicker ayeba-kicker-accent">Ayebi · encyclopédie</p>
         <Link href="/ayebi" className="text-xs text-[var(--link)]">
           Toutes les fiches
         </Link>

@@ -59,7 +59,7 @@ export function SearchEngineSettings({ compact = false }: { compact?: boolean })
               </button>
             ))}
             <p className="ayeba-engine-note">
-              Ayebi (encyclopédie RDC) et Wikipédia (mondial) sont deux sources séparées — les deux peuvent apparaître.
+              Ayebi et Wikipédia sont deux sources encyclopédiques distinctes — les deux peuvent apparaître dans les résultats.
             </p>
           </div>
         ) : null}
