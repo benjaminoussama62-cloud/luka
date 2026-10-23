@@ -4,7 +4,7 @@ type Props = {
   id: string;
   label: string;
   onClick: () => void;
-  variant?: "google" | "default";
+  variant?: "google" | "mail" | "default";
 };
 
 export function GoogleLogo({ size = 20 }: { size?: number }) {
@@ -42,6 +42,31 @@ export function GitHubLogo({ size = 20 }: { size?: number }) {
   );
 }
 
+export function AyebaMailLogo({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 48 48" aria-hidden>
+      <path
+        fill="url(#mailGradient)"
+        d="M8 12c0-2.2 1.8-4 4-4h24c2.2 0 4 1.8 4 4v24c0 2.2-1.8 4-4 4H12c-2.2 0-4-1.8-4-4V12z"
+      />
+      <path
+        fill="none"
+        stroke="#fff"
+        strokeWidth="3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M10 14l14 12 14-12"
+      />
+      <defs>
+        <linearGradient id="mailGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#00b4ff" />
+          <stop offset="100%" stopColor="#e85d04" />
+        </linearGradient>
+      </defs>
+    </svg>
+  );
+}
+
 export function MicrosoftLogo({ size = 20 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 23 23" aria-hidden>
@@ -55,7 +80,9 @@ export function MicrosoftLogo({ size = 20 }: { size?: number }) {
 
 export function OAuthButton({ id, label, onClick, variant = "default" }: Props) {
   const icon =
-    id === "google" ? (
+    id === "mail" ? (
+      <AyebaMailLogo size={20} />
+    ) : id === "google" ? (
       <GoogleLogo size={20} />
     ) : id === "github" ? (
       <GitHubLogo size={20} />
@@ -63,12 +90,15 @@ export function OAuthButton({ id, label, onClick, variant = "default" }: Props) 
       <MicrosoftLogo size={20} />
     ) : null;
 
+  const className =
+    variant === "google"
+      ? "oauth-btn-google"
+      : variant === "mail"
+        ? "oauth-btn-mail"
+        : "oauth-btn-brand";
+
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={variant === "google" ? "oauth-btn-google" : "oauth-btn-brand"}
-    >
+    <button type="button" onClick={onClick} className={className}>
       {icon}
       <span>{label}</span>
     </button>

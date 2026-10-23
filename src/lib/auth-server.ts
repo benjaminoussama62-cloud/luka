@@ -112,10 +112,11 @@ export async function registerUser(email: string, password: string, name?: strin
   const existing = await findUserByEmail(email);
   if (existing) return { error: "Compte déjà existant." as const };
 
+  const normalizedEmail = email.trim().toLowerCase();
   const user: DbUser = {
     id: crypto.randomUUID(),
-    name: name?.trim() || email.split("@")[0],
-    email: email.trim().toLowerCase(),
+    name: name?.trim() || normalizedEmail.split("@")[0],
+    email: normalizedEmail,
     passwordHash: await hashPassword(password),
     avatarColor: COLORS[Math.floor(Math.random() * COLORS.length)],
     provider: "email",
@@ -125,6 +126,10 @@ export async function registerUser(email: string, password: string, name?: strin
   const users = await getUsers();
   await saveUsers([...users, user]);
   syncUserToSqlite(user);
+
+  // Lier le compte mail existant si cet email a déjà une boîte AYEBA.
+  await linkMailAccountByEmail(normalizedEmail, user.id);
+
   return { user: toSessionUser(user) };
 }
 
@@ -137,7 +142,25 @@ export async function loginUser(email: string, password: string) {
     return { error: "Compte suspendu. Contacte le support." as const };
   }
   syncUserToSqlite(user);
+  await linkMailAccountByEmail(user.email.toLowerCase(), user.id);
   return { user: toSessionUser(user) };
+}
+
+/** Lie un compte mail existant à un utilisateur par email. */
+async function linkMailAccountByEmail(email: string, userId: string) {
+  try {
+    const { getDb } = await import("@/lib/storage/database");
+    const db = getDb();
+    // Chercher un compte mail avec cet email (format xxx@ayeba.app)
+    const account = db
+      .prepare("SELECT id, user_id FROM mail_accounts WHERE email = ? OR address = ?")
+      .get(email, email.split("@")[0]) as { id: string; user_id: string } | undefined;
+    if (account && account.user_id !== userId) {
+      db.prepare("UPDATE mail_accounts SET user_id = ? WHERE id = ?").run(userId, account.id);
+    }
+  } catch {
+    // Non-bloquant — l'échec de liaison ne doit pas empêcher la connexion
+  }
 }
 
 export async function upsertOAuthUser(profile: {
@@ -176,6 +199,7 @@ export async function upsertOAuthUser(profile: {
     }
     syncUserToSqlite(user);
   }
+  await linkMailAccountByEmail(email, user.id);
   return toSessionUser(user);
 }
 

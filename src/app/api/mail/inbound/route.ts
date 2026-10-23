@@ -94,6 +94,11 @@ export async function POST(req: Request) {
       .replace(/&quot;/g, '"')
       .trim();
 
+  const attachments = (body.attachments || [])
+    .filter((a): a is { name: string; mime: string; bytes: Uint8Array } =>
+      Boolean(a?.name && a?.mime && a?.bytes)
+    );
+
   const result = await receiveExternalMail({
     from: body.from,
     fromName: body.fromName,
@@ -102,7 +107,7 @@ export async function POST(req: Request) {
     body: text || "(message vide)",
     html: body.html,
     messageId: body.messageId,
-    attachments: body.attachments,
+    attachments: attachments.length ? attachments : undefined,
   });
 
   return NextResponse.json({ ok: true, ...result });

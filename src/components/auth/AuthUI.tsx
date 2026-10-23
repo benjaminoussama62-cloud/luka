@@ -13,7 +13,8 @@ type Provider = {
   brandColor: string;
 };
 
-const OAUTH_UI: { id: string; label: string; variant?: "google" | "default" }[] = [
+const OAUTH_UI: { id: string; label: string; variant?: "google" | "mail" | "default" }[] = [
+  { id: "mail", label: "Se connecter avec AYEBA Mail", variant: "mail" },
   { id: "google", label: "Se connecter avec Google", variant: "google" },
   { id: "github", label: "Continuer avec GitHub" },
   { id: "microsoft", label: "Continuer avec Microsoft" },
@@ -71,6 +72,11 @@ export function LoginModal() {
 
   function onProvider(id: string) {
     setError(null);
+    // AYEBA Mail : connexion par numéro de téléphone + SMS
+    if (id === "mail") {
+      window.location.href = "/mail/signin";
+      return;
+    }
     if (!configuredMap[id]) {
       setError(
         "OAuth non branché sur le serveur. Ajoutez GOOGLE_CLIENT_ID/SECRET, GITHUB_* et MICROSOFT_* sur Vercel, avec les callbacks https://ayeba.app/api/auth/{google|github|microsoft}/callback — ou utilisez l’email ci-dessous.",
@@ -224,7 +230,9 @@ export function ProfileMenu() {
         ? "GitHub"
         : user.provider === "microsoft"
           ? "Microsoft"
-          : "Email";
+          : user.provider === "mail"
+            ? "AYEBA Mail"
+            : "Email";
 
   return (
     <div className="ayeba-profile" ref={rootRef}>

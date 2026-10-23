@@ -1867,6 +1867,29 @@ select option {
   background: rgba(255, 255, 255, 0.08);
 }
 
+.oauth-btn-mail {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  border: 1px solid rgba(0, 180, 255, 0.4);
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(0, 140, 255, 0.15), rgba(232, 93, 4, 0.12));
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+  padding: 0.65rem 1rem;
+  transition: all 0.2s;
+  box-shadow: 0 0 20px rgba(0, 180, 255, 0.15);
+}
+
+.oauth-btn-mail:hover {
+  border-color: rgba(0, 180, 255, 0.7);
+  background: linear-gradient(135deg, rgba(0, 140, 255, 0.25), rgba(232, 93, 4, 0.2));
+  box-shadow: 0 0 30px rgba(0, 180, 255, 0.25);
+}
+
 /* ——— Market ticker (bourse) ——— */
 .ayeba-ticker {
   position: relative;
