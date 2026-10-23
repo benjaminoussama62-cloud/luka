@@ -586,6 +586,28 @@
   .mail-search { max-width: none; }
 }
 
+/* ── Écrans d'authentification dédiés (/mail/signin, /mail/signup) ──── */
+.mail-auth-logo {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+.mail-auth-alt {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+  color: var(--muted);
+  text-align: center;
+}
+.mail-auth-alt a {
+  color: var(--orange);
+  text-decoration: none;
+}
+.mail-auth-alt a:hover {
+  text-decoration: underline;
+}
+
 /* ── Landing ───────────────────────────────────────────────────────── */
 .mail-landing { overflow: hidden; }
 .mail-landing-scroll { flex: 1; overflow-y: auto; }
