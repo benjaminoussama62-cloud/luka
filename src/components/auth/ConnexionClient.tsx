@@ -51,8 +51,6 @@ export function ConnexionClient({ next }: { next: string }) {
   const dest = safeNext(next);
   const destLabel = destinationLabel(dest);
 
-  const [mode, setMode] = useState<"login" | "register">("login");
-  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -83,7 +81,7 @@ export function ConnexionClient({ next }: { next: string }) {
     e.preventDefault();
     setLoading(true);
     setError(null);
-    const err = await loginWithEmail(email, password, mode === "register" ? name : undefined);
+    const err = await loginWithEmail(email, password);
     setLoading(false);
     if (err) {
       setError(err);
@@ -134,14 +132,6 @@ export function ConnexionClient({ next }: { next: string }) {
         ) : null}
 
         <form onSubmit={onSubmit} className="space-y-3">
-          {mode === "register" && (
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Nom"
-              className="ayeba-glass w-full rounded-xl px-4 py-3 text-white outline-none focus:border-[var(--line-bright)]"
-            />
-          )}
           <input
             type="email"
             value={email}
@@ -160,34 +150,21 @@ export function ConnexionClient({ next }: { next: string }) {
           />
           {error && <p className="text-sm text-[var(--bad)]">{error}</p>}
           <button type="submit" disabled={loading} className="ayeba-cta w-full py-3">
-            {loading ? "…" : mode === "login" ? "Entrer" : "Créer le compte"}
+            {loading ? "…" : "Entrer"}
           </button>
         </form>
 
         <p className="mt-5 text-center text-sm text-[var(--muted)]">
-          {mode === "login" ? (
-            <>
-              Pas de compte ?{" "}
-              <button
-                type="button"
-                className="text-[var(--orange)]"
-                onClick={() => setMode("register")}
-              >
-                S&apos;inscrire
-              </button>
-            </>
-          ) : (
-            <>
-              Déjà inscrit ?{" "}
-              <button
-                type="button"
-                className="text-[var(--orange)]"
-                onClick={() => setMode("login")}
-              >
-                Connexion
-              </button>
-            </>
-          )}
+          Pas de compte ?{" "}
+          <button
+            type="button"
+            className="text-[var(--orange)]"
+            onClick={() => {
+              window.location.href = `/mail/signup?next=${encodeURIComponent(dest)}`;
+            }}
+          >
+            S&apos;inscrire
+          </button>
         </p>
       </div>
     </main>
