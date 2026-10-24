@@ -44,25 +44,22 @@ export function GitHubLogo({ size = 20 }: { size?: number }) {
 
 export function AyebaMailLogo({ size = 20 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 48 48" aria-hidden>
-      <path
-        fill="url(#mailGradient)"
-        d="M8 12c0-2.2 1.8-4 4-4h24c2.2 0 4 1.8 4 4v24c0 2.2-1.8 4-4 4H12c-2.2 0-4-1.8-4-4V12z"
-      />
-      <path
-        fill="none"
-        stroke="#fff"
-        strokeWidth="3"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M10 14l14 12 14-12"
-      />
+    <svg width={size} height={size} viewBox="0 0 512 512" aria-hidden>
       <defs>
-        <linearGradient id="mailGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#00b4ff" />
+        <linearGradient id="ayebaMailBg" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#0a0a0e" />
+          <stop offset="100%" stopColor="#12141c" />
+        </linearGradient>
+        <linearGradient id="ayebaMailA" x1="20%" y1="10%" x2="80%" y2="90%">
+          <stop offset="0%" stopColor="#7df0ff" />
+          <stop offset="45%" stopColor="#00b4ff" />
           <stop offset="100%" stopColor="#e85d04" />
         </linearGradient>
       </defs>
+      <rect width="512" height="512" rx="108" fill="url(#ayebaMailBg)" />
+      <rect x="22" y="22" width="468" height="468" rx="92" fill="none" stroke="rgba(0,180,255,0.35)" strokeWidth="6" />
+      <rect x="104" y="158" width="304" height="196" rx="30" fill="none" stroke="url(#ayebaMailA)" strokeWidth="24" />
+      <path d="M118 182 L256 296 L394 182" fill="none" stroke="url(#ayebaMailA)" strokeWidth="24" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }

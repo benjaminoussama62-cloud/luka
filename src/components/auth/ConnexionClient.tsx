@@ -24,7 +24,7 @@ export function safeNext(raw: string | null | undefined): string {
   return raw;
 }
 
-const NEXT_LABELS: [string, string][] = [
+const PRODUCT_PREFIXES: [string, string][] = [
   ["/mbongo", "Ayeba Mbongo"],
   ["/mail", "Ayeba Mail"],
   ["/studio", "Ayeba Studio"],
@@ -34,10 +34,15 @@ const NEXT_LABELS: [string, string][] = [
 ];
 
 function destinationLabel(next: string): string | null {
-  for (const [prefix, label] of NEXT_LABELS) {
+  for (const [prefix, label] of PRODUCT_PREFIXES) {
     if (next === prefix || next.startsWith(prefix + "/") || next.startsWith(prefix + "?")) return label;
   }
   return null;
+}
+
+/** Un produit Ayeba est visé → compte Ayeba exigé, OAuth jamais proposé. */
+function isProductDestination(next: string): boolean {
+  return destinationLabel(next) !== null;
 }
 
 export function ConnexionClient({ next }: { next: string }) {
@@ -64,10 +69,12 @@ export function ConnexionClient({ next }: { next: string }) {
     if (auth === "failed" || auth === "config") {
       setError("Connexion refusée ou indisponible. Réessayez ou utilisez l'email.");
     }
-    // OAuth visible uniquement dans le navigateur desktop AYEBA
-    // (param explicite ou user-agent de la coque Electron).
+    // OAuth visible uniquement dans le navigateur desktop AYEBA ET
+    // seulement pour une session navigateur pure — jamais quand la
+    // destination est un produit (compte Ayeba exigé).
     const ua = navigator.userAgent || "";
-    if (params.get("oauth") === "1" || /\bAYEBA\b/i.test(ua)) {
+    const inBrowser = params.get("oauth") === "1" || /\bAYEBA\b/i.test(ua);
+    if (inBrowser && !isProductDestination(dest)) {
       setOauthVisible(true);
     }
   }, []);
