@@ -12,6 +12,13 @@ const nextConfig: NextConfig = {
       { source: "/privacy/money", destination: "/privacy/mbongo", permanent: true },
     ];
   },
+  async rewrites() {
+    return [
+      // Les routes API du portefeuille vivent sous /api/money/* (nom interne
+      // historique) — le client les appelle via l'alias /api/mbongo/*.
+      { source: "/api/mbongo/:path*", destination: "/api/money/:path*" },
+    ];
+  },
   async headers() {
     return [
       {
