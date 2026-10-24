@@ -3,12 +3,11 @@
 import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { OAuthButton } from "@/components/auth/OAuthLogos";
 import { useAuth } from "@/lib/auth";
 import { AyebiStage } from "@/components/ayebi/AyebiStage";
 
 export function AyebiConnexionPage() {
-  const { user, loginWithEmail, loginWithProvider, ready } = useAuth();
+  const { user, loginWithEmail, ready } = useAuth();
   const router = useRouter();
   const params = useSearchParams();
   const redirect = params.get("redirect") ?? "/ayebi/contribuer";
@@ -46,15 +45,6 @@ export function AyebiConnexionPage() {
           </p>
 
           <div className="ayeba-panel mt-8 space-y-3 p-6">
-            <OAuthButton id="google" label="Google" variant="google" onClick={() => loginWithProvider("google")} />
-            <OAuthButton id="github" label="GitHub" onClick={() => loginWithProvider("github")} />
-
-            <div className="my-4 flex items-center gap-3">
-              <div className="h-px flex-1 bg-[var(--line)]" />
-              <span className="text-[10px] text-[var(--faint)]">EMAIL</span>
-              <div className="h-px flex-1 bg-[var(--line)]" />
-            </div>
-
             <form onSubmit={onSubmit} className="space-y-3">
               {mode === "register" && (
                 <input

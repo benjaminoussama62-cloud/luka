@@ -86,6 +86,16 @@ export async function getSessionFromCookies(): Promise<SessionUser | null> {
   return readSessionToken(token);
 }
 
+/**
+ * Les produits Ayeba (Mbongo, Mail, Studio, Developers, Ayebi) exigent un
+ * compte Ayeba — créé par email/mot de passe ou via la session Mail. Une
+ * session ouverte via un provider externe (Google/GitHub/Microsoft, ex.
+ * dans le navigateur desktop) ne débloque aucun de ces produits.
+ */
+export function isAyebaAccount(user: SessionUser): boolean {
+  return user.provider === "email" || user.provider === "mail";
+}
+
 export async function setSessionCookie(token: string) {
   const jar = await cookies();
   const secure =

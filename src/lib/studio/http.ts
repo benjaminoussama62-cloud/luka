@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSessionFromCookies, type SessionUser } from "@/lib/auth-server";
+import { getSessionFromCookies, isAyebaAccount, type SessionUser } from "@/lib/auth-server";
 import { StudioAuthError, requireOwnedSite } from "@/lib/studio/sites";
 import type { StudioSite } from "@/lib/studio/types";
 
@@ -7,6 +7,12 @@ export async function requireStudioUser(): Promise<SessionUser | NextResponse> {
   const user = await getSessionFromCookies();
   if (!user) {
     return NextResponse.json({ error: "Connexion requise" }, { status: 401 });
+  }
+  if (!isAyebaAccount(user)) {
+    return NextResponse.json(
+      { error: "Compte Ayeba requis", code: "ayeba_account_required" },
+      { status: 403 },
+    );
   }
   return user;
 }

@@ -2,7 +2,7 @@
  * Ayeba Mbongo — garde-fous HTTP partagés par les routes /api/money/*.
  */
 import { NextResponse } from "next/server";
-import { getSessionFromCookies, type SessionUser } from "@/lib/auth-server";
+import { getSessionFromCookies, isAyebaAccount, type SessionUser } from "@/lib/auth-server";
 import { siteBaseUrl } from "@/lib/site-url";
 import { MoneyError } from "./core";
 
@@ -10,6 +10,14 @@ export async function requireMoneyUser(): Promise<SessionUser | NextResponse> {
   const user = await getSessionFromCookies();
   if (!user) {
     return NextResponse.json({ error: "Connexion requise" }, { status: 401 });
+  }
+  // Un compte Ayeba est exigé — les sessions sociales (navigateur) ne
+  // donnent accès à aucun produit de l'écosystème.
+  if (!isAyebaAccount(user)) {
+    return NextResponse.json(
+      { error: "Compte Ayeba requis — connectez-vous avec email et mot de passe", code: "ayeba_account_required" },
+      { status: 403 },
+    );
   }
   return user;
 }

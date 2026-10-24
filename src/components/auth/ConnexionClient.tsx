@@ -6,26 +6,17 @@ import { AyebaWordmark } from "@/components/brand/AyebaIcon";
 import { OAuthButton } from "@/components/auth/OAuthLogos";
 import { useAuth } from "@/lib/auth";
 
-type Provider = {
-  id: string;
-  label: string;
-  authPath: string;
-  configured: boolean;
-};
+// Compte Ayeba obligatoire sur les produits (Mbongo, Mail, Studio,
+// Developers, Ayebi) — comme Google, un seul compte unifié.
+// Exception : le navigateur desktop AYEBA peut proposer Google/GitHub/
+// Microsoft (param ?oauth=1 ou UA "AYEBA"), mais ces sessions n'ouvrent
+// aucun produit — isAyebaAccount() les bloque côté serveur.
 
-const OAUTH_UI: { id: string; label: string; variant?: "google" | "mail" | "default" }[] = [
-  { id: "mail", label: "Se connecter avec AYEBA Mail", variant: "mail" },
-  { id: "google", label: "Se connecter avec Google", variant: "google" },
+const EXTERNAL_OAUTH: { id: string; label: string; variant?: "google" }[] = [
+  { id: "google", label: "Continuer avec Google", variant: "google" },
   { id: "github", label: "Continuer avec GitHub" },
   { id: "microsoft", label: "Continuer avec Microsoft" },
 ];
-
-const DEFAULT_PROVIDERS: Provider[] = OAUTH_UI.map((p) => ({
-  id: p.id,
-  label: p.label,
-  authPath: `/api/auth/${p.id}`,
-  configured: false,
-}));
 
 /** Chemin interne sûr — refuse les URLs externes / protocol-relative. */
 export function safeNext(raw: string | null | undefined): string {
@@ -61,27 +52,24 @@ export function ConnexionClient({ next }: { next: string }) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [providers, setProviders] = useState<Provider[]>(DEFAULT_PROVIDERS);
-  const [showEmail, setShowEmail] = useState(false);
+  const [oauthVisible, setOauthVisible] = useState(false);
 
   useEffect(() => {
     if (ready && user) router.replace(dest);
   }, [ready, user, dest, router]);
 
   useEffect(() => {
-    fetch("/api/auth/providers")
-      .then((r) => r.json())
-      .then((d: { providers: Provider[] }) => {
-        if (d.providers?.length) setProviders(d.providers);
-      })
-      .catch(() => {});
-  }, []);
-
-  useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const auth = params.get("auth");
-    if (auth === "failed") setError("Connexion sociale refusée. Réessayez ou utilisez l'email.");
-    if (auth === "config") setError("OAuth mal configuré (clés / redirect URI).");
+    if (auth === "failed" || auth === "config") {
+      setError("Connexion refusée ou indisponible. Réessayez ou utilisez l'email.");
+    }
+    // OAuth visible uniquement dans le navigateur desktop AYEBA
+    // (param explicite ou user-agent de la coque Electron).
+    const ua = navigator.userAgent || "";
+    if (params.get("oauth") === "1" || /\bAYEBA\b/i.test(ua)) {
+      setOauthVisible(true);
+    }
   }, []);
 
   async function onSubmit(e: FormEvent) {
@@ -97,22 +85,7 @@ export function ConnexionClient({ next }: { next: string }) {
     }
   }
 
-  const configuredMap = Object.fromEntries(providers.map((p) => [p.id, p.configured]));
 
-  function onProvider(id: string) {
-    setError(null);
-    if (id === "mail") {
-      window.location.href = `/mail/signin?next=${encodeURIComponent(dest)}`;
-      return;
-    }
-    if (!configuredMap[id]) {
-      setError(
-        "OAuth non branché sur le serveur. Ajoutez les clés correspondantes — ou utilisez l'email ci-dessous.",
-      );
-      return;
-    }
-    window.location.href = `/api/auth/${id}?next=${encodeURIComponent(dest)}`;
-  }
 
   return (
     <main className="flex min-h-dvh flex-col items-center justify-center px-4 py-10">
@@ -129,61 +102,60 @@ export function ConnexionClient({ next }: { next: string }) {
           ) : null}
         </div>
 
-        <div className="space-y-2">
-          {OAUTH_UI.map((p) => (
-            <OAuthButton
-              key={p.id}
-              id={p.id}
-              label={p.label}
-              variant={p.variant}
-              onClick={() => onProvider(p.id)}
-            />
-          ))}
-          {error && !showEmail ? <p className="text-sm text-[var(--bad)]">{error}</p> : null}
-        </div>
-
-        <div className="my-5 flex items-center gap-3">
-          <div className="h-px flex-1 bg-[var(--line)]" />
-          <span className="font-[family-name:var(--font-mono)] text-[10px] text-[var(--faint)]">EMAIL</span>
-          <div className="h-px flex-1 bg-[var(--line)]" />
-        </div>
-
-        {!showEmail ? (
-          <button type="button" onClick={() => setShowEmail(true)} className="ayeba-ghost w-full py-3 text-sm">
-            Continuer avec email
-          </button>
-        ) : (
-          <form onSubmit={onSubmit} className="space-y-3">
-            {mode === "register" && (
-              <input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Nom"
-                className="ayeba-glass w-full rounded-xl px-4 py-3 text-white outline-none focus:border-[var(--line-bright)]"
+        {oauthVisible ? (
+          <div className="mb-5 space-y-2">
+            {EXTERNAL_OAUTH.map((p) => (
+              <OAuthButton
+                key={p.id}
+                id={p.id}
+                label={p.label}
+                variant={p.variant}
+                onClick={() => {
+                  window.location.href = `/api/auth/${p.id}?next=${encodeURIComponent(dest)}`;
+                }}
               />
-            )}
+            ))}
+            <p className="text-[11px] leading-snug text-[var(--faint)]">
+              Session navigateur uniquement — ne donne accès à aucun produit Ayeba (Mail, Mbongo, Studio…).
+            </p>
+            <div className="my-4 flex items-center gap-3">
+              <div className="h-px flex-1 bg-[var(--line)]" />
+              <span className="font-[family-name:var(--font-mono)] text-[10px] text-[var(--faint)]">COMPTE AYEBA</span>
+              <div className="h-px flex-1 bg-[var(--line)]" />
+            </div>
+          </div>
+        ) : null}
+
+        <form onSubmit={onSubmit} className="space-y-3">
+          {mode === "register" && (
             <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="Email"
-              required
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Nom"
               className="ayeba-glass w-full rounded-xl px-4 py-3 text-white outline-none focus:border-[var(--line-bright)]"
             />
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Mot de passe"
-              required
-              className="ayeba-glass w-full rounded-xl px-4 py-3 text-white outline-none focus:border-[var(--line-bright)]"
-            />
-            {error && <p className="text-sm text-[var(--bad)]">{error}</p>}
-            <button type="submit" disabled={loading} className="ayeba-cta w-full py-3">
-              {loading ? "…" : mode === "login" ? "Entrer" : "Créer le compte"}
-            </button>
-          </form>
-        )}
+          )}
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="Email"
+            required
+            className="ayeba-glass w-full rounded-xl px-4 py-3 text-white outline-none focus:border-[var(--line-bright)]"
+          />
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Mot de passe"
+            required
+            className="ayeba-glass w-full rounded-xl px-4 py-3 text-white outline-none focus:border-[var(--line-bright)]"
+          />
+          {error && <p className="text-sm text-[var(--bad)]">{error}</p>}
+          <button type="submit" disabled={loading} className="ayeba-cta w-full py-3">
+            {loading ? "…" : mode === "login" ? "Entrer" : "Créer le compte"}
+          </button>
+        </form>
 
         <p className="mt-5 text-center text-sm text-[var(--muted)]">
           {mode === "login" ? (
@@ -192,10 +164,7 @@ export function ConnexionClient({ next }: { next: string }) {
               <button
                 type="button"
                 className="text-[var(--orange)]"
-                onClick={() => {
-                  setMode("register");
-                  setShowEmail(true);
-                }}
+                onClick={() => setMode("register")}
               >
                 S&apos;inscrire
               </button>
@@ -206,10 +175,7 @@ export function ConnexionClient({ next }: { next: string }) {
               <button
                 type="button"
                 className="text-[var(--orange)]"
-                onClick={() => {
-                  setMode("login");
-                  setShowEmail(true);
-                }}
+                onClick={() => setMode("login")}
               >
                 Connexion
               </button>
