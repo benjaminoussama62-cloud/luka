@@ -161,14 +161,28 @@ export function LoginModal() {
           {mode === "login" ? (
             <>
               Pas de compte ?{" "}
-              <button type="button" className="text-[var(--orange)]" onClick={() => setMode("register")}>
+              <button
+                type="button"
+                className="text-[var(--orange)]"
+                onClick={() => {
+                  setMode("register");
+                  setShowEmail(true);
+                }}
+              >
                 S&apos;inscrire
               </button>
             </>
           ) : (
             <>
               Déjà inscrit ?{" "}
-              <button type="button" className="text-[var(--orange)]" onClick={() => setMode("login")}>
+              <button
+                type="button"
+                className="text-[var(--orange)]"
+                onClick={() => {
+                  setMode("login");
+                  setShowEmail(true);
+                }}
+              >
                 Connexion
               </button>
             </>
