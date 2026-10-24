@@ -145,6 +145,45 @@ export default function RootLayout({
           title="AYEBA"
           href="/opensearch.xml"
         />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@graph": [
+                {
+                  "@type": "Organization",
+                  "@id": "https://ayeba.app/#org",
+                  name: "AYEBA",
+                  url: "https://ayeba.app",
+                  logo: {
+                    "@type": "ImageObject",
+                    url: "https://ayeba.app/brand/ayeba-mark-192.png",
+                    width: 192,
+                    height: 192,
+                  },
+                  sameAs: ["https://ayeba.app"],
+                },
+                {
+                  "@type": "WebSite",
+                  "@id": "https://ayeba.app/#website",
+                  url: "https://ayeba.app",
+                  name: "AYEBA",
+                  publisher: { "@id": "https://ayeba.app/#org" },
+                  potentialAction: {
+                    "@type": "SearchAction",
+                    target: {
+                      "@type": "EntryPoint",
+                      urlTemplate: "https://ayeba.app/?q={search_term_string}",
+                    },
+                    "query-input": "required name=search_term_string",
+                  },
+                  inLanguage: ["fr", "en"],
+                },
+              ],
+            }),
+          }}
+        />
       </head>
       <body className="ayeba-shell min-h-full">
         <AyebaJsonLd />
