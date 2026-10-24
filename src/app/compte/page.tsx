@@ -17,7 +17,7 @@ export default async function AccountPage() {
       {!session ? (
         <div className="ayeba-panel p-6">
           <p>Connectez-vous pour gérer votre compte Ayeba, vos applications connectées et la sécurité.</p>
-          <Link href="/?auth=login" className="ayeba-cta mt-4 inline-block px-5 py-2 text-sm">
+          <Link href="/connexion?next=/compte" className="ayeba-cta mt-4 inline-block px-5 py-2 text-sm">
             Se connecter
           </Link>
         </div>

@@ -10,8 +10,11 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const code = searchParams.get("code");
   const base = appBaseUrl();
+  const state = searchParams.get("state") || "";
+  const nextRaw = state.startsWith("next|") ? state.slice(5) : "";
+  const backToNext = nextRaw.startsWith("/") && !nextRaw.startsWith("//") ? nextRaw : "";
 
-  if (!code) return NextResponse.redirect(`${base}/?auth=failed`);
+  if (!code) return NextResponse.redirect(`${base}${backToNext || "/connexion"}?auth=failed`);
 
   const clientId = process.env.GITHUB_CLIENT_ID;
   const clientSecret = process.env.GITHUB_CLIENT_SECRET;
@@ -70,9 +73,9 @@ export async function GET(req: Request) {
       name: profile.name || profile.login,
     });
     await setSessionCookie(await createSessionToken(user));
-    return NextResponse.redirect(`${base}/?auth=ok`);
+    return NextResponse.redirect(`${base}${backToNext || "/?auth=ok"}`);
   } catch (e) {
     console.error(e);
-    return NextResponse.redirect(`${base}/?auth=failed`);
+    return NextResponse.redirect(`${base}${backToNext || "/connexion"}?auth=failed`);
   }
 }

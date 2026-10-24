@@ -21,9 +21,12 @@ export async function GET(req: Request) {
   const backToOAuth =
     ayebaReturn.startsWith("/oauth/authorize") ? ayebaReturn : "";
 
+  const nextRaw = state.startsWith("next|") ? state.slice("next|".length) : "";
+  const backToNext = nextRaw.startsWith("/") && !nextRaw.startsWith("//") ? nextRaw : "";
+
   if (error || !code) {
     if (backToOmega) return NextResponse.redirect(`${backToOmega}?ayeba_error=failed`);
-    return NextResponse.redirect(`${base}/?auth=failed`);
+    return NextResponse.redirect(`${base}${backToNext || "/connexion"}?auth=failed`);
   }
 
   const clientId = process.env.GOOGLE_CLIENT_ID;
@@ -32,7 +35,7 @@ export async function GET(req: Request) {
 
   if (!clientId || !clientSecret) {
     if (backToOmega) return NextResponse.redirect(`${backToOmega}?ayeba_error=config`);
-    return NextResponse.redirect(`${base}/?auth=config`);
+    return NextResponse.redirect(`${base}${backToNext || "/connexion"}?auth=config`);
   }
 
   try {
@@ -77,11 +80,11 @@ export async function GET(req: Request) {
       return NextResponse.redirect(`${base}${backToOAuth}`);
     }
 
-    return NextResponse.redirect(`${base}/?auth=ok`);
+    return NextResponse.redirect(`${base}${backToNext || "/?auth=ok"}`);
   } catch (e) {
     console.error("[google/callback]", e);
     if (backToOmega) return NextResponse.redirect(`${backToOmega}?ayeba_error=failed`);
-    return NextResponse.redirect(`${base}/?auth=failed`);
+    return NextResponse.redirect(`${base}${backToNext || "/connexion"}?auth=failed`);
   }
 }
 

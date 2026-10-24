@@ -79,7 +79,7 @@ export function SecurityClient() {
   if (needsLogin) {
     return (
       <div className="ayeba-panel p-6">
-        <Link href="/?auth=login" className="ayeba-cta inline-block px-5 py-2 text-sm">
+        <Link href="/connexion?next=/compte/securite" className="ayeba-cta inline-block px-5 py-2 text-sm">
           Se connecter
         </Link>
       </div>

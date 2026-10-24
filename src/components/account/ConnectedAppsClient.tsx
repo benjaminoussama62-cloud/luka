@@ -40,7 +40,7 @@ export function ConnectedAppsClient() {
     return (
       <div className="ayeba-panel p-6">
         <p>Connectez-vous pour gérer les applications ayant accès à votre compte.</p>
-        <Link href="/?auth=login" className="ayeba-cta mt-4 inline-block px-5 py-2 text-sm">
+        <Link href="/connexion?next=/compte/applications" className="ayeba-cta mt-4 inline-block px-5 py-2 text-sm">
           Se connecter
         </Link>
       </div>

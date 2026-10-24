@@ -184,7 +184,7 @@ export function MoneyApp() {
                 <small>Dépôt et retrait vers votre compte — recrédité automatiquement si échec.</small>
               </div>
             </div>
-            <a className="mn-btn-primary" href="/compte?next=/mbongo">
+            <a className="mn-btn-primary" href="/connexion?next=/mbongo">
               Se connecter avec Ayeba
             </a>
             <small className="mn-landing-note">Un compte Ayeba suffit — le PIN est créé au premier accès.</small>

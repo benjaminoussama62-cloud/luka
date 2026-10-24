@@ -63,7 +63,7 @@ export function DeveloperConsoleClient() {
       <div className="dev-console-login ayeba-panel">
         <h2>Connexion requise</h2>
         <p>Connectez-vous avec votre compte Ayeba pour enregistrer et gérer vos applications OAuth.</p>
-        <Link href="/?auth=login" className="ayeba-cta inline-block px-5 py-2.5 text-sm">
+        <Link href="/connexion?next=/developers/console" className="ayeba-cta inline-block px-5 py-2.5 text-sm">
           Se connecter
         </Link>
       </div>

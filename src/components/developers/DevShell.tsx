@@ -267,7 +267,7 @@ export function DevShell({ children }: { children: React.ReactNode }) {
               <p className="dev-console-muted">
                 Connectez-vous avec votre compte Ayeba pour accéder à la console développeur.
               </p>
-              <Link href="/?auth=login" className="ayeba-cta inline-block px-5 py-2.5 text-sm">
+              <Link href="/connexion?next=/developers/console" className="ayeba-cta inline-block px-5 py-2.5 text-sm">
                 Se connecter
               </Link>
             </div>
