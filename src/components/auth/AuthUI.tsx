@@ -89,7 +89,9 @@ export function LoginModal() {
               <button
                 type="button"
                 className="text-[var(--orange)]"
-                onClick={() => setMode("register")}
+                onClick={() => {
+                  window.location.href = "/mail/signup";
+                }}
               >
                 S&apos;inscrire
               </button>

@@ -167,27 +167,27 @@ export function MoneyApp() {
             <span className="mn-kicker">Portefeuille — écosystème Ayeba</span>
             <h1 className="mn-title">AYEBA MBONGO</h1>
             <p className="mn-sub">
-              Un portefeuille à part, dans votre compte Ayeba. Soldes USD &amp; CDF, transferts
-              internes instantanés et gratuits, dépôts et retraits Mobile Money.
+              Le portefeuille intégré à votre compte Ayeba. Soldes USD &amp; CDF, transferts
+              internes instantanés sans frais, dépôts et retraits via Mobile Money.
             </p>
             <div className="mn-features">
               <div>
                 <b>Instantané</b>
-                <small>Envoyez à un email ou un téléphone Ayeba — zéro frais, zéro attente.</small>
+                <small>Transférez vers une adresse ou un numéro Ayeba — exécution immédiate, sans frais.</small>
               </div>
               <div>
-                <b>Blindé</b>
-                <small>PIN exigé à chaque mouvement, journal comptable immuable, audit complet.</small>
+                <b>Sécurisé</b>
+                <small>Code PIN exigé pour chaque opération, registre comptable immuable, traçabilité complète.</small>
               </div>
               <div>
                 <b>Mobile Money</b>
-                <small>Dépôt et retrait vers votre compte — recrédité automatiquement si échec.</small>
+                <small>Dépôts et retraits vers votre compte Mobile Money, avec recréditation automatique en cas d'échec.</small>
               </div>
             </div>
             <a className="mn-btn-primary" href="/connexion?next=/mbongo">
               Se connecter avec Ayeba
             </a>
-            <small className="mn-landing-note">Un compte Ayeba suffit — le PIN est créé au premier accès.</small>
+            <small className="mn-landing-note">Un compte Ayeba suffit — votre code PIN est défini lors du premier accès.</small>
           </div>
           <LegalFooter />
         </div>

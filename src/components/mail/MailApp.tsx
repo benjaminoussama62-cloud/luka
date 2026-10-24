@@ -1002,32 +1002,32 @@ function ComposePanel({
 const FEATURES = [
   {
     t: "Coffre de bout en bout",
-    d: "Entre adresses @ayeba.app, le texte et les pièces jointes sont chiffrés sur votre appareil. Ayeba stocke le chiffré, pas le contenu.",
+    d: "Les messages échangés entre adresses @ayeba.app sont chiffrés de bout en bout sur votre appareil. Ayeba conserve le chiffré, jamais le contenu.",
     i: "◆",
   },
   {
     t: "Vérifié par téléphone",
-    d: "Un numéro, un code SMS, un compte. Pas de mot de passe à voler, pas de compte anonyme — l'identité est réelle.",
+    d: "L'inscription s'effectue par vérification SMS. Aucun mot de passe à compromettre, aucun compte anonyme.",
     i: "✓",
   },
   {
     t: "Adresse unique à vie",
-    d: "prenom@ayeba.app vous appartient pour toujours — jamais dupliquée, jamais réattribuée, même après suppression.",
+    d: "Votre adresse @ayeba.app vous est attribuée de manière permanente : jamais dupliquée, jamais réattribuée, même après suppression du compte.",
     i: "@",
   },
   {
     t: "Remise garantie",
-    d: "Si un destinataire n'existe pas, vous le savez immédiatement — notification d'échec claire, jamais de silence.",
+    d: "En cas d'échec de livraison, une notification explicite vous informe immédiatement. Aucun message ne disparaît en silence.",
     i: "↩",
   },
   {
-    t: "Quasi-0 data",
-    d: "En-têtes d'abord, corps à l'ouverture, images bloquées, extraits seulement. Conçu pour les connexions réelles.",
+    t: "Consommation réduite",
+    d: "En-têtes chargés en priorité, corps à l'ouverture, images distantes bloquées par défaut. Conçu pour les connexions limitées.",
     i: "▽",
   },
   {
-    t: "Traduire en un clic",
-    d: "Français, Lingala, Swahili, English — un bouton sous chaque message, comme sur X. Rien d'intrusif.",
+    t: "Traduction intégrée",
+    d: "Français, Lingala, Swahili, English — traduisez chaque message en un geste, sans quitter la conversation.",
     i: "⇄",
   },
 ];
@@ -1079,11 +1079,11 @@ function Landing({ onSignup, onSignin }: { onSignup: () => void; onSignin: () =>
         </section>
 
         <section className="mail-band">
-          <span className="mail-kicker">ZÉRO GOOGLE · ZÉRO GMAIL</span>
+          <span className="mail-kicker">INFRASTRUCTURE INDÉPENDANTE</span>
           <p>
-            Ayeba Mail est une infrastructure indépendante. Aucune connexion à
-            Google, aucune dépendance externe — votre boîte vit sur les
-            serveurs de l’écosystème Ayeba.
+            Ayeba Mail fonctionne sur une infrastructure dédiée, sans
+            intermédiaire tiers. Votre messagerie réside intégralement au sein
+            de l'écosystème Ayeba.
           </p>
         </section>
       </div>
