@@ -1049,14 +1049,14 @@ function Landing({ onSignup, onSignin }: { onSignup: () => void; onSignin: () =>
         <section className="mail-hero">
           <span className="mail-kicker">MESSAGERIE SÉCURISÉE · @AYEBA.APP</span>
           <h1>
-            Votre messagerie.
+            Une messagerie privée.
             <br />
-            <span>Vraiment à vous.</span>
+            <span>Conçue pour durer.</span>
           </h1>
           <p>
-            Une adresse <b>@ayeba.app</b> unique, vérifiée par votre numéro de
-            téléphone. Des messages chiffrés que personne n’analyse — même pas
-            nous. Conçu pour Kinshasa, ouvert au monde.
+            Une adresse <b>@ayeba.app</b> vérifiée par téléphone. Des échanges
+            chiffrés de bout en bout, une infrastructure dédiée, et aucune
+            analyse du contenu de vos messages.
           </p>
           <div className="mail-hero-cta">
             <button className="mail-cta" style={{ width: "auto", padding: "13px 34px" }} onClick={onSignup}>
@@ -1079,11 +1079,11 @@ function Landing({ onSignup, onSignin }: { onSignup: () => void; onSignin: () =>
         </section>
 
         <section className="mail-band">
-          <span className="mail-kicker">INFRASTRUCTURE INDÉPENDANTE</span>
+          <span className="mail-kicker">UNE INFRASTRUCTURE DÉDIÉE</span>
           <p>
-            Ayeba Mail fonctionne sur une infrastructure dédiée, sans
-            intermédiaire tiers. Votre messagerie réside intégralement au sein
-            de l'écosystème Ayeba.
+            Ayeba Mail fonctionne sur ses propres serveurs. Vos données restent
+            au sein de l'écosystème Ayeba et ne sont jamais transmises à des
+            tiers.
           </p>
         </section>
       </div>
