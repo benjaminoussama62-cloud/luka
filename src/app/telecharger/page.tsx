@@ -16,7 +16,7 @@ export const metadata: Metadata = {
   },
 };
 
-const VERSION = process.env.NEXT_PUBLIC_BROWSER_VERSION || "1.3.0";
+const VERSION = process.env.NEXT_PUBLIC_BROWSER_VERSION || "1.3.1";
 const FILENAME = `AYEBA-Setup-${VERSION}.exe`;
 const SETUP_URL =
   process.env.NEXT_PUBLIC_BROWSER_SETUP_URL ||
