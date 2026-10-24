@@ -4984,3 +4984,65 @@ body.ayeba-mobile-chrome .ayeba-home-shell {
   font-weight: 500;
 }
 .ayeba-mobile-omni-actions button svg { opacity: 0.7; }
+
+/* ── Vue onglets : cartes façon Safari (favicon réel + label sous carte) ── */
+.ayeba-tabscard-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+.ayeba-tabscard-fav.is-img {
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 0.4rem;
+  object-fit: contain;
+  background: #fff;
+  padding: 0.15rem;
+}
+.ayeba-tabscard-thumb-favicon {
+  width: 2.6rem;
+  height: 2.6rem;
+  border-radius: 0.7rem;
+  object-fit: contain;
+  background: rgba(255, 255, 255, 0.92);
+  padding: 0.35rem;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: #0a0d14;
+  display: grid;
+  place-items: center;
+}
+.ayeba-tabscard-label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0 0.3rem;
+  font-size: 0.72rem;
+  color: var(--muted);
+  overflow: hidden;
+}
+.ayeba-tabscard-label span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ayeba-tabscard-label-favicon {
+  width: 0.95rem;
+  height: 0.95rem;
+  border-radius: 0.25rem;
+  object-fit: contain;
+  background: rgba(255, 255, 255, 0.9);
+  flex: 0 0 auto;
+  font-size: 0.55rem;
+  font-weight: 800;
+  color: #0a0d14;
+  display: grid;
+  place-items: center;
+}
+.ayeba-tabscard-thumb {
+  min-height: 9rem;
+}
+.ayeba-tabscard-thumb-inner {
+  gap: 0.55rem;
+}

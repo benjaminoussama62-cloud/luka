@@ -23,6 +23,43 @@ function hostOf(url?: string) {
   }
 }
 
+function faviconUrl(url?: string) {
+  if (!url) return "";
+  try {
+    const u = new URL(url);
+    return `${u.protocol}//${u.host}/favicon.ico`;
+  } catch {
+    return "";
+  }
+}
+
+/** Favicon réel du site avec repli sur l'initiale (comme Safari). */
+function TabFavicon({
+  url,
+  fallback,
+  className,
+}: {
+  url?: string;
+  fallback: string;
+  className: string;
+}) {
+  const [err, setErr] = useState(false);
+  const src = faviconUrl(url);
+  if (!src || err) {
+    return <span className={className}>{fallback}</span>;
+  }
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={src}
+      alt=""
+      className={`${className} is-img`}
+      onError={() => setErr(true)}
+      loading="lazy"
+    />
+  );
+}
+
 function fmtTime(ts: number) {
   const d = new Date(ts);
   const today = new Date();
@@ -93,64 +130,86 @@ export function MobileTabsOverview({ onClose }: { onClose: () => void }) {
               tab.kind === "home"
                 ? "Accueil Ayeba"
                 : hostOf(tab.kind === "web" ? tab.url : undefined) || tab.title;
+            const tabUrl = tab.kind === "web" ? tab.url : undefined;
+            const fallbackLetter = tab.private
+              ? ""
+              : tab.kind === "home"
+                ? "A"
+                : (label.slice(0, 1) || "A").toUpperCase();
             return (
-              <div
-                key={tab.id}
-                className={`ayeba-tabscard${isActive ? " active" : ""}${tab.private ? " private" : ""}`}
-                role="tab"
-                aria-selected={isActive}
-                tabIndex={0}
-                onClick={() => {
-                  activateTab(tab.id);
-                  onClose();
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
+              <div key={tab.id} className="ayeba-tabscard-wrap">
+                <div
+                  className={`ayeba-tabscard${isActive ? " active" : ""}${tab.private ? " private" : ""}`}
+                  role="tab"
+                  aria-selected={isActive}
+                  tabIndex={0}
+                  onClick={() => {
                     activateTab(tab.id);
                     onClose();
-                  }
-                }}
-              >
-                <div className="ayeba-tabscard-head">
-                  <span className="ayeba-tabscard-fav" aria-hidden>
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      activateTab(tab.id);
+                      onClose();
+                    }
+                  }}
+                >
+                  <div className="ayeba-tabscard-head">
                     {tab.private ? (
-                      <IconShield size={11} />
-                    ) : tab.kind === "home" ? (
-                      "A"
+                      <span className="ayeba-tabscard-fav" aria-hidden>
+                        <IconShield size={11} />
+                      </span>
                     ) : (
-                      label.slice(0, 1).toUpperCase()
+                      <TabFavicon
+                        url={tabUrl}
+                        fallback={fallbackLetter}
+                        className="ayeba-tabscard-fav"
+                      />
                     )}
-                  </span>
-                  <div className="ayeba-tabscard-meta">
                     <span className="ayeba-tabscard-title">{tab.title}</span>
-                    <span className="ayeba-tabscard-host">{label}</span>
+                    <button
+                      type="button"
+                      className="ayeba-tabscard-close"
+                      aria-label={`Fermer ${tab.title}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        closeTab(tab.id);
+                      }}
+                    >
+                      <IconClose size={13} strokeWidth={2.2} />
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    className="ayeba-tabscard-close"
-                    aria-label={`Fermer ${tab.title}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      closeTab(tab.id);
-                    }}
-                  >
-                    <IconClose size={13} strokeWidth={2.2} />
-                  </button>
+                  <div className="ayeba-tabscard-thumb" aria-hidden>
+                    <div className="ayeba-tabscard-thumb-inner">
+                      {tab.private ? (
+                        <IconShield size={34} strokeWidth={1.3} />
+                      ) : tab.kind === "home" ? (
+                        <IconHome size={34} strokeWidth={1.3} />
+                      ) : (
+                        <>
+                          <TabFavicon
+                            url={tabUrl}
+                            fallback={fallbackLetter}
+                            className="ayeba-tabscard-thumb-favicon"
+                          />
+                          <span className="ayeba-tabscard-thumb-host">{hostOf(tab.url)}</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
                 </div>
-                <div className="ayeba-tabscard-thumb" aria-hidden>
-                  <div className="ayeba-tabscard-thumb-inner">
-                    {tab.private ? (
-                      <IconShield size={30} strokeWidth={1.4} />
-                    ) : tab.kind === "home" ? (
-                      <IconHome size={30} strokeWidth={1.4} />
-                    ) : (
-                      <>
-                        <IconGlobe size={30} strokeWidth={1.4} />
-                        <span className="ayeba-tabscard-thumb-host">{hostOf(tab.url)}</span>
-                      </>
-                    )}
-                  </div>
+                <div className="ayeba-tabscard-label" aria-hidden>
+                  {tab.private ? (
+                    <IconShield size={12} />
+                  ) : (
+                    <TabFavicon
+                      url={tabUrl}
+                      fallback={fallbackLetter}
+                      className="ayeba-tabscard-label-favicon"
+                    />
+                  )}
+                  <span>{label}</span>
                 </div>
               </div>
             );

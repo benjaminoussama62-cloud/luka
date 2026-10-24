@@ -126,10 +126,7 @@ export async function registerUser(email: string, password: string, name?: strin
   const users = await getUsers();
   await saveUsers([...users, user]);
   syncUserToSqlite(user);
-
-  // Lier le compte mail existant si cet email a déjà une boîte AYEBA.
-  await linkMailAccountByEmail(normalizedEmail, user.id);
-
+  await provisionMailForUser(user);
   return { user: toSessionUser(user) };
 }
 
@@ -142,24 +139,17 @@ export async function loginUser(email: string, password: string) {
     return { error: "Compte suspendu. Contacte le support." as const };
   }
   syncUserToSqlite(user);
-  await linkMailAccountByEmail(user.email.toLowerCase(), user.id);
+  await provisionMailForUser(user);
   return { user: toSessionUser(user) };
 }
 
-/** Lie un compte mail existant à un utilisateur par email. */
-async function linkMailAccountByEmail(email: string, userId: string) {
+/** Crée la boîte @ayeba.app du compte si absente — comme Gmail avec Google. */
+async function provisionMailForUser(user: DbUser) {
   try {
-    const { getDb } = await import("@/lib/storage/database");
-    const db = getDb();
-    // Chercher un compte mail avec cet email (format xxx@ayeba.app)
-    const account = db
-      .prepare("SELECT id, user_id FROM mail_accounts WHERE email = ? OR address = ?")
-      .get(email, email.split("@")[0]) as { id: string; user_id: string } | undefined;
-    if (account && account.user_id !== userId) {
-      db.prepare("UPDATE mail_accounts SET user_id = ? WHERE id = ?").run(userId, account.id);
-    }
+    const { ensureMailAccount } = await import("@/lib/mail/mail");
+    ensureMailAccount(user.id, user.email.toLowerCase(), user.name);
   } catch {
-    // Non-bloquant — l'échec de liaison ne doit pas empêcher la connexion
+    // Non-bloquant — l'échec ne doit pas empêcher la connexion
   }
 }
 
@@ -199,7 +189,7 @@ export async function upsertOAuthUser(profile: {
     }
     syncUserToSqlite(user);
   }
-  await linkMailAccountByEmail(email, user.id);
+  await provisionMailForUser(user);
   return toSessionUser(user);
 }
 

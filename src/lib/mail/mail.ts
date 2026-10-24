@@ -344,6 +344,54 @@ type VerifRow = {
 const AVATAR_COLORS = ["#e85d04", "#ff6b35", "#64748b", "#94a3b8", "#f97316", "#78716c"];
 
 /**
+ * Provisionne automatiquement une boîte @ayeba.app pour un compte Ayeba —
+ * comme Google crée un Gmail avec le compte. Idempotent : retourne la boîte
+ * existante si le compte en a déjà une. L'adresse dérive de l'email de
+ * connexion (partie locale), avec suffixe numérique si déjà prise et repli
+ * aléatoire si la base n'est pas valide. Le téléphone reste à renseigner
+ * (placeholder "pending:<userId>" — jamais un vrai numéro).
+ */
+export function ensureMailAccount(
+  userId: string,
+  email: string,
+  name?: string,
+): MailAccount | null {
+  const existing = getAccountByUser(userId);
+  if (existing) return existing;
+  try {
+    let base = (email.split("@")[0] || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9._-]/g, "")
+      .replace(/^[._-]+/, "");
+    if (!base || !/^[a-z]/.test(base)) {
+      base = `u${crypto.randomBytes(3).toString("hex")}`;
+    }
+    base = base.slice(0, 24);
+    if (RESERVED.has(base)) base = `${base}x`;
+    let address = base;
+    for (
+      let n = 2;
+      db().prepare("SELECT 1 AS x FROM mail_accounts WHERE address = ?").get(address) ||
+      RESERVED.has(address);
+      n++
+    ) {
+      if (n > 200) return null;
+      const suffix = String(n);
+      address = `${base.slice(0, 30 - suffix.length)}${suffix}`;
+    }
+    const mailEmail = `${address}@${MAIL_DOMAIN}`;
+    db()
+      .prepare(
+        "INSERT INTO mail_accounts (id, user_id, address, email, phone, created_at, display_name, status) VALUES (?, ?, ?, ?, ?, ?, ?, 'active')",
+      )
+      .run(uid(), userId, address, mailEmail, `pending:${userId}`, now(), (name || "").trim());
+    return getAccountByUser(userId);
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Valide un code SMS et finalise :
  * - compte mail existant pour ce numéro → connexion (retourne l'userId lié)
  * - sinon → crée l'utilisateur Ayeba (provider « mail », sans mot de passe) +
