@@ -27,6 +27,8 @@ type Props = {
   onHome?: () => void;
   onNativeNav?: (nav: NativeNav) => void;
   onNewTab?: (url: string) => void;
+  /** Capture JPEG de la page (vignette onglet façon Safari). */
+  onSnapshot?: (dataUrl: string) => void;
 };
 
 export function InAppBrowser({
@@ -40,6 +42,7 @@ export function InAppBrowser({
   onReload,
   onNativeNav,
   onNewTab,
+  onSnapshot,
 }: Props) {
   const [nonce, setNonce] = useState(0);
   const [frameUrl, setFrameUrl] = useState(url);
@@ -127,6 +130,17 @@ export function InAppBrowser({
         setBusy(d.loading);
         if (d.loading) setSslIssue(null);
         onNativeNav?.(d);
+        // Page chargée -> capture la vignette de l'onglet (façon Safari).
+        if (!d.loading) {
+          window.setTimeout(() => {
+            void nativeBrowser()
+              ?.capture()
+              .then((r) => {
+                if (r?.data) onSnapshot?.(r.data);
+              })
+              .catch(() => {});
+          }, 700);
+        }
       }),
       addNativeListener<{ value: number }>("progress", (d) => setProgress(d.value)),
       addNativeListener<{ dy: number; y: number }>("scroll", (d) => {
@@ -144,7 +158,7 @@ export function InAppBrowser({
       }),
     ];
     return () => cleanups.forEach((c) => c?.());
-  }, [native, onNativeNav, onNewTab]);
+  }, [native, onNativeNav, onNewTab, onSnapshot]);
 
   // Les avertissements HTML passent par-dessus : on masque la WebView native.
   useEffect(() => {

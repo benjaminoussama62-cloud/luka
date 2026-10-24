@@ -416,7 +416,7 @@ export function AyebaApp() {
 function AyebaAppBody() {
   const { hasSearched, response, searching, searchError, search, tab, setTab, splitScreen, resetHome, setDeepResearchOpen } = useAyeba();
   const { t } = useI18n();
-  const { tabs, activeTab, activateTab, openHomeTab, openWebTab, navigateWebTab, webGoBack, webGoForward, syncWebTab } = useBrowserShell();
+  const { tabs, activeTab, activateTab, openHomeTab, openWebTab, navigateWebTab, webGoBack, webGoForward, syncWebTab, updateTabSnapshot } = useBrowserShell();
   // isMobileApp() lit window.URL — evalue apres montage pour eviter
   // tout mismatch d'hydratation (serveur : false toujours).
   const [inApp, setInApp] = useState(false);
@@ -496,6 +496,7 @@ function AyebaAppBody() {
           onSearch={onOmniSearch}
           onHome={goHomeTab}
           onNativeNav={syncWebTab}
+          onSnapshot={(d) => updateTabSnapshot(activeTab.id, d)}
           onNewTab={(u) => openWebTab(u)}
         />
         {inApp ? <MobileBrowserChrome onSearch={onOmniSearch} /> : null}

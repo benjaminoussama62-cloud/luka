@@ -181,6 +181,10 @@ export function MobileTabsOverview({ onClose }: { onClose: () => void }) {
                     </button>
                   </div>
                   <div className="ayeba-tabscard-thumb" aria-hidden>
+                    {tab.kind === "web" && tab.snapshot ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={tab.snapshot} alt="" className="ayeba-tabscard-snapshot" />
+                    ) : null}
                     <div className="ayeba-tabscard-thumb-inner">
                       {tab.private ? (
                         <IconShield size={34} strokeWidth={1.3} />

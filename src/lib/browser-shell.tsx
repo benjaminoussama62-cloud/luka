@@ -19,6 +19,8 @@ export type AyebaTab =
       history: string[];
       historyIndex: number;
       private?: boolean;
+      /** Capture JPEG (data URL) de la page — vignette façon Safari. */
+      snapshot?: string;
     };
 
 type ClosedTab = { title: string; url?: string; home?: boolean };
@@ -39,6 +41,8 @@ type BrowserShellApi = {
   webGoTo: (index: number) => void;
   /** Reconciliation quand la WebView native navigue (liens, back natif...). */
   syncWebTab: (nav: NativeNav) => void;
+  /** Enregistre la capture JPEG de la page d'un onglet web. */
+  updateTabSnapshot: (id: string, dataUrl: string) => void;
   activateTab: (id: string) => void;
   closeTab: (id: string) => void;
   closeAllTabs: () => void;
@@ -295,6 +299,16 @@ export function BrowserShellProvider({ children }: { children: ReactNode }) {
     [recentlyClosed, openWebTab, openHomeTab],
   );
 
+  /** Capture JPEG de l'onglet web (vignette Safari) — jamais en mode privé. */
+  const updateTabSnapshot = useCallback((id: string, dataUrl: string) => {
+    if (!dataUrl.startsWith("data:image/")) return;
+    setTabs((prev) =>
+      prev.map((t) =>
+        t.id === id && t.kind === "web" && !t.private ? { ...t, snapshot: dataUrl } : t,
+      ),
+    );
+  }, []);
+
   const activeTab = tabs.find((t) => t.id === activeId) || tabs[0];
 
   const value = useMemo(
@@ -313,11 +327,12 @@ export function BrowserShellProvider({ children }: { children: ReactNode }) {
       webGoForward,
       webGoTo,
       syncWebTab,
+      updateTabSnapshot,
       activateTab,
       closeTab,
       closeAllTabs,
     }),
-    [tabs, activeTab, privateMode, recentlyClosed, restoreClosedTab, openHomeTab, openWebTab, navigateWebTab, webGoBack, webGoForward, webGoTo, syncWebTab, activateTab, closeTab, closeAllTabs],
+    [tabs, activeTab, privateMode, recentlyClosed, restoreClosedTab, openHomeTab, openWebTab, navigateWebTab, webGoBack, webGoForward, webGoTo, syncWebTab, updateTabSnapshot, activateTab, closeTab, closeAllTabs],
   );
 
   return <BrowserShellContext.Provider value={value}>{children}</BrowserShellContext.Provider>;
