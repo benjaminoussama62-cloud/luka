@@ -1273,7 +1273,7 @@ function SignupFlow({ defaultName, onDone, onBack }: { defaultName: string; onDo
           {step === 1 && (
             <>
               <h2>Choisissez votre adresse</h2>
-              <p className="sub">Unique à vie — jamais réattribuée, jamais dupliquée.</p>
+              <p className="sub">Votre adresse @ayeba.app vous identifie sur l'ensemble des services Ayeba.</p>
               {err && <div className="mail-err">{err}</div>}
               <div className="mail-field">
                 <label>Votre adresse</label>
@@ -1281,7 +1281,8 @@ function SignupFlow({ defaultName, onDone, onBack }: { defaultName: string; onDo
                   <input
                     value={address}
                     onChange={(e) => checkAddress(e.target.value)}
-                    placeholder="benjaminoussama"
+                    placeholder="votre.adresse"
+                    autoComplete="off"
                     autoFocus
                   />
                   <span className="suffix">@ayeba.app</span>
@@ -1312,7 +1313,7 @@ function SignupFlow({ defaultName, onDone, onBack }: { defaultName: string; onDo
                 <input
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
-                  placeholder="Benjamin Oussama"
+                  placeholder="Votre nom complet"
                   autoFocus
                 />
               </div>
