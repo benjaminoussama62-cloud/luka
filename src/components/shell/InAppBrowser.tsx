@@ -55,7 +55,11 @@ export function InAppBrowser({
   const wrapRef = useRef<HTMLDivElement>(null);
   const prevTabRef = useRef<string | null>(null);
   const native = typeof window !== "undefined" && nativeBrowserAvailable();
-  const mobile = typeof window !== "undefined" && isMobileApp();
+  // Mode mobile : app native OU tout navigateur tactile (Safari iOS inclus) —
+  // la barre d'outils interne desktop ne doit jamais s'afficher sur mobile.
+  const mobile =
+    typeof window !== "undefined" &&
+    (isMobileApp() || window.matchMedia("(pointer: coarse)").matches);
 
   /* ---------------- Mode natif : vraie WebView Android ---------------- */
 
@@ -323,6 +327,10 @@ export function InAppBrowser({
                     loading: false,
                   });
                 }
+                // Vignette façon Safari : capture réelle de la page (same-origin).
+                if (onSnapshot && doc?.documentElement) {
+                  captureIframe(doc).then((d) => d && onSnapshot(d));
+                }
               } catch {
                 /* cross-origin : opaque par design */
               }
@@ -332,6 +340,60 @@ export function InAppBrowser({
       </div>
     </div>
   );
+}
+
+/**
+ * Capture un document same-origin en JPEG : DOM -> SVG <foreignObject> ->
+ * <img> -> canvas. Les ressources externes (images non-CORS, polices) ne se
+ * chargent pas dans le contexte SVG — la vignette montre la mise en page,
+ * les couleurs et le texte réels de la page (jamais le canvas n'est tainté).
+ * Retourne null si le document est vide ou la capture impossible.
+ */
+async function captureIframe(doc: Document): Promise<string | null> {
+  try {
+    const root = doc.documentElement;
+    const bodyHtml = doc.body?.innerHTML?.trim() ?? "";
+    if (!bodyHtml) return null;
+    const width = Math.max(root.clientWidth || doc.body?.clientWidth || 375, 320);
+    const height = Math.max(root.clientHeight || doc.body?.clientHeight || 640, 480);
+    const clone = root.cloneNode(true) as HTMLElement;
+    clone.querySelectorAll("script, iframe, video, canvas, noscript").forEach((n) => n.remove());
+    // Inline les feuilles de style pour que la vignette ressemble à la page.
+    let css = "";
+    for (const sheet of Array.from(doc.styleSheets)) {
+      try {
+        for (const rule of Array.from(sheet.cssRules)) css += rule.cssText + "\n";
+      } catch {
+        /* sheet cross-origin : ignorée */
+      }
+    }
+    if (css) {
+      const style = doc.createElement("style");
+      style.textContent = css;
+      const head = clone.querySelector("head") ?? clone.insertBefore(doc.createElement("head"), clone.firstChild);
+      head.appendChild(style);
+    }
+    clone.setAttribute("xmlns", "http://www.w3.org/1999/xhtml");
+    const serialized = new XMLSerializer().serializeToString(clone);
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><foreignObject width="100%" height="100%">${serialized}</foreignObject></svg>`;
+    const img = new Image();
+    const loaded = await new Promise<boolean>((resolve) => {
+      img.onload = () => resolve(true);
+      img.onerror = () => resolve(false);
+      img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+    });
+    if (!loaded || !img.width) return null;
+    const scale = 360 / width;
+    const canvas = doc.createElement("canvas");
+    canvas.width = Math.round(width * scale);
+    canvas.height = Math.round(height * scale);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL("image/jpeg", 0.7);
+  } catch {
+    return null;
+  }
 }
 
 function hostOfUrl(url: string): string {

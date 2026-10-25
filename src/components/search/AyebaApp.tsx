@@ -420,6 +420,7 @@ function AyebaAppBody() {
   // isMobileApp() lit window.URL — evalue apres montage pour eviter
   // tout mismatch d'hydratation (serveur : false toujours).
   const [inApp, setInApp] = useState(false);
+  const [coarse, setCoarse] = useState(false);
   useEffect(() => {
     // window.self === top : pas de chrome imbrique si AyebaApp tourne dans
     // l'iframe d'un onglet (page d'accueil ouverte en tant que site web).
@@ -427,9 +428,20 @@ function AyebaAppBody() {
       () => setInApp(isMobileApp() && window.self === window.top),
       0,
     );
-    return () => window.clearTimeout(t);
+    const mq = window.matchMedia("(pointer: coarse), (max-width: 768px)");
+    const update = () => setCoarse(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => {
+      window.clearTimeout(t);
+      mq.removeEventListener("change", update);
+    };
   }, []);
-  const showTabBar = !inApp && tabs.length > 1;
+  // Strip d'onglets : desktop uniquement. Safari mobile n'en a jamais —
+  // sur tactile le chrome du bas (omnibox + bouton onglets) suffit.
+  const showTabBar = !inApp && !coarse && tabs.length > 1;
+  // Chrome façon Safari en bas : app native ET navigateurs mobiles (Safari iOS).
+  const showMobileChrome = (inApp || coarse) && window.self === window.top;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -499,7 +511,7 @@ function AyebaAppBody() {
           onSnapshot={(d) => updateTabSnapshot(activeTab.id, d)}
           onNewTab={(u) => openWebTab(u)}
         />
-        {inApp ? <MobileBrowserChrome onSearch={onOmniSearch} /> : null}
+        {showMobileChrome ? <MobileBrowserChrome onSearch={onOmniSearch} /> : null}
       </div>
     );
   }
@@ -523,7 +535,7 @@ function AyebaAppBody() {
             />
           </main>
         </div>
-        {inApp ? <MobileBrowserChrome onSearch={onOmniSearch} /> : null}
+        {showMobileChrome ? <MobileBrowserChrome onSearch={onOmniSearch} /> : null}
         <Modals />
       </>
     );
@@ -640,7 +652,7 @@ function AyebaAppBody() {
           ) : null}
         </div>
       </div>
-      {inApp ? <MobileBrowserChrome onSearch={onOmniSearch} /> : null}
+      {showMobileChrome ? <MobileBrowserChrome onSearch={onOmniSearch} /> : null}
       <Modals />
     </>
   );
