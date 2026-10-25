@@ -84,6 +84,7 @@ export const MEGA_SEEDS = [
   "https://ayeba.app/studio",
   "https://ayeba.app/developers",
   "https://ayeba.app/ayebi",
+  "https://ayeba.app/mail",
   // === Shopping RDC ===
   "https://www.jumia.cd/",
   "https://www.yango.com/",
@@ -100,6 +101,7 @@ export const MEGA_SEEDS = [
   "https://fr.wikipedia.org/wiki/Cat%C3%A9gorie:Faune_en_R%C3%A9publique_d%C3%A9mocratique_du_Congo",
   "https://fr.wikipedia.org/wiki/Cat%C3%A9gorie:Politique_en_R%C3%A9publique_d%C3%A9mocratique_du_Congo",
   // === Sitemaps majeurs ===
+  "https://ayeba.app/sitemap.xml",
   "https://www.bbc.com/sitemaps/https-sitemap-com-news-1.xml",
   "https://www.reuters.com/sitemap.xml",
   "https://www.radiookapi.net/sitemap.xml",

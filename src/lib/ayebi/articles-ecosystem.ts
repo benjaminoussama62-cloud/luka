@@ -198,7 +198,7 @@ export const ECOSYSTEM_ARTICLES: AyebiArticle[] = [
     subtitle: "Moteur de recherche · ayeba.app",
     category: "institution",
     summary:
-      "Ayeba est un moteur de recherche généraliste avec priorité à la République démocratique du Congo. Il propose recherche web, images, actualités, cartes, shopping, Ayebi (encyclopédie) et Ayeba Studio pour les éditeurs.",
+      "Ayeba est un moteur de recherche généraliste avec priorité à la République démocratique du Congo. Il propose recherche web, images, actualités, cartes, shopping, Ayebi (encyclopédie), Ayeba Mail (messagerie chiffrée @ayeba.app) et Ayeba Studio pour les éditeurs.",
     body: [],
     sections: [
       {
@@ -212,6 +212,7 @@ export const ECOSYSTEM_ARTICLES: AyebiArticle[] = [
         heading: "Compte et écosystème",
         paragraphs: [
           "Un compte Ayeba permet la connexion à Jemsa, TALA, SombaTeka, OMEGA et des applications tierces via OAuth / OpenID.",
+          "Ayeba Mail (ayeba.app/mail) fournit des adresses @ayeba.app vérifiées par SMS avec chiffrement de bout en bout et application Android.",
           "Ayeba Studio (Radar, Trace, Yield…) offre aux éditeurs des outils d’indexation, de requêtes et de performance — Radar est le premier module disponible.",
         ],
       },
@@ -227,7 +228,50 @@ export const ECOSYSTEM_ARTICLES: AyebiArticle[] = [
       { label: "Encyclopédie", value: "Ayebi (/ayebi)" },
       { label: "Éditeur", value: "DevAlpha" },
     ],
-    tags: ["ayeba", "recherche", "moteur", "rdc", "congo", "ayebi", "studio"],
-    relatedSlugs: ["devalpha", "jemsa", "kinshasa"],
+    tags: ["ayeba", "recherche", "moteur", "rdc", "congo", "ayebi", "studio", "mail"],
+    relatedSlugs: ["devalpha", "jemsa", "kinshasa", "ayeba-mail"],
+  },
+  {
+    slug: "ayeba-mail",
+    title: "Ayeba Mail",
+    subtitle: "Messagerie privée chiffrée · @ayeba.app",
+    category: "institution",
+    summary:
+      "Ayeba Mail est la messagerie sécurisée de l’écosystème Ayeba : adresses @ayeba.app vérifiées par téléphone, chiffrement de bout en bout entre comptes, envoi et réception d’e-mails classiques, application Android et webmail sur ayeba.app/mail.",
+    body: [],
+    sections: [
+      {
+        heading: "Présentation",
+        paragraphs: [
+          "Ayeba Mail (ayeba.app/mail) attribue une adresse @ayeba.app permanente à chaque utilisateur, vérifiée par code SMS — sans mot de passe à compromettre. Les échanges entre adresses Ayeba sont chiffrés de bout en bout : Ayeba ne conserve que le chiffré, jamais le contenu des messages.",
+          "Le service communique aussi avec l’extérieur : envoi et réception vers Gmail, Outlook et les autres messageries classiques, avec signatures DKIM, SPF et politique DMARC pour l’authenticité des messages.",
+        ],
+      },
+      {
+        heading: "Fonctionnalités",
+        paragraphs: [
+          "Webmail et application Android : boîte de réception, brouillons chiffrés, archivage, corbeille, suivi (étoile), recherche, notifications push, réponse et transfert avec citation.",
+          "Pièces jointes chiffrées, traduction intégrée (français, lingala, swahili, anglais), coffre numérique personnel et signature personnalisable.",
+        ],
+      },
+      {
+        heading: "Sécurité",
+        paragraphs: [
+          "Chiffrement de bout en bout (ECDH P-256, AES-256-GCM, HKDF) appliqué aux messages entre adresses @ayeba.app. Les messages externes sont stockés chiffrés au repos et transmis en TLS.",
+          "Les comptes sont vérifiés par SMS et les adresses ne sont jamais réattribuées, même après suppression d’un compte.",
+        ],
+      },
+    ],
+    timeline: [
+      { date: "2026", event: "Lancement du webmail et de l’application Android" },
+    ],
+    facts: [
+      { label: "Site", value: "ayeba.app/mail" },
+      { label: "Adresses", value: "@ayeba.app" },
+      { label: "Type", value: "Messagerie chiffrée" },
+      { label: "Éditeur", value: "DevAlpha" },
+    ],
+    tags: ["ayeba", "mail", "messagerie", "email", "e-mail", "courriel", "chiffré", "privée", "boîte"],
+    relatedSlugs: ["ayeba", "devalpha"],
   },
 ];
