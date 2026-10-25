@@ -722,7 +722,7 @@ export async function receiveExternalMail(opts: {
     }
     const pub = vaultPublicKey(acc.id);
     if (pub) {
-      const sealed = await sealMessage(pub, subj, body, files);
+      const sealed = await sealMessage(pub, subj, body, files, vaultMlkemKey(acc.id) ?? undefined);
       const messageId = insertSealed({
         threadId,
         accountId: acc.id,
@@ -1001,6 +1001,8 @@ async function notifyAccountPush(accountId: string, fromName: string, subject: s
 export type VaultRecord = {
   ecdhPublic: string;
   ecdsaPublic: string;
+  /** Clé publique ML-KEM-768 (hybride post-quantique) — '' si coffre ancien. */
+  mlkemPublic: string;
   privWrap: PassWrap;
   recoveryWrap: PassWrap;
   fingerprint: string;
@@ -1021,15 +1023,35 @@ export function vaultPublicKey(accountId: string): string | null {
   return pub.length > 40 ? pub : null;
 }
 
+/** Clé publique ML-KEM-768 du coffre — null si coffre pré-PQ. */
+export function vaultMlkemKey(accountId: string): string | null {
+  const r = db()
+    .prepare("SELECT vault_mlkem_pub AS pub FROM mail_accounts WHERE id = ?")
+    .get(accountId) as { pub?: string } | undefined;
+  const pub = r?.pub || "";
+  // ML-KEM-768 public key = 1184 octets → ~1580 en base64
+  return pub.length > 1400 ? pub : null;
+}
+
+/** Enregistre la clé PQ d'un coffre existant (upgrade transparent au déverrouillage). */
+export function setVaultMlkemKey(accountId: string, pub: string): { ok: true } | { error: string } {
+  if (!getVaultRecord(accountId)) return { error: "Coffre absent." };
+  db()
+    .prepare("UPDATE mail_accounts SET vault_mlkem_pub = ? WHERE id = ? AND vault_mlkem_pub = ''")
+    .run(pub, accountId);
+  return { ok: true };
+}
+
 export function getVaultRecord(accountId: string): VaultRecord | null {
   const r = db()
     .prepare(
-      "SELECT vault_ecdh_pub, vault_ecdsa_pub, vault_priv_wrap, vault_recovery_wrap, vault_fp FROM mail_accounts WHERE id = ?",
+      "SELECT vault_ecdh_pub, vault_ecdsa_pub, vault_mlkem_pub, vault_priv_wrap, vault_recovery_wrap, vault_fp FROM mail_accounts WHERE id = ?",
     )
     .get(accountId) as
     | {
         vault_ecdh_pub: string;
         vault_ecdsa_pub: string;
+        vault_mlkem_pub: string;
         vault_priv_wrap: string;
         vault_recovery_wrap: string;
         vault_fp: string;
@@ -1042,6 +1064,7 @@ export function getVaultRecord(accountId: string): VaultRecord | null {
   return {
     ecdhPublic: r.vault_ecdh_pub,
     ecdsaPublic: r.vault_ecdsa_pub,
+    mlkemPublic: r.vault_mlkem_pub || "",
     privWrap,
     recoveryWrap,
     fingerprint: r.vault_fp,
@@ -1060,12 +1083,13 @@ export function saveVault(
   db()
     .prepare(
       `UPDATE mail_accounts
-       SET vault_ecdh_pub = ?, vault_ecdsa_pub = ?, vault_priv_wrap = ?, vault_recovery_wrap = ?, vault_fp = ?
+       SET vault_ecdh_pub = ?, vault_ecdsa_pub = ?, vault_mlkem_pub = ?, vault_priv_wrap = ?, vault_recovery_wrap = ?, vault_fp = ?
        WHERE id = ? AND vault_ecdh_pub = ''`,
     )
     .run(
       v.ecdhPublic,
       v.ecdsaPublic,
+      v.mlkemPublic || "",
       JSON.stringify(v.privWrap),
       JSON.stringify(v.recoveryWrap),
       v.fingerprint,
@@ -1118,7 +1142,9 @@ export function consumeVaultChallenge(accountId: string, nonce: string): boolean
 
 export type MailKeyStatus = "ok" | "no-vault" | "missing";
 
-export function lookupMailKeys(emails: string[]): { email: string; status: MailKeyStatus; ecdhPublic?: string }[] {
+export function lookupMailKeys(
+  emails: string[],
+): { email: string; status: MailKeyStatus; ecdhPublic?: string; mlkemPublic?: string }[] {
   return emails.slice(0, 20).map((raw) => {
     const email = raw.trim().toLowerCase();
     if (!INTERNAL_RE.test(email)) return { email, status: "missing" as const };
@@ -1126,7 +1152,7 @@ export function lookupMailKeys(emails: string[]): { email: string; status: MailK
     if (!acc || acc.status !== "active") return { email, status: "missing" as const };
     const pub = vaultPublicKey(acc.id);
     if (!pub) return { email, status: "no-vault" as const };
-    return { email, status: "ok" as const, ecdhPublic: pub };
+    return { email, status: "ok" as const, ecdhPublic: pub, mlkemPublic: vaultMlkemKey(acc.id) ?? undefined };
   });
 }
 
@@ -1134,6 +1160,7 @@ export function lookupMailKeys(emails: string[]): { email: string; status: MailK
 export async function migrateLegacyToVault(accountId: string): Promise<number> {
   const pub = vaultPublicKey(accountId);
   if (!pub) return 0;
+  const mlkem = vaultMlkemKey(accountId) ?? undefined;
   const rows = db()
     .prepare(
       "SELECT id, subject_enc, body_enc FROM mail_messages WHERE account_id = ? AND enc = 0",
@@ -1141,7 +1168,7 @@ export async function migrateLegacyToVault(accountId: string): Promise<number> {
     .all(accountId) as { id: string; subject_enc: string; body_enc: string }[];
   let n = 0;
   for (const row of rows) {
-    const sealed = await sealText(pub, decryptText(row.subject_enc), decryptText(row.body_enc));
+    const sealed = await sealText(pub, decryptText(row.subject_enc), decryptText(row.body_enc), mlkem);
     db()
       .prepare(
         `UPDATE mail_messages
@@ -1326,7 +1353,7 @@ async function insertSealedNotice(
     });
     return;
   }
-  const sealed = await sealText(pub, subject, body);
+  const sealed = await sealText(pub, subject, body, vaultMlkemKey(accountId) ?? undefined);
   insertSealed({
     threadId: uid(),
     accountId,

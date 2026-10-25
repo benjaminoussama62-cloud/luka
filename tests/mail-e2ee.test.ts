@@ -26,7 +26,8 @@ function seedAccount(local = `e${++seq}`) {
   const db = getDb();
   const uid = `u-${local}`;
   const now = new Date().toISOString();
-  db.prepare("DELETE FROM mail_accounts WHERE id = ?").run(`acc-${local}`);
+  const phone = `+24382${String(s).padStart(7, "0")}`;
+  db.prepare("DELETE FROM mail_accounts WHERE id = ? OR phone = ?").run(`acc-${local}`, phone);
   db.prepare("DELETE FROM users WHERE id = ?").run(uid);
   db.prepare("INSERT INTO users (id, name, email, created_at) VALUES (?, ?, ?, ?)").run(
     uid,
@@ -37,7 +38,7 @@ function seedAccount(local = `e${++seq}`) {
   db.prepare(
     `INSERT INTO mail_accounts (id, user_id, address, email, phone, created_at, status, display_name)
      VALUES (?, ?, ?, ?, ?, ?, 'active', ?)`,
-  ).run(`acc-${local}`, uid, local, `${local}@ayeba.app`, `+24382${String(s).padStart(7, "0")}`, now, local);
+  ).run(`acc-${local}`, uid, local, `${local}@ayeba.app`, phone, now, local);
   return {
     id: `acc-${local}`,
     userId: uid,
@@ -63,6 +64,7 @@ describe("coffre e2e", () => {
     expect(saveVault(alice.id, {
       ecdhPublic: aliceVault.session.ecdhPublic,
       ecdsaPublic: aliceVault.session.ecdsaPublic,
+      mlkemPublic: aliceVault.session.mlkemPublic,
       privWrap: aliceVault.privWrap,
       recoveryWrap: aliceVault.recoveryWrap,
       fingerprint: aliceVault.session.fingerprint,
@@ -70,6 +72,7 @@ describe("coffre e2e", () => {
     expect(saveVault(bob.id, {
       ecdhPublic: bobVault.session.ecdhPublic,
       ecdsaPublic: bobVault.session.ecdsaPublic,
+      mlkemPublic: bobVault.session.mlkemPublic,
       privWrap: bobVault.privWrap,
       recoveryWrap: bobVault.recoveryWrap,
       fingerprint: bobVault.session.fingerprint,
@@ -149,12 +152,58 @@ describe("coffre e2e", () => {
     expect(meta.name).toBe("note.txt");
   }, 60_000);
 
+  it("hybride post-quantique : wrap avec kc ML-KEM, décodage et déterminisme", async () => {
+    const alice = seedAccount("alicepq");
+    const vault = await generateVault("phrase-pq-solide");
+    saveVault(alice.id, {
+      ecdhPublic: vault.session.ecdhPublic,
+      ecdsaPublic: vault.session.ecdsaPublic,
+      mlkemPublic: vault.session.mlkemPublic,
+      privWrap: vault.privWrap,
+      recoveryWrap: vault.recoveryWrap,
+      fingerprint: vault.session.fingerprint,
+    });
+
+    // Enveloppe hybride : kc (ciphertext ML-KEM-768) présent.
+    const { raw, key } = await createContentKey();
+    const wrap = await wrapContentKey(
+      vault.session.ecdhPublic,
+      raw,
+      vault.session.mlkemPublic,
+    );
+    expect(wrap.kc).toBeDefined();
+    expect(wrap.kc!.length).toBeGreaterThan(1000);
+
+    // Le destinataire ouvre avec sa session (mlkemSecret dérivé) — la clé
+    // ouverte chiffre/déchiffre exactement comme la clé de contenu d'origine.
+    const opened = await openContentKey(vault.session, wrap);
+    const probe = await encryptUtf8(opened, "pq");
+    expect(await decryptUtf8(key, probe)).toBe("pq");
+    raw.fill(0);
+
+    // Déterminisme : la même paire ML-KEM est dérivée à chaque déverrouillage.
+    const again = await unlockVault(
+      "phrase-pq-solide",
+      vault.privWrap,
+      vault.session.ecdhPublic,
+      vault.session.ecdsaPublic,
+      "passphrase",
+    );
+    expect(again.mlkemPublic).toBe(vault.session.mlkemPublic);
+
+    // Sans la clé PQ, l'ouverture hybride est impossible.
+    await expect(
+      openContentKey({ ...vault.session, mlkemSecret: new Uint8Array(0) }, wrap),
+    ).rejects.toThrow();
+  }, 60_000);
+
   it("scelle un mail externe entrant et refuse l'envoi hors coffre sans confirmation", async () => {
     const bob = seedAccount("bobe2ein");
     const vault = await generateVault("phrase-inbound-ok");
     saveVault(bob.id, {
       ecdhPublic: vault.session.ecdhPublic,
       ecdsaPublic: vault.session.ecdsaPublic,
+      mlkemPublic: vault.session.mlkemPublic,
       privWrap: vault.privWrap,
       recoveryWrap: vault.recoveryWrap,
       fingerprint: vault.session.fingerprint,
@@ -183,6 +232,7 @@ describe("coffre e2e", () => {
     saveVault(alice.id, {
       ecdhPublic: av.session.ecdhPublic,
       ecdsaPublic: av.session.ecdsaPublic,
+      mlkemPublic: av.session.mlkemPublic,
       privWrap: av.privWrap,
       recoveryWrap: av.recoveryWrap,
       fingerprint: av.session.fingerprint,

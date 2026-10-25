@@ -15,10 +15,24 @@ import {
 export type VaultInfo = {
   ecdhPublic: string;
   ecdsaPublic: string;
+  /** Clé publique ML-KEM-768 (post-quantique) — absente sur les coffres anciens. */
+  mlkemPublic?: string;
   privWrap: PassWrap;
   recoveryWrap: PassWrap;
   fingerprint: string;
 };
+
+/** Publie la clé publique post-quantique si le coffre n'en a pas encore (upgrade transparent). */
+async function publishMlkem(session: VaultSession, vault: VaultInfo) {
+  if (vault.mlkemPublic || !session.mlkemPublic) return;
+  try {
+    await fetch("/api/mail/vault/mlkem", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mlkemPublic: session.mlkemPublic }),
+    });
+  } catch { /* l'upgrade se retentera au prochain déverrouillage */ }
+}
 
 async function prove(session: VaultSession): Promise<{ nonce: string; signature: string } | { error: string }> {
   const res = await fetch("/api/mail/vault/challenge", { method: "POST" });
@@ -66,6 +80,7 @@ export function VaultCreate({ onReady }: { onReady: (session: VaultSession) => v
         body: JSON.stringify({
           ecdhPublic: pending.session.ecdhPublic,
           ecdsaPublic: pending.session.ecdsaPublic,
+          mlkemPublic: pending.session.mlkemPublic,
           privWrap: pending.privWrap,
           recoveryWrap: pending.recoveryWrap,
         }),
@@ -165,6 +180,7 @@ export function VaultUnlock({ vault, onReady }: { vault: VaultInfo; onReady: (se
         mode,
       );
       setSecret("");
+      void publishMlkem(opened, vault);
       if (mode === "recovery") setSession(opened);
       else onReady(opened);
     } catch {

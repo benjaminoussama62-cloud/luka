@@ -22,7 +22,7 @@ type Msg = {
   enc?: 0 | 1;
   sealedSubject?: { iv: string; ct: string };
   sealedBody?: { iv: string; ct: string };
-  wrap?: { ek: string; iv: string; ct: string };
+  wrap?: { ek: string; iv: string; ct: string; kc?: string };
   attachmentCount?: number;
   attachments?: { id: string; byteSize: number; fileIv: string; nameIv: string; nameCt: string }[];
 };
@@ -808,7 +808,9 @@ export function MailApp() {
                 <h1>{open.subject}</h1>
                 <p className="mail-seal">
                   {open.enc === 1
-                    ? "Déchiffré sur cet appareil. Ayeba n’a pas le texte."
+                    ? open.wrap?.kc
+                      ? "Déchiffré sur cet appareil — enveloppe hybride ECDH + ML-KEM-768 (post-quantique). Ayeba n’a pas le texte."
+                      : "Déchiffré sur cet appareil. Ayeba n’a pas le texte."
                     : "Chiffré au repos sur les serveurs Ayeba — pas de bout en bout. Message système, échec de remise, ou reçu avant le coffre."}
                 </p>
 
@@ -1256,6 +1258,11 @@ const FEATURES = [
     t: "Coffre de bout en bout",
     d: "Les messages échangés entre adresses @ayeba.app sont chiffrés de bout en bout sur votre appareil. Ayeba conserve le chiffré, jamais le contenu.",
     i: "◆",
+  },
+  {
+    t: "Hybride post-quantique",
+    d: "Chaque enveloppe combine ECDH P-256 et ML-KEM-768 : casser un message exigerait de casser les deux — même face à un ordinateur quantique.",
+    i: "◇",
   },
   {
     t: "Vérifié par téléphone",

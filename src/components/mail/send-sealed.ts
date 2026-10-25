@@ -65,7 +65,7 @@ export async function sendSealedMessage(opts: {
     return { error: "Confirmez l'envoi hors coffre pour les adresses externes." };
   }
 
-  let keys: { email: string; status: string; ecdhPublic?: string }[] = [];
+  let keys: { email: string; status: string; ecdhPublic?: string; mlkemPublic?: string }[] = [];
   if (internals.length && !opts.draft) {
     const res = await fetch("/api/mail/keys", {
       method: "POST",
@@ -87,11 +87,11 @@ export async function sendSealedMessage(opts: {
     const subjectCipher: CipherPack = await encryptUtf8(key, opts.subject.trim() || "(sans objet)");
     const bodyCipher: CipherPack = await encryptUtf8(key, opts.body);
     const wraps: Record<string, KeyWrap> = {
-      [opts.selfEmail]: await wrapContentKey(opts.session.ecdhPublic, raw),
+      [opts.selfEmail]: await wrapContentKey(opts.session.ecdhPublic, raw, opts.session.mlkemPublic),
     };
     if (!opts.draft) {
       for (const k of keys) {
-        if (k.ecdhPublic) wraps[k.email] = await wrapContentKey(k.ecdhPublic, raw);
+        if (k.ecdhPublic) wraps[k.email] = await wrapContentKey(k.ecdhPublic, raw, k.mlkemPublic);
       }
     }
 

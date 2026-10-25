@@ -43,7 +43,9 @@ function asWrap(v: unknown): KeyWrap | null {
   if (!v || typeof v !== "object") return null;
   const o = v as KeyWrap;
   if ([o.ek, o.iv, o.ct].some((s) => typeof s !== "string" || s.length < 8 || s.length > 8000)) return null;
-  return { ek: o.ek, iv: o.iv, ct: o.ct };
+  // kc = ciphertext ML-KEM-768 (1088 octets → ~1450 en base64) pour l'enveloppe hybride.
+  if (o.kc !== undefined && (typeof o.kc !== "string" || o.kc.length < 100 || o.kc.length > 2400)) return null;
+  return { ek: o.ek, iv: o.iv, ct: o.ct, ...(o.kc ? { kc: o.kc } : {}) };
 }
 
 export async function POST(req: Request) {

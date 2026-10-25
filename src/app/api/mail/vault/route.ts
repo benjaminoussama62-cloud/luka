@@ -52,12 +52,14 @@ export async function POST(req: Request) {
   const body = (await req.json().catch(() => null)) as {
     ecdhPublic?: string;
     ecdsaPublic?: string;
+    mlkemPublic?: string;
     privWrap?: unknown;
     recoveryWrap?: unknown;
   } | null;
 
   const ecdhPublic = String(body?.ecdhPublic || "");
   const ecdsaPublic = String(body?.ecdsaPublic || "");
+  const mlkemPublic = String(body?.mlkemPublic || "");
   const privWrap = asWrap(body?.privWrap, 600_000);
   const recoveryWrap = asWrap(body?.recoveryWrap, 120_000);
   if (!privWrap || !recoveryWrap || ecdhPublic.length < 80 || ecdsaPublic.length < 80) {
@@ -72,11 +74,23 @@ export async function POST(req: Request) {
   } catch {
     return NextResponse.json({ error: "Clé publique illisible." }, { status: 400 });
   }
+  // ML-KEM-768 : clé publique de 1184 octets (~1580 en base64). On la valide en
+  // tentant une encapsulation — une clé corrompue lève une erreur.
+  if (mlkemPublic) {
+    try {
+      const { ml_kem768 } = await import("@noble/post-quantum/ml-kem.js");
+      const { b64ToBytes } = await import("@/lib/mail/e2ee");
+      ml_kem768.encapsulate(b64ToBytes(mlkemPublic));
+    } catch {
+      return NextResponse.json({ error: "Clé post-quantique illisible." }, { status: 400 });
+    }
+  }
 
   const fingerprint = await fingerprintSpki(ecdhPublic);
   const saved = saveVault(account.id, {
     ecdhPublic,
     ecdsaPublic,
+    mlkemPublic,
     privWrap,
     recoveryWrap,
     fingerprint,
