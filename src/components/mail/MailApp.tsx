@@ -27,7 +27,17 @@ type Msg = {
   attachments?: { id: string; byteSize: number; fileIv: string; nameIv: string; nameCt: string }[];
 };
 
-type OpenFile = { id: string; name: string; mime: string; iv: string; size: number };
+type OpenFile = { id: string; name: string; mime: string; iv: string; size: number; key?: CryptoKey };
+
+type ThreadMsg = {
+  msg: Msg;
+  subject: string;
+  body: string;
+  files: OpenFile[];
+  failed?: boolean;
+};
+
+type ComposeInit = { to?: string; subject?: string; body?: string; draftId?: string; files?: File[] };
 
 type Account = {
   email: string;
@@ -91,7 +101,9 @@ export function MailApp() {
   const [q, setQ] = useState("");
   const [messages, setMessages] = useState<Msg[]>([]);
   const [open, setOpen] = useState<Msg | null>(null);
-  const [compose, setCompose] = useState(false);
+  const [thread, setThread] = useState<ThreadMsg[]>([]);
+  const [compose, setCompose] = useState<ComposeInit | null>(null);
+  const [navOpen, setNavOpen] = useState(false);
   const [toast, setToast] = useState("");
   const [translation, setTranslation] = useState<string | null>(null);
   const [translating, setTranslating] = useState(false);
@@ -234,24 +246,18 @@ export function MailApp() {
     setVaultInfo(undefined);
     setMessages([]);
     setOpen(null);
+    setThread([]);
     setContentKey(null);
     setOpenFiles([]);
     setGate("landing");
     void refreshSession();
   };
 
-  const openMessage = async (id: string) => {
-    const res = await fetch(`/api/mail/messages/${id}`);
-    if (!res.ok) return;
-    const data = (await res.json()) as { message: Msg };
-    setTranslation(null);
-    setContentKey(null);
-    setOpenFiles([]);
-    const message = data.message;
-    if (message.enc === 1) {
+  const decryptOne = useCallback(
+    async (message: Msg): Promise<ThreadMsg> => {
+      if (message.enc !== 1) return { msg: message, subject: message.subject, body: message.body, files: [] };
       if (!vault || !message.wrap || !message.sealedSubject || !message.sealedBody) {
-        showToast("Ce message est dans le coffre — déverrouillez-le pour le lire.");
-        return;
+        return { msg: message, subject: "Message chiffré", body: "", files: [], failed: true };
       }
       try {
         const key = await openContentKey(vault, message.wrap);
@@ -259,42 +265,71 @@ export function MailApp() {
         const body = await decryptUtf8(key, message.sealedBody);
         const files: OpenFile[] = [];
         for (const a of message.attachments || []) {
+          let name = "Pièce jointe", mime = "application/octet-stream";
           try {
             const meta = JSON.parse(await decryptUtf8(key, { iv: a.nameIv, ct: a.nameCt })) as { name?: string; mime?: string };
-            files.push({
-              id: a.id,
-              name: meta.name || "Pièce jointe",
-              mime: meta.mime || "application/octet-stream",
-              iv: a.fileIv,
-              size: a.byteSize,
-            });
-          } catch {
-            files.push({ id: a.id, name: "Pièce jointe", mime: "application/octet-stream", iv: a.fileIv, size: a.byteSize });
-          }
+            name = meta.name || name;
+            mime = meta.mime || mime;
+          } catch { /* métadonnées illisibles — nom générique */ }
+          files.push({ id: a.id, name, mime, iv: a.fileIv, size: a.byteSize, key });
         }
-        setContentKey(key);
-        setOpenFiles(files);
-        setOpen({ ...message, subject, body });
+        return { msg: message, subject, body, files };
       } catch {
-        showToast("Impossible de déchiffrer ce message.");
-        return;
+        return { msg: message, subject: "Message chiffré", body: "", files: [], failed: true };
+      }
+    },
+    [vault],
+  );
+
+  const openMessage = async (id: string) => {
+    const res = await fetch(`/api/mail/messages/${id}`);
+    if (!res.ok) return;
+    const data = (await res.json()) as { message: Msg };
+    const message = data.message;
+    setTranslation(null);
+    setContentKey(null);
+    setOpenFiles([]);
+    const mine = await decryptOne(message);
+    if (mine.failed) {
+      showToast("Ce message est dans le coffre — déverrouillez-le pour le lire.");
+      return;
+    }
+    // Brouillon : on reprend la rédaction au lieu d'ouvrir le lecteur.
+    if (message.folder === "drafts") {
+      setCompose({ to: message.to.join(", "), subject: mine.subject, body: mine.body, draftId: message.id });
+      setOpen(null);
+      setThread([]);
+      return;
+    }
+    setContentKey(mine.files.find((f) => f.key)?.key ?? null);
+    setOpenFiles(mine.files);
+    setOpen({ ...message, subject: mine.subject, body: mine.body });
+    // Vue conversation : tous les messages du fil, déchiffrés.
+    if (message.threadId) {
+      const tr = await fetch(`/api/mail/messages?thread=${encodeURIComponent(message.threadId)}`);
+      if (tr.ok) {
+        const td = (await tr.json()) as { messages: Msg[] };
+        setThread(await Promise.all((td.messages || []).map((m) => decryptOne(m))));
+      } else {
+        setThread([mine]);
       }
     } else {
-      setOpen(message);
+      setThread([mine]);
     }
     setMessages((ms) => ms.map((m) => (m.id === id ? { ...m, read: true } : m)));
-    setUnread((u) => Math.max(0, u - 1));
+    if (!message.read) setUnread((u) => Math.max(0, u - 1));
   };
 
   const downloadFile = async (file: OpenFile) => {
-    if (!contentKey) return;
+    const key = file.key ?? contentKey;
+    if (!key) return;
     const res = await fetch(`/api/mail/attachments/${file.id}`);
     if (!res.ok) {
       showToast("Téléchargement impossible.");
       return;
     }
     const cipher = new Uint8Array(await res.arrayBuffer());
-    const plain = await decryptBytes(contentKey, file.iv, cipher);
+    const plain = await decryptBytes(key, file.iv, cipher);
     const copy = new ArrayBuffer(plain.byteLength);
     new Uint8Array(copy).set(plain);
     const blob = new Blob([copy], { type: file.mime || "application/octet-stream" });
@@ -304,6 +339,51 @@ export function MailApp() {
     a.download = file.name || "piece-jointe";
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  // Répondre / Transférer — citation façon clients mails.
+  const quoteOf = (t: ThreadMsg) =>
+    `\n\n——————\nLe ${fmtFull(t.msg.at)}, ${t.msg.fromName || t.msg.from} a écrit :\n` +
+    t.body.split("\n").map((l) => `> ${l}`).join("\n");
+
+  const reSubject = (s: string) => (/^re\s*:/i.test(s.trim()) ? s : `Re : ${s}`);
+
+  const startReply = (t: ThreadMsg, all = false) => {
+    const self = account!.email.toLowerCase();
+    const fromIsMe = t.msg.from.toLowerCase() === self;
+    let to: string[];
+    if (all) {
+      to = [...new Set([t.msg.from, ...t.msg.to].filter((e) => e.toLowerCase() !== self))];
+      if (!to.length) to = [...t.msg.to];
+    } else {
+      to = fromIsMe ? [...t.msg.to] : [t.msg.from];
+    }
+    setCompose({ to: to.join(", "), subject: reSubject(t.subject), body: quoteOf(t) });
+  };
+
+  const startForward = async (t: ThreadMsg) => {
+    const fwd = /^tr\s*:|^fwd?\s*:/i.test(t.subject.trim()) ? t.subject : `Tr : ${t.subject}`;
+    // Les pièces jointes voyagent avec le transfert.
+    const files: File[] = [];
+    for (const f of t.files) {
+      try {
+        const key = f.key;
+        if (!key) continue;
+        const res = await fetch(`/api/mail/attachments/${f.id}`);
+        if (!res.ok) continue;
+        const cipher = new Uint8Array(await res.arrayBuffer());
+        const plain = await decryptBytes(key, f.iv, cipher);
+        const copy = new ArrayBuffer(plain.byteLength);
+        new Uint8Array(copy).set(plain);
+        files.push(new File([copy], f.name, { type: f.mime }));
+      } catch { /* PJ ignorée si indéchiffrable */ }
+    }
+    setCompose({
+      to: "",
+      subject: fwd,
+      body: `\n\n——————\nMessage transféré — De : ${t.msg.fromName || t.msg.from} <${t.msg.from}>\nDate : ${fmtFull(t.msg.at)}\nObjet : ${t.subject}\nÀ : ${t.msg.to.join(", ")}\n\n${t.body}`,
+      files,
+    });
   };
 
   const patch = async (id: string, body: Record<string, unknown>) => {
@@ -316,10 +396,21 @@ export function MailApp() {
   };
 
   const removeMessage = async (id: string) => {
+    const inTrash = folder === "trash" || open?.folder === "trash";
     await fetch(`/api/mail/messages/${id}`, { method: "DELETE" });
     setOpen(null);
+    setThread([]);
     void loadMessages(folder, q);
-    showToast("Message déplacé vers la corbeille.");
+    showToast(inTrash ? "Message supprimé définitivement." : "Message déplacé vers la corbeille.");
+  };
+
+  const emptyTrash = async () => {
+    const trashed = messages.filter((m) => m.folder === "trash");
+    await Promise.all(trashed.map((m) => fetch(`/api/mail/messages/${m.id}`, { method: "DELETE" })));
+    setOpen(null);
+    setThread([]);
+    void loadMessages(folder, q);
+    showToast("Corbeille vidée.");
   };
 
   const translate = async () => {
@@ -427,6 +518,7 @@ export function MailApp() {
   return (
     <div className="mail-root">
       <header className="mail-topbar">
+        <button className="mail-burger" aria-label="Dossiers" onClick={() => setNavOpen(true)}>☰</button>
         <div className="mail-brand">
           <strong>AYEBA</strong>
           <span className="mail-kicker">MAIL</span>
@@ -513,7 +605,7 @@ export function MailApp() {
 
       <div className="mail-body">
         <nav className="mail-rail">
-          <button className="mail-compose-btn" onClick={() => setCompose(true)}>
+          <button className="mail-compose-btn" onClick={() => setCompose({})}>
             <span className="lbl">Nouveau message</span>
             <span style={{ display: "none" }} className="mail-compose-icon">✎</span>
           </button>
@@ -521,7 +613,7 @@ export function MailApp() {
             <button
               key={f.id}
               className={`mail-folder ${folder === f.id ? "active" : ""}`}
-              onClick={() => { setFolder(f.id); setOpen(null); }}
+              onClick={() => { setFolder(f.id); setOpen(null); setThread([]); }}
             >
               <span>{f.icon}</span>
               <span className="lbl">{f.label}</span>
@@ -537,13 +629,65 @@ export function MailApp() {
           </div>
         </nav>
 
+        {navOpen && (
+          <div className="mail-drawer-overlay" onClick={() => setNavOpen(false)}>
+            <nav className="mail-drawer" onClick={(e) => e.stopPropagation()}>
+              <div className="mail-drawer-head">
+                <div className="mail-brand">
+                  <strong>AYEBA</strong>
+                  <span className="mail-kicker">MAIL</span>
+                </div>
+                <button className="mail-icon-btn" onClick={() => setNavOpen(false)}>✕</button>
+              </div>
+              <button
+                className="mail-compose-btn"
+                onClick={() => { setNavOpen(false); setCompose({}); }}
+              >
+                <span className="lbl">Nouveau message</span>
+              </button>
+              {FOLDERS.map((f) => (
+                <button
+                  key={f.id}
+                  className={`mail-folder ${folder === f.id ? "active" : ""}`}
+                  onClick={() => { setFolder(f.id); setOpen(null); setThread([]); setNavOpen(false); }}
+                >
+                  <span>{f.icon}</span>
+                  <span className="lbl">{f.label}</span>
+                  {f.id === "inbox" && unread > 0 && <span className="count">{unread}</span>}
+                </button>
+              ))}
+              <div className="mail-rail-note">
+                <b>COFFRE BOUT EN BOUT</b>
+                <br />
+                @AYEBA.APP ILLISIBLE PAR NOUS
+                <br />
+                COMPTE VÉRIFIÉ PAR SMS
+              </div>
+            </nav>
+          </div>
+        )}
+
         <section className="mail-list">
           <div className="mail-list-head">
             <span className="mail-kicker">
               {FOLDERS.find((f) => f.id === folder)?.label.toUpperCase()}
             </span>
-            <span className="mail-kicker" style={{ color: "var(--faint)" }}>
-              {visible.length}
+            <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              {folder === "trash" && messages.length > 0 && (
+                <button className="mail-btn link" style={{ fontSize: 11 }} onClick={() => void emptyTrash()}>
+                  Vider
+                </button>
+              )}
+              <button
+                className="mail-icon-btn"
+                title="Actualiser"
+                onClick={() => { void loadMessages(folder, q); void loadAccount(); }}
+              >
+                ↻
+              </button>
+              <span className="mail-kicker" style={{ color: "var(--faint)" }}>
+                {visible.length}
+              </span>
             </span>
           </div>
           {visible.map((m) => (
@@ -552,21 +696,51 @@ export function MailApp() {
               className={`mail-item ${!m.read ? "unread" : ""} ${open?.id === m.id ? "active" : ""}`}
               onClick={() => void openMessage(m.id)}
             >
-              <div className="mail-item-top">
-                {!m.read && <i className="dot" />}
-                <span className="mail-item-from">{m.fromName || m.from}</span>
-                {m.enc === 1 && <span className="badge system">COFFRE</span>}
-                {m.kind === "bounce" && <span className="badge bounce">ÉCHEC</span>}
-                {m.kind === "system" && <span className="badge system">AYEBA</span>}
-                {(m.attachmentCount || 0) > 0 && <span className="badge system">PJ</span>}
-                {m.starred && <span className="star">★</span>}
-                <span className="mail-item-time">{fmtTime(m.at)}</span>
+              <div
+                className="mail-item-avatar"
+                style={{
+                  background: `linear-gradient(135deg, hsl(${hueFrom(m.from)} 62% 42%), hsl(${(hueFrom(m.from) + 40) % 360} 70% 30%))`,
+                }}
+              >
+                {(m.fromName || m.from)[0].toUpperCase()}
               </div>
-              <div className="mail-item-subject">{m.enc === 1 ? (subjects[m.id] || "Message chiffré…") : m.subject}</div>
-              <div className="mail-item-snippet">
-                {m.enc === 1
-                  ? (m.attachmentCount ? `${m.attachmentCount} pièce${m.attachmentCount > 1 ? "s" : ""} jointe${m.attachmentCount > 1 ? "s" : ""}` : "Chiffré de bout en bout")
-                  : m.body}
+              <div className="mail-item-main">
+                <div className="mail-item-top">
+                  {!m.read && <i className="dot" />}
+                  <span className="mail-item-from">{m.fromName || m.from}</span>
+                  {(m.attachmentCount || 0) > 0 && <span className="badge system">📎</span>}
+                  <span
+                    className={`star ${m.starred ? "on" : ""}`}
+                    role="button"
+                    aria-label="Suivre"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setMessages((ms) => ms.map((x) => (x.id === m.id ? { ...x, starred: !x.starred } : x)));
+                      void fetch(`/api/mail/messages/${m.id}`, {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ starred: !m.starred }),
+                      });
+                    }}
+                  >
+                    {m.starred ? "★" : "☆"}
+                  </span>
+                  <span className="mail-item-time">{fmtTime(m.at)}</span>
+                </div>
+                <div className="mail-item-subject">{m.enc === 1 ? (subjects[m.id] || "Message chiffré…") : m.subject}</div>
+                <div className="mail-item-snippet">
+                  {m.enc === 1
+                    ? (m.attachmentCount ? `${m.attachmentCount} pièce${m.attachmentCount > 1 ? "s" : ""} jointe${m.attachmentCount > 1 ? "s" : ""}` : "Chiffré de bout en bout")
+                    : m.body}
+                </div>
+                {(m.enc === 1 || m.kind !== "mail") && (
+                  <div className="mail-item-badges">
+                    {m.enc === 1 && <span className="badge system">COFFRE</span>}
+                    {m.kind === "bounce" && <span className="badge bounce">ÉCHEC</span>}
+                    {m.kind === "system" && <span className="badge system">AYEBA</span>}
+                    {m.folder === "drafts" && <span className="badge draft">BROUILLON</span>}
+                  </div>
+                )}
               </div>
             </button>
           ))}
@@ -577,7 +751,7 @@ export function MailApp() {
           )}
         </section>
 
-        <section className="mail-reader">
+        <section className={`mail-reader ${open ? "is-open" : ""}`}>
           {!open ? (
             <div className="mail-reader-empty">
               <span className="mail-kicker">AYEBA MAIL</span>
@@ -585,88 +759,163 @@ export function MailApp() {
             </div>
           ) : (
             <>
-              <h1>{open.subject}</h1>
-              <p className="mail-seal">
-                {open.enc === 1
-                  ? "Déchiffré sur cet appareil. Ayeba n’a pas le texte."
-                  : "Chiffré au repos sur les serveurs Ayeba — pas de bout en bout. Message système, échec de remise, ou reçu avant le coffre."}
-              </p>
-              <div className="mail-reader-meta">
-                <div className="from">
-                  {open.fromName || open.from}
-                  <span>{open.from}</span>
-                </div>
-                <div className="to">à {open.to.join(", ")}</div>
-                <span className="when">{fmtFull(open.at)}</span>
-                <div className="mail-reader-actions">
+              <div className="mail-reader-topbar">
+                <button className="mail-back" onClick={() => { setOpen(null); setThread([]); }} aria-label="Retour à la liste">
+                  ← <span className="lbl">{FOLDERS.find((f) => f.id === folder)?.label}</span>
+                </button>
+                <div className="mail-reader-topbar-actions">
                   <button
-                    className="mail-btn"
-                    onClick={() => void patch(open.id, { starred: !open.starred })}
+                    className="mail-icon-btn"
+                    title="Archiver"
+                    onClick={() => void patch(open.id, { folder: open.folder === "archive" ? "inbox" : "archive" }).then(() => { setOpen(null); setThread([]); })}
                   >
-                    {open.starred ? "★ Suivi" : "☆ Suivre"}
+                    {open.folder === "archive" ? "↩" : "▣"}
                   </button>
-                  <button
-                    className="mail-btn"
-                    onClick={() => void patch(open.id, { read: false }).then(() => setOpen(null))}
-                  >
-                    Non lu
-                  </button>
-                  <button
-                    className="mail-btn"
-                    onClick={() => void patch(open.id, { folder: "archive" }).then(() => setOpen(null))}
-                  >
-                    Archiver
-                  </button>
-                  <button className="mail-btn danger" onClick={() => void removeMessage(open.id)}>
-                    Supprimer
-                  </button>
-                </div>
-              </div>
-              <div className="mail-reader-body">{open.body}</div>
-              {openFiles.length > 0 && (
-                <div className="mail-files">
-                  {openFiles.map((f) => (
-                    <button key={f.id} className="mail-file" onClick={() => void downloadFile(f)}>
-                      <b>{f.name}</b>
-                      <span>{Math.max(1, Math.round(f.size / 1024))} Ko · déchiffrer</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              <div className="mail-translate">
-                <div className="mail-translate-bar">
-                  {translation ? (
-                    <button className="mail-btn link" onClick={() => setTranslation(null)}>
-                      Voir l’original
-                    </button>
-                  ) : (
-                    <button className="mail-btn link" onClick={() => void translate()} disabled={translating}>
-                      {translating ? "Traduction…" : "Traduire"}
+                  {open.folder === "trash" && (
+                    <button
+                      className="mail-icon-btn"
+                      title="Restaurer"
+                      onClick={() => void patch(open.id, { folder: "inbox" }).then(() => { setOpen(null); setThread([]); })}
+                    >
+                      ↩
                     </button>
                   )}
-                  <span className="mail-translate-note">Le texte déchiffré part au service de langue.</span>
-                  <select value={targetLang} onChange={(e) => setTargetLang(e.target.value)}>
-                    {LANGS.map((l) => (
-                      <option key={l.id} value={l.id}>{l.label}</option>
-                    ))}
-                  </select>
+                  <button
+                    className="mail-icon-btn"
+                    title={open.starred ? "Retirer le suivi" : "Suivre"}
+                    onClick={() => {
+                      void patch(open.id, { starred: !open.starred });
+                      setOpen({ ...open, starred: !open.starred });
+                      setThread((ts) => ts.map((t) => (t.msg.id === open.id ? { ...t, msg: { ...t.msg, starred: !open.starred } } : t)));
+                    }}
+                  >
+                    {open.starred ? "★" : "☆"}
+                  </button>
+                  <button
+                    className="mail-icon-btn"
+                    title="Marquer non lu"
+                    onClick={() => void patch(open.id, { read: false }).then(() => { setOpen(null); setThread([]); setUnread((u) => u + 1); })}
+                  >
+                    ✉
+                  </button>
+                  <button className="mail-icon-btn danger" title={open.folder === "trash" ? "Supprimer définitivement" : "Supprimer"} onClick={() => void removeMessage(open.id)}>
+                    🗑
+                  </button>
                 </div>
-                {translation && <div className="mail-translated">{translation}</div>}
               </div>
+
+              <div className="mail-reader-scroll">
+                <h1>{open.subject}</h1>
+                <p className="mail-seal">
+                  {open.enc === 1
+                    ? "Déchiffré sur cet appareil. Ayeba n’a pas le texte."
+                    : "Chiffré au repos sur les serveurs Ayeba — pas de bout en bout. Message système, échec de remise, ou reçu avant le coffre."}
+                </p>
+
+                {(thread.length ? thread : [{ msg: open, subject: open.subject, body: open.body, files: openFiles }]).map((t) => (
+                  <article key={t.msg.id} className={`mail-msg ${t.msg.id === open.id ? "focus" : ""}`}>
+                    <div className="mail-msg-head">
+                      <div
+                        className="mail-msg-avatar"
+                        style={{
+                          background: `linear-gradient(135deg, hsl(${hueFrom(t.msg.from)} 62% 42%), hsl(${(hueFrom(t.msg.from) + 40) % 360} 70% 30%))`,
+                        }}
+                      >
+                        {(t.msg.fromName || t.msg.from)[0].toUpperCase()}
+                      </div>
+                      <div className="mail-msg-id">
+                        <div className="from">{t.msg.fromName || t.msg.from}<span>{t.msg.from}</span></div>
+                        <div className="to">à {t.msg.to.join(", ")}</div>
+                      </div>
+                      <span className="when" title={fmtFull(t.msg.at)}>{fmtTime(t.msg.at)}</span>
+                    </div>
+                    {t.failed ? (
+                      <div className="mail-msg-body" style={{ color: "var(--faint)", fontStyle: "italic" }}>
+                        Message chiffré — déverrouillez le coffre pour le lire.
+                      </div>
+                    ) : (
+                      <div className="mail-msg-body">{t.body}</div>
+                    )}
+                    {t.files.length > 0 && (
+                      <div className="mail-files">
+                        {t.files.map((f) => (
+                          <button key={f.id} className="mail-file" onClick={() => void downloadFile(f)}>
+                            <b>{f.name}</b>
+                            <span>{Math.max(1, Math.round(f.size / 1024))} Ko · déchiffrer</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {!t.failed && t.msg.kind === "mail" && (
+                      <div className="mail-msg-actions">
+                        <button className="mail-btn" onClick={() => startReply(t)}>↩ Répondre</button>
+                        {(t.msg.to.length > 1 || t.msg.from.toLowerCase() !== account.email.toLowerCase()) && (
+                          <button className="mail-btn" onClick={() => startReply(t, true)}>↩↩ Tous</button>
+                        )}
+                        <button className="mail-btn" onClick={() => void startForward(t)}>→ Transférer</button>
+                      </div>
+                    )}
+                  </article>
+                ))}
+
+                <div className="mail-translate">
+                  <div className="mail-translate-bar">
+                    {translation ? (
+                      <button className="mail-btn link" onClick={() => setTranslation(null)}>
+                        Voir l’original
+                      </button>
+                    ) : (
+                      <button className="mail-btn link" onClick={() => void translate()} disabled={translating}>
+                        {translating ? "Traduction…" : "Traduire"}
+                      </button>
+                    )}
+                    <span className="mail-translate-note">Le texte déchiffré part au service de langue.</span>
+                    <select value={targetLang} onChange={(e) => setTargetLang(e.target.value)}>
+                      {LANGS.map((l) => (
+                        <option key={l.id} value={l.id}>{l.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  {translation && <div className="mail-translated">{translation}</div>}
+                </div>
+              </div>
+
+              {open.kind === "mail" && (
+                <div className="mail-reader-bar">
+                  <button className="mail-send-btn" onClick={() => startReply(thread.find((t) => t.msg.id === open.id) ?? { msg: open, subject: open.subject, body: open.body, files: openFiles })}>
+                    ↩ Répondre
+                  </button>
+                  <button className="mail-btn" onClick={() => void startForward(thread.find((t) => t.msg.id === open.id) ?? { msg: open, subject: open.subject, body: open.body, files: openFiles })}>
+                    → Transférer
+                  </button>
+                </div>
+              )}
             </>
           )}
         </section>
       </div>
+
+      {!open && !compose && (
+        <button className="mail-fab" aria-label="Nouveau message" onClick={() => setCompose({})}>
+          ✎
+        </button>
+      )}
 
       {compose && (
         <ComposePanel
           self={account.email}
           signature={account.signature}
           session={vault}
-          onClose={() => setCompose(false)}
+          initial={compose}
+          onClose={() => setCompose(null)}
           onSent={(delivered, bounced, draft) => {
-            setCompose(false);
+            const draftId = compose.draftId;
+            setCompose(null);
+            if (!draft && draftId) {
+              // Le brouillon est envoyé : on le purge (corbeille puis suppression).
+              void fetch(`/api/mail/messages/${draftId}`, { method: "DELETE" })
+                .then(() => fetch(`/api/mail/messages/${draftId}`, { method: "DELETE" }));
+            }
             void loadMessages(folder, q);
             showToast(
               draft
@@ -688,6 +937,7 @@ export function MailApp() {
             setVault(null);
             setSettingsOpen(false);
             setOpen(null);
+            setThread([]);
             setContentKey(null);
           }}
           onToast={showToast}
@@ -881,19 +1131,21 @@ function ComposePanel({
   self,
   signature,
   session,
+  initial,
   onClose,
   onSent,
 }: {
   self: string;
   signature: string;
   session: VaultSession;
+  initial?: ComposeInit;
   onClose: () => void;
   onSent: (delivered: string[], bounced: { address: string }[], draft?: boolean) => void;
 }) {
-  const [to, setTo] = useState("");
-  const [subject, setSubject] = useState("");
-  const [body, setBody] = useState("");
-  const [files, setFiles] = useState<File[]>([]);
+  const [to, setTo] = useState(initial?.to ?? "");
+  const [subject, setSubject] = useState(initial?.subject ?? "");
+  const [body, setBody] = useState(initial?.body ?? "");
+  const [files, setFiles] = useState<File[]>(initial?.files ?? []);
   const [externalAck, setExternalAck] = useState(false);
   const [sending, setSending] = useState(false);
   const [err, setErr] = useState("");
