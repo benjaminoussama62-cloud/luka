@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AyebaMailLogo } from "@/components/auth/OAuthLogos";
 
 type SigninProps = {
@@ -25,6 +25,19 @@ const MAX_BIRTHDATE = new Date(Date.now() - 13 * 365.25 * 86400e3)
   .toISOString()
   .slice(0, 10);
 
+/** Préserve la destination d'origine (?next=) à travers les liens signin ↔ signup. */
+function useNextHref(base: string) {
+  const [href, setHref] = useState(base);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const raw = new URLSearchParams(window.location.search).get("next") || "";
+    if (raw.startsWith("/") && !raw.startsWith("//")) {
+      setHref(`${base}?next=${encodeURIComponent(raw)}`);
+    }
+  }, [base]);
+  return href;
+}
+
 function hueFrom(text: string) {
   let h = 0;
   for (const c of text) h = (h * 31 + c.charCodeAt(0)) % 360;
@@ -32,6 +45,7 @@ function hueFrom(text: string) {
 }
 
 export function SigninFlow({ onDone, onBack }: SigninProps) {
+  const signupHref = useNextHref("/mail/signup");
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
   const [sent, setSent] = useState(false);
@@ -131,7 +145,7 @@ export function SigninFlow({ onDone, onBack }: SigninProps) {
             </button>
           )}
           <p className="mail-auth-alt">
-            Pas encore de boîte ? <a href="/mail/signup">Créer un compte AYEBA Mail</a>
+            Pas encore de boîte ? <a href={signupHref}>Créer un compte AYEBA Mail</a>
           </p>
         </div>
       </div>
@@ -140,6 +154,7 @@ export function SigninFlow({ onDone, onBack }: SigninProps) {
 }
 
 export function SignupFlow({ defaultName = "", onDone, onBack }: SignupProps) {
+  const signinHref = useNextHref("/mail/signin");
   const [step, setStep] = useState(1);
   const [address, setAddress] = useState("");
   const [avail, setAvail] = useState<{ ok: boolean; msg: string } | null>(null);
@@ -342,7 +357,7 @@ export function SignupFlow({ defaultName = "", onDone, onBack }: SignupProps) {
             </button>
           )}
           <p className="mail-auth-alt">
-            Déjà un compte ? <a href="/mail/signin">Se connecter</a>
+            Déjà un compte ? <a href={signinHref}>Se connecter</a>
           </p>
         </div>
       </div>
