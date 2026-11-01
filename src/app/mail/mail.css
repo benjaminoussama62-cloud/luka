@@ -168,8 +168,8 @@
   width: 100%;
   margin-bottom: 20px;
   padding: 11px 16px;
-  background: var(--ink);
-  color: #000;
+  background: var(--orange);
+  color: #fff;
   border: 0;
   border-radius: 3px;
   font-family: var(--font-mono), monospace;
@@ -179,7 +179,7 @@
   cursor: pointer;
   transition: background 0.18s var(--ease-out);
 }
-.mail-compose-btn:hover { background: var(--orange); color: #fff; }
+.mail-compose-btn:hover { filter: brightness(1.12); }
 .mail-folder {
   display: flex;
   align-items: center;
@@ -573,7 +573,7 @@
 /* Mobile — liste plein écran, lecteur par-dessus */
 @media (max-width: 860px) {
   .mail-rail { width: 60px; padding: 14px 8px; }
-  .mail-folder span.lbl, .mail-folder .count, .mail-rail-note, .mail-compose-btn .lbl { display: none; }
+  .mail-rail .mail-folder span.lbl, .mail-rail .mail-folder .count, .mail-rail-note { display: none; }
   .mail-compose-btn { padding: 11px 0; }
   .mail-list { width: 100%; border-right: 0; }
   .mail-reader {

@@ -882,7 +882,7 @@ export function MailApp() {
                         ))}
                       </div>
                     )}
-                    {!t.failed && t.msg.kind === "mail" && (
+                    {!t.failed && t.msg.kind !== "bounce" && (
                       <div className="mail-msg-actions">
                         <button className="mail-btn" onClick={() => startReply(t)}><IcReply size={13} /> Répondre</button>
                         {(t.msg.to.length > 1 || t.msg.from.toLowerCase() !== account.email.toLowerCase()) && (
@@ -916,7 +916,7 @@ export function MailApp() {
                 </div>
               </div>
 
-              {open.kind === "mail" && (
+              {open.kind !== "bounce" && (
                 <div className="mail-reader-bar">
                   <button className="mail-send-btn" onClick={() => startReply(thread.find((t) => t.msg.id === open.id) ?? { msg: open, subject: open.subject, body: open.body, files: openFiles })}>
                     <IcReply size={14} /> Répondre
