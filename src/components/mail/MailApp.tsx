@@ -5,6 +5,28 @@ import { useAuth } from "@/lib/auth";
 import { decryptBytes, decryptUtf8, openContentKey, type VaultSession } from "@/lib/mail/e2ee";
 import { sendSealedMessage } from "@/components/mail/send-sealed";
 import { SecurityPane, VaultCreate, VaultUnlock, type VaultInfo } from "@/components/mail/VaultScreens";
+import {
+  IcArchive,
+  IcBack,
+  IcClip,
+  IcClose,
+  IcCompose,
+  IcDraft,
+  IcForward,
+  IcInbox,
+  IcLock,
+  IcMailOpen,
+  IcMenu,
+  IcRefresh,
+  IcReply,
+  IcReplyAll,
+  IcRestore,
+  IcSearch,
+  IcSend,
+  IcSettings,
+  IcStar,
+  IcTrash,
+} from "@/components/mail/icons";
 
 type Msg = {
   id: string;
@@ -49,13 +71,13 @@ type Account = {
   createdAt: string;
 };
 
-const FOLDERS: { id: string; label: string; icon: string }[] = [
-  { id: "inbox", label: "Boîte de réception", icon: "▤" },
-  { id: "starred", label: "Suivis", icon: "★" },
-  { id: "sent", label: "Envoyés", icon: "↗" },
-  { id: "drafts", label: "Brouillons", icon: "▱" },
-  { id: "archive", label: "Archives", icon: "▣" },
-  { id: "trash", label: "Corbeille", icon: "✕" },
+const FOLDERS: { id: string; label: string; icon: (p: { size?: number }) => React.ReactNode }[] = [
+  { id: "inbox", label: "Boîte de réception", icon: (p) => <IcInbox {...p} /> },
+  { id: "starred", label: "Suivis", icon: (p) => <IcStar {...p} /> },
+  { id: "sent", label: "Envoyés", icon: (p) => <IcSend {...p} /> },
+  { id: "drafts", label: "Brouillons", icon: (p) => <IcDraft {...p} /> },
+  { id: "archive", label: "Archives", icon: (p) => <IcArchive {...p} /> },
+  { id: "trash", label: "Corbeille", icon: (p) => <IcTrash {...p} /> },
 ];
 
 const LANGS = [
@@ -518,7 +540,7 @@ export function MailApp() {
   return (
     <div className="mail-root">
       <header className="mail-topbar">
-        <button className="mail-burger" aria-label="Dossiers" onClick={() => setNavOpen(true)}>☰</button>
+        <button className="mail-burger" aria-label="Dossiers" onClick={() => setNavOpen(true)}><IcMenu size={20} /></button>
         <div className="mail-brand">
           <strong>AYEBA</strong>
           <span className="mail-kicker">MAIL</span>
@@ -607,7 +629,7 @@ export function MailApp() {
         <nav className="mail-rail">
           <button className="mail-compose-btn" onClick={() => setCompose({})}>
             <span className="lbl">Nouveau message</span>
-            <span style={{ display: "none" }} className="mail-compose-icon">✎</span>
+            <span className="mail-compose-icon"><IcCompose size={15} /></span>
           </button>
           {FOLDERS.map((f) => (
             <button
@@ -615,7 +637,7 @@ export function MailApp() {
               className={`mail-folder ${folder === f.id ? "active" : ""}`}
               onClick={() => { setFolder(f.id); setOpen(null); setThread([]); }}
             >
-              <span>{f.icon}</span>
+              <span className="fi">{f.icon({ size: 15 })}</span>
               <span className="lbl">{f.label}</span>
               {f.id === "inbox" && unread > 0 && <span className="count">{unread}</span>}
             </button>
@@ -637,7 +659,7 @@ export function MailApp() {
                   <strong>AYEBA</strong>
                   <span className="mail-kicker">MAIL</span>
                 </div>
-                <button className="mail-icon-btn" onClick={() => setNavOpen(false)}>✕</button>
+                <button className="mail-icon-btn" onClick={() => setNavOpen(false)}><IcClose size={17} /></button>
               </div>
               <button
                 className="mail-compose-btn"
@@ -651,17 +673,29 @@ export function MailApp() {
                   className={`mail-folder ${folder === f.id ? "active" : ""}`}
                   onClick={() => { setFolder(f.id); setOpen(null); setThread([]); setNavOpen(false); }}
                 >
-                  <span>{f.icon}</span>
+                  <span className="fi">{f.icon({ size: 15 })}</span>
                   <span className="lbl">{f.label}</span>
                   {f.id === "inbox" && unread > 0 && <span className="count">{unread}</span>}
                 </button>
               ))}
-              <div className="mail-rail-note">
-                <b>COFFRE BOUT EN BOUT</b>
-                <br />
-                @AYEBA.APP ILLISIBLE PAR NOUS
-                <br />
-                COMPTE VÉRIFIÉ PAR SMS
+              <div className="mail-drawer-foot">
+                <button className="mail-folder" onClick={() => { setNavOpen(false); setSettingsOpen(true); }}>
+                  <span className="fi"><IcSettings size={15} /></span>
+                  <span className="lbl">Paramètres</span>
+                </button>
+                <button
+                  className="mail-folder"
+                  onClick={() => {
+                    setNavOpen(false);
+                    setVault(null);
+                    setOpen(null);
+                    setThread([]);
+                    setContentKey(null);
+                  }}
+                >
+                  <span className="fi"><IcLock size={15} /></span>
+                  <span className="lbl">Verrouiller le coffre</span>
+                </button>
               </div>
             </nav>
           </div>
@@ -683,7 +717,7 @@ export function MailApp() {
                 title="Actualiser"
                 onClick={() => { void loadMessages(folder, q); void loadAccount(); }}
               >
-                ↻
+                <IcRefresh size={15} />
               </button>
               <span className="mail-kicker" style={{ color: "var(--faint)" }}>
                 {visible.length}
@@ -708,7 +742,7 @@ export function MailApp() {
                 <div className="mail-item-top">
                   {!m.read && <i className="dot" />}
                   <span className="mail-item-from">{m.fromName || m.from}</span>
-                  {(m.attachmentCount || 0) > 0 && <span className="badge system">📎</span>}
+                  {(m.attachmentCount || 0) > 0 && <span className="badge system" style={{ display: "inline-flex", padding: "2px 4px" }}><IcClip size={11} /></span>}
                   <span
                     className={`star ${m.starred ? "on" : ""}`}
                     role="button"
@@ -723,7 +757,7 @@ export function MailApp() {
                       });
                     }}
                   >
-                    {m.starred ? "★" : "☆"}
+                    <IcStar size={14} filled={m.starred} />
                   </span>
                   <span className="mail-item-time">{fmtTime(m.at)}</span>
                 </div>
@@ -761,15 +795,15 @@ export function MailApp() {
             <>
               <div className="mail-reader-topbar">
                 <button className="mail-back" onClick={() => { setOpen(null); setThread([]); }} aria-label="Retour à la liste">
-                  ← <span className="lbl">{FOLDERS.find((f) => f.id === folder)?.label}</span>
+                  <IcBack size={17} /> <span className="lbl">{FOLDERS.find((f) => f.id === folder)?.label}</span>
                 </button>
                 <div className="mail-reader-topbar-actions">
                   <button
                     className="mail-icon-btn"
-                    title="Archiver"
+                    title={open.folder === "archive" ? "Restaurer dans la boîte" : "Archiver"}
                     onClick={() => void patch(open.id, { folder: open.folder === "archive" ? "inbox" : "archive" }).then(() => { setOpen(null); setThread([]); })}
                   >
-                    {open.folder === "archive" ? "↩" : "▣"}
+                    {open.folder === "archive" ? <IcRestore size={15} /> : <IcArchive size={15} />}
                   </button>
                   {open.folder === "trash" && (
                     <button
@@ -777,7 +811,7 @@ export function MailApp() {
                       title="Restaurer"
                       onClick={() => void patch(open.id, { folder: "inbox" }).then(() => { setOpen(null); setThread([]); })}
                     >
-                      ↩
+                      <IcRestore size={15} />
                     </button>
                   )}
                   <button
@@ -789,17 +823,17 @@ export function MailApp() {
                       setThread((ts) => ts.map((t) => (t.msg.id === open.id ? { ...t, msg: { ...t.msg, starred: !open.starred } } : t)));
                     }}
                   >
-                    {open.starred ? "★" : "☆"}
+                    <IcStar size={15} filled={open.starred} />
                   </button>
                   <button
                     className="mail-icon-btn"
                     title="Marquer non lu"
                     onClick={() => void patch(open.id, { read: false }).then(() => { setOpen(null); setThread([]); setUnread((u) => u + 1); })}
                   >
-                    ✉
+                    <IcMailOpen size={15} />
                   </button>
                   <button className="mail-icon-btn danger" title={open.folder === "trash" ? "Supprimer définitivement" : "Supprimer"} onClick={() => void removeMessage(open.id)}>
-                    🗑
+                    <IcTrash size={15} />
                   </button>
                 </div>
               </div>
@@ -850,11 +884,11 @@ export function MailApp() {
                     )}
                     {!t.failed && t.msg.kind === "mail" && (
                       <div className="mail-msg-actions">
-                        <button className="mail-btn" onClick={() => startReply(t)}>↩ Répondre</button>
+                        <button className="mail-btn" onClick={() => startReply(t)}><IcReply size={13} /> Répondre</button>
                         {(t.msg.to.length > 1 || t.msg.from.toLowerCase() !== account.email.toLowerCase()) && (
-                          <button className="mail-btn" onClick={() => startReply(t, true)}>↩↩ Tous</button>
+                          <button className="mail-btn" onClick={() => startReply(t, true)}><IcReplyAll size={13} /> Tous</button>
                         )}
-                        <button className="mail-btn" onClick={() => void startForward(t)}>→ Transférer</button>
+                        <button className="mail-btn" onClick={() => void startForward(t)}><IcForward size={13} /> Transférer</button>
                       </div>
                     )}
                   </article>
@@ -885,10 +919,10 @@ export function MailApp() {
               {open.kind === "mail" && (
                 <div className="mail-reader-bar">
                   <button className="mail-send-btn" onClick={() => startReply(thread.find((t) => t.msg.id === open.id) ?? { msg: open, subject: open.subject, body: open.body, files: openFiles })}>
-                    ↩ Répondre
+                    <IcReply size={14} /> Répondre
                   </button>
                   <button className="mail-btn" onClick={() => void startForward(thread.find((t) => t.msg.id === open.id) ?? { msg: open, subject: open.subject, body: open.body, files: openFiles })}>
-                    → Transférer
+                    <IcForward size={14} /> Transférer
                   </button>
                 </div>
               )}
@@ -899,7 +933,7 @@ export function MailApp() {
 
       {!open && !compose && (
         <button className="mail-fab" aria-label="Nouveau message" onClick={() => setCompose({})}>
-          ✎
+          <IcCompose size={22} />
         </button>
       )}
 
@@ -1035,7 +1069,7 @@ function SettingsPanel({
       <div className="mail-settings" onClick={(e) => e.stopPropagation()}>
         <div className="mail-settings-head">
           <span className="mail-kicker">PARAMÈTRES</span>
-          <button className="mail-btn" onClick={onClose}>✕</button>
+          <button className="mail-icon-btn" onClick={onClose}><IcClose size={16} /></button>
         </div>
         <div className="mail-switch" style={{ marginBottom: 16 }}>
           <button className={tab === "compte" ? "on" : ""} onClick={() => setTab("compte")}>Compte</button>
@@ -1065,7 +1099,7 @@ function SettingsPanel({
             ) : (
               (name || account.address)[0].toUpperCase()
             )}
-            <span className="mail-settings-avatar-edit">✎</span>
+            <span className="mail-settings-avatar-edit"><IcCompose size={11} /></span>
           </button>
           <input
             ref={fileRef}
@@ -1209,7 +1243,7 @@ function ComposePanel({
     <div className="mail-compose">
       <div className="mail-compose-head">
         <span className="mail-kicker">NOUVEAU MESSAGE — COFFRE — {self}</span>
-        <button className="mail-btn" onClick={onClose}>✕</button>
+        <button className="mail-icon-btn" onClick={onClose}><IcClose size={16} /></button>
       </div>
       <input value={to} onChange={(e) => setTo(e.target.value)} placeholder="À — prenom@ayeba.app" />
       <input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Objet" />
@@ -1277,7 +1311,7 @@ const FEATURES = [
   {
     t: "Remise garantie",
     d: "En cas d'échec de livraison, une notification explicite vous informe immédiatement. Aucun message ne disparaît en silence.",
-    i: "↩",
+    i: "✓",
   },
   {
     t: "Consommation réduite",

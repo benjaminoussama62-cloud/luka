@@ -1129,3 +1129,38 @@
 @media (min-width: 861px) {
   .mail-drawer-overlay, .mail-burger, .mail-fab { display: none !important; }
 }
+
+/* ── Icônes SVG — alignement uniforme ──────────────────────────────── */
+.mail-folder .fi { display: inline-flex; flex-shrink: 0; }
+.mail-btn { display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
+.mail-icon-btn svg { display: block; }
+.mail-msg-actions .mail-btn svg { opacity: 0.85; }
+.mail-back { display: none; align-items: center; gap: 4px; }
+.mail-item .star svg { display: block; }
+.mail-compose-btn { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.mail-compose-icon { display: inline-flex; }
+.mail-reader-bar .mail-send-btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
+.mail-reader-bar .mail-btn { display: inline-flex; align-items: center; gap: 7px; }
+.mail-file b { word-break: break-all; }
+
+/* ── Drawer : pied avec actions ────────────────────────────────────── */
+.mail-drawer-foot {
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* ── Topbar mobile : l'avatar ne sort jamais de l'écran ───────────── */
+.mail-profile { flex-shrink: 0; }
+.mail-search { min-width: 0; }
+@media (max-width: 860px) {
+  .mail-topbar { gap: 8px; }
+  .mail-search { flex: 1; min-width: 0; padding: 0 10px; }
+  .mail-brand strong { font-size: 16px; }
+}
+@media (max-width: 420px) {
+  .mail-brand .mail-kicker { display: none; }
+}
