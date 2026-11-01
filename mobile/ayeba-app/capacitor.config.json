@@ -5,7 +5,8 @@
   "server": {
     "url": "https://ayeba.app/?app=1",
     "cleartext": false,
-    "androidScheme": "https"
+    "androidScheme": "https",
+    "errorPath": "error.html"
   },
   "android": {
     "backgroundColor": "#050507",

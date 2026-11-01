@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#050507" />
+    <title>AYEBA — Connexion impossible</title>
+    <style>
+      * { box-sizing: border-box; }
+      html, body { height: 100%; margin: 0; }
+      body {
+        background:
+          radial-gradient(120% 50% at 50% -10%, rgba(0, 160, 255, 0.16), transparent 60%),
+          #050507;
+        color: #e8ecf1;
+        font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem;
+        text-align: center;
+      }
+      .mark {
+        width: 84px;
+        height: 84px;
+        border-radius: 22px;
+        margin-bottom: 1.6rem;
+        box-shadow: 0 0 44px rgba(255, 80, 60, 0.35);
+      }
+      h1 { font-size: 1.15rem; font-weight: 650; margin: 0 0 0.7rem; }
+      p { font-size: 0.88rem; color: #8b93a3; max-width: 30rem; margin: 0 0 1.7rem; line-height: 1.55; }
+      button {
+        background: linear-gradient(135deg, #7df0ff, #38bdf8);
+        color: #04121a;
+        border: 0;
+        border-radius: 999px;
+        padding: 0.85rem 2.3rem;
+        font-size: 0.92rem;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        box-shadow: 0 6px 20px rgba(56, 189, 248, 0.35);
+      }
+      button:active { transform: scale(0.96); }
+    </style>
+  </head>
+  <body>
+    <img class="mark" src="ayeba-mark.png" alt="AYEBA" onerror="this.style.display='none'" />
+    <h1>Connexion impossible</h1>
+    <p>AYEBA n'a pas pu se connecter au serveur.<br />Vérifiez votre connexion internet, puis réessayez.</p>
+    <button onclick="window.location.reload()">Réessayer</button>
+  </body>
+</html>
