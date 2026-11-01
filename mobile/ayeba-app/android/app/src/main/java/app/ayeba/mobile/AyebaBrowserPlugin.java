@@ -172,6 +172,14 @@ public class AyebaBrowserPlugin extends Plugin {
             }
 
             @Override
+            public void onReceivedError(WebView view, android.webkit.WebResourceRequest request,
+                                        android.webkit.WebResourceError error) {
+                if (!request.isForMainFrame()) return;
+                String failed = request.getUrl() == null ? "" : request.getUrl().toString();
+                view.loadDataWithBaseURL(null, ayebaErrorPage(failed), "text/html", "utf-8", null);
+            }
+
+            @Override
             public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
                 handler.cancel();
                 pendingSslHandler = handler;
@@ -527,5 +535,35 @@ public class AyebaBrowserPlugin extends Plugin {
             if (container != null) container.setVisibility(View.GONE);
             call.resolve();
         });
+    }
+
+    /** Page d'erreur AYEBA (remplace la page generique du systeme). */
+    private static String ayebaErrorPage(String url) {
+        String host = url;
+        try {
+            host = android.net.Uri.parse(url).getHost();
+            if (host == null) host = url;
+        } catch (Exception ignored) {
+        }
+        return "<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'/>"
+                + "<style>"
+                + "html,body{height:100%;margin:0;background:#050507;color:#e8ecf1;"
+                + "font-family:-apple-system,Segoe UI,Roboto,sans-serif}"
+                + ".w{min-height:100%;display:flex;flex-direction:column;align-items:center;"
+                + "justify-content:center;padding:2rem;text-align:center;box-sizing:border-box;"
+                + "background:radial-gradient(120% 50% at 50% -10%,rgba(0,160,255,.14),transparent 60%)}"
+                + ".g{font-size:52px;line-height:1;margin-bottom:1.4rem;opacity:.9}"
+                + "h1{font-size:1.15rem;font-weight:650;margin:0 0 .7rem;letter-spacing:.01em}"
+                + "p{font-size:.88rem;color:#8b93a3;max-width:32rem;margin:0 0 1.6rem;line-height:1.55}"
+                + ".h{color:#7df0ff;font-weight:600;word-break:break-all}"
+                + "button{background:linear-gradient(135deg,#7df0ff,#38bdf8);color:#04121a;border:0;"
+                + "border-radius:999px;padding:.8rem 2.2rem;font-size:.92rem;font-weight:700;"
+                + "letter-spacing:.02em;box-shadow:0 6px 20px rgba(56,189,248,.35)}"
+                + "</style></head><body><div class='w'><div class='g'>&#9673;</div>"
+                + "<h1>Page indisponible</h1>"
+                + "<p>AYEBA n'a pas pu charger cette page.<br/><span class='h'>" + host
+                + "</span><br/><br/>Verifiez votre connexion internet, puis reessayez. "
+                + "Si le probleme persiste, le site bloque peut-etre l'affichage dans un navigateur integre.</p>"
+                + "<button onclick='location.reload()'>Recharger</button></div></body></html>";
     }
 }

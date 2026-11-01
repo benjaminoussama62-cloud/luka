@@ -26,7 +26,7 @@
       "androidSplashResourceName": "splash"
     },
     "StatusBar": {
-      "style": "DARK",
+      "style": "LIGHT",
       "backgroundColor": "#050507"
     }
   }

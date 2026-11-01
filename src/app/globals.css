@@ -5253,3 +5253,14 @@ body.ayeba-mobile-chrome .ayeba-home-shell {
 @media (pointer: coarse), (max-width: 768px) {
   .ayeba-tabbar { display: none !important; }
 }
+
+/* ── Bouton connexion compact sur mobile (pas de gros bloc blanc) ────────── */
+@media (pointer: coarse), (max-width: 768px) {
+  .ayeba-profile > button.ayeba-cta,
+  button.ayeba-cta {
+    padding: 0.5rem 0.9rem !important;
+    font-size: 0.72rem !important;
+    letter-spacing: 0.08em !important;
+    border-radius: 999px !important;
+  }
+}
