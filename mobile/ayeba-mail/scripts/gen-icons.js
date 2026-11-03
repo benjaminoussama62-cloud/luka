@@ -23,12 +23,14 @@ const GRADIENT = `<linearGradient id="ayebaA" x1="20%" y1="10%" x2="80%" y2="90%
     <stop offset="100%" stop-color="#e85d04"/>
   </linearGradient>`;
 
-// Foreground adaptatif : enveloppe seule sur fond transparent, ~62% du canvas (zone sûre).
+// Foreground adaptatif : enveloppe seule sur fond transparent.
+// Zone sûre circulaire Android = ~66% du canvas (72/108) — l'enveloppe (304px de large
+// dans son repère 512) est mise à l'échelle 0.24 → ~73px, pleine zone sûre, trait épais.
 const foregroundSvg = (size) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" width="${size}" height="${size}">
   <defs>${GRADIENT}</defs>
-  <g transform="translate(54,54) scale(0.27) translate(-256,-256)">
-    <rect x="104" y="158" width="304" height="196" rx="30" fill="none" stroke="url(#ayebaA)" stroke-width="26"/>
-    <path d="M118 182 L256 296 L394 182" fill="none" stroke="url(#ayebaA)" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>
+  <g transform="translate(54,54) scale(0.24) translate(-256,-256)">
+    <rect x="104" y="158" width="304" height="196" rx="30" fill="none" stroke="url(#ayebaA)" stroke-width="32"/>
+    <path d="M118 182 L256 296 L394 182" fill="none" stroke="url(#ayebaA)" stroke-width="32" stroke-linecap="round" stroke-linejoin="round"/>
   </g>
 </svg>`;
 
