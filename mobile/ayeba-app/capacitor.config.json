@@ -6,7 +6,11 @@
     "url": "https://ayeba.app/?app=1",
     "cleartext": false,
     "androidScheme": "https",
-    "errorPath": "error.html"
+    "errorPath": "error.html",
+    "allowNavigation": [
+      "ayeba.app",
+      "*.ayeba.app"
+    ]
   },
   "android": {
     "backgroundColor": "#050507",
