@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Ayeba Mbongo">
+  <defs>
+    <linearGradient id="ayebaBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0a0a0e"/>
+      <stop offset="100%" stop-color="#12141c"/>
+    </linearGradient>
+    <linearGradient id="ayebaA" x1="20%" y1="10%" x2="80%" y2="90%">
+      <stop offset="0%" stop-color="#7df0ff"/>
+      <stop offset="45%" stop-color="#00b4ff"/>
+      <stop offset="100%" stop-color="#e85d04"/>
+    </linearGradient>
+  </defs>
+  <!-- Maskable : fond plein cadre (zone sûre), glyphe centré sans bordure -->
+  <rect width="512" height="512" fill="url(#ayebaBg)"/>
+  <rect x="128" y="150" width="256" height="200" rx="32" fill="none" stroke="url(#ayebaA)" stroke-width="26"/>
+  <path d="M128 190 h84 a58 58 0 0 1 0 116 h-84" fill="none" stroke="url(#ayebaA)" stroke-width="26" stroke-linejoin="round"/>
+  <circle cx="330" cy="248" r="16" fill="url(#ayebaA)"/>
+</svg>
