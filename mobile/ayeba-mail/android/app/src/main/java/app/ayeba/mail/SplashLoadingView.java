@@ -12,15 +12,13 @@ import android.graphics.Shader;
 import android.view.View;
 import android.view.animation.LinearInterpolator;
 
-// Écran de chargement : LE LOGO COMPLET (tuile sombre + contour cyan +
-// enveloppe dégradée identique au store) + une ligne lumineuse qui court
-// le long du cadre — le splash système et le chargement sont cohérents.
+// Écran de chargement : cadre arrondi + enveloppe dégradée (couleurs du store)
+// + une ligne lumineuse qui court le long du cadre. Fond transparent — la
+// vue flotte sur l'écran noir, identique au rendu souhaité.
 public class SplashLoadingView extends View {
-  private final Paint bgPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
   private final Paint framePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
   private final Paint runnerPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
   private final Paint envPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-  private final Path logoClip = new Path();
   private final Path framePath = new Path();
   private final Path segPath = new Path();
   private final Path envBox = new Path();
@@ -54,13 +52,7 @@ public class SplashLoadingView extends View {
   protected void onSizeChanged(int w, int h, int oldw, int oldh) {
     super.onSizeChanged(w, h, oldw, oldh);
     float s = w / 512f;
-    // Tuile du logo : carré arrondi plein, dégradé sombre identique à l'icône
-    logoClip.reset();
-    logoClip.addRoundRect(new RectF(0, 0, w, h), 108 * s, 108 * s, Path.Direction.CW);
-    bgPaint.setShader(new LinearGradient(0, 0, w, h,
-        new int[] { 0xFF0A0A0E, 0xFF12141C },
-        new float[] { 0f, 1f }, Shader.TileMode.CLAMP));
-    // Contour cyan du logo (anneau 22..490, rayon 92)
+    // Contour arrondi (anneau 22..490, rayon 92) — le cadre que la ligne trace
     framePath.reset();
     framePath.addRoundRect(new RectF(22 * s, 22 * s, 490 * s, 490 * s), 92 * s, 92 * s, Path.Direction.CW);
     framePaint.setStrokeWidth(6 * s);
@@ -91,10 +83,6 @@ public class SplashLoadingView extends View {
   protected void onDraw(Canvas canvas) {
     super.onDraw(canvas);
     if (measure == null) return;
-    int save = canvas.save();
-    canvas.clipPath(logoClip);
-    canvas.drawPaint(bgPaint);
-    canvas.restoreToCount(save);
     canvas.drawPath(framePath, framePaint);
     canvas.drawPath(envBox, envPaint);
     canvas.drawPath(envFlap, envPaint);
