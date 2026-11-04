@@ -596,3 +596,7 @@ a.mn-btn-primary { text-decoration: none; display: inline-block; }
 .mn-sheet-head button { background: none; border: 0; color: var(--faint, #6b7280); font-size: 18px; cursor: pointer; }
 .mn-err { color: var(--bad, #fb7185); font-size: 13px; margin: 8px 0; }
 @media (min-width: 560px) { .mn-sheet { border-radius: 18px; margin-bottom: 8vh; } }
+
+.mn-faq { border: 1px solid rgba(255,255,255,.08); border-radius: 12px; padding: 12px 14px; background: rgba(255,255,255,.03); }
+.mn-faq summary { cursor: pointer; font-size: 13.5px; font-weight: 600; color: #fff; }
+.mn-faq p { font-size: 13px; color: var(--muted, #9ca3af); line-height: 1.6; margin: 8px 0 0; }

@@ -755,9 +755,11 @@ function SettingsSheet({
           <section className="mn-set-group">
             <span className="mn-set-title">Produit</span>
             <div className="mn-set-links">
+              <Link href="/mbongo/aide">Aide &amp; FAQ</Link>
+              <Link href="/mbongo/apropos">À propos</Link>
               <Link href="/privacy/mbongo">Confidentialité Ayeba Mbongo</Link>
               <Link href="/mbongo/conditions">Conditions d&apos;utilisation</Link>
-              <Link href="/support">Aide &amp; support</Link>
+              <Link href="/support">Support</Link>
               <Link href="/mbongo/suppression" className="mn-danger">Fermer le portefeuille</Link>
             </div>
           </section>
