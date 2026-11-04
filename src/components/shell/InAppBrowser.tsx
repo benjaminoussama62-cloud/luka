@@ -55,11 +55,9 @@ export function InAppBrowser({
   const wrapRef = useRef<HTMLDivElement>(null);
   const prevTabRef = useRef<string | null>(null);
   const native = typeof window !== "undefined" && nativeBrowserAvailable();
-  // Mode mobile : app native OU tout navigateur tactile (Safari iOS inclus) —
-  // la barre d'outils interne desktop ne doit jamais s'afficher sur mobile.
-  const mobile =
-    typeof window !== "undefined" &&
-    (isMobileApp() || window.matchMedia("(pointer: coarse)").matches);
+  // Mode mobile : uniquement dans l'app native — le site web mobile
+  // reste un site, le chrome navigateur ne s'y affiche jamais.
+  const mobile = typeof window !== "undefined" && isMobileApp();
 
   /* ---------------- Mode natif : vraie WebView Android ---------------- */
 

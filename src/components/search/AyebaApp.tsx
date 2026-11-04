@@ -440,8 +440,9 @@ function AyebaAppBody() {
   // Strip d'onglets : desktop uniquement. Safari mobile n'en a jamais —
   // sur tactile le chrome du bas (omnibox + bouton onglets) suffit.
   const showTabBar = !inApp && !coarse && tabs.length > 1;
-  // Chrome façon Safari en bas : app native ET navigateurs mobiles (Safari iOS).
-  const showMobileChrome = (inApp || coarse) && window.self === window.top;
+  // Le chrome navigateur n'existe QUE dans l'app (navigateur = Safari).
+  // Sur le web mobile, ayeba.app reste un site — jamais de barre navigateur.
+  const showMobileChrome = inApp;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

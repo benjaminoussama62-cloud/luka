@@ -6,35 +6,70 @@
     <meta name="theme-color" content="#050507" />
     <title>AYEBA</title>
     <style>
-      * {
-        box-sizing: border-box;
-      }
+      * { box-sizing: border-box; }
+      html, body { height: 100%; margin: 0; }
       body {
-        margin: 0;
-        min-height: 100dvh;
+        background: #050507;
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        gap: 1rem;
-        background: #050507;
-        color: #f5f5f7;
-        font-family: system-ui, sans-serif;
+        gap: 2.2rem;
+        font-family: system-ui, -apple-system, sans-serif;
+        animation: body-in 0.5s ease;
       }
-      .mark {
-        font-size: 2rem;
-        font-weight: 700;
-        letter-spacing: 0.2em;
+      @keyframes body-in { from { opacity: 0; } }
+
+      /* ── Cadre arrondi : ligne lumineuse degradee qui le trace en tournant ── */
+      .loader { position: relative; width: 132px; height: 132px; }
+      .loader svg.trace { position: absolute; inset: 0; }
+      .trace rect {
+        fill: none;
+        stroke: url(#lg);
+        stroke-width: 4;
+        stroke-linecap: round;
+        stroke-dasharray: 340 920;
+        animation: trace 1.6s linear infinite;
       }
-      .sub {
-        font-size: 0.85rem;
-        color: #888;
+      @keyframes trace { to { stroke-dashoffset: -1260; } }
+      .loader .faint {
+        fill: none;
+        stroke: rgba(0, 180, 255, 0.12);
+        stroke-width: 4;
+      }
+      /* Le A fixe au centre, degrade cyan->orange */
+      .loader .letter {
+        position: absolute; inset: 0;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 58px; font-weight: 650;
+        background: linear-gradient(160deg, #7df0ff 0%, #00b4ff 45%, #e85d04 100%);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+      }
+      .word {
+        font-size: 1.15rem; font-weight: 300;
+        letter-spacing: 0.55em; text-indent: 0.55em;
+        color: #d2dce7;
       }
     </style>
   </head>
   <body>
-    <p class="mark">AYEBA</p>
-    <p class="sub">Connexion…</p>
+    <div class="loader">
+      <svg class="trace" viewBox="0 0 132 132">
+        <defs>
+          <linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#7df0ff"/>
+            <stop offset="55%" stop-color="#00b4ff"/>
+            <stop offset="100%" stop-color="#e85d04"/>
+          </linearGradient>
+        </defs>
+        <rect class="faint" x="10" y="10" width="112" height="112" rx="26"/>
+        <rect x="10" y="10" width="112" height="112" rx="26"/>
+      </svg>
+      <div class="letter">A</div>
+    </div>
+    <div class="word">AYEBA</div>
     <script>
       location.replace("https://ayeba.app/?app=1");
     </script>
