@@ -29,7 +29,7 @@ export async function GET(req: Request) {
   if (!TYPES.has(type) || !requestId || !creativeId) {
     return NextResponse.json({ error: "paramètres invalides" }, { status: 400 });
   }
-  if (!rateLimit(`adtrack:${clientIp(req)}`, 300, 60_000)) {
+  if (!await rateLimit(`adtrack:${clientIp(req)}`, 300, 60_000)) {
     return NextResponse.json({ error: "rate_limit" }, { status: 429 });
   }
   if (!verifyAdTrackingSignature(type, requestId, creativeId, sig)) {

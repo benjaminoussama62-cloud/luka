@@ -74,7 +74,7 @@ export async function POST(req: Request) {
     | { action?: string; accountId?: string; subject?: string; message?: string }
     | null;
   if (body?.action === "notify" && body.accountId && body.subject && body.message) {
-    const ok = sendSystemMessage(body.accountId, body.subject.slice(0, 200), body.message.slice(0, 5000));
+    const ok = await sendSystemMessage(body.accountId, body.subject.slice(0, 200), body.message.slice(0, 5000));
     return ok
       ? NextResponse.json({ ok: true })
       : NextResponse.json({ error: "Compte introuvable" }, { status: 404 });
@@ -93,6 +93,6 @@ export async function PATCH(req: Request) {
   if (!body?.accountId || !status) {
     return NextResponse.json({ error: "accountId + status requis" }, { status: 400 });
   }
-  setAccountStatus(body.accountId, status);
+  await setAccountStatus(body.accountId, status);
   return NextResponse.json({ ok: true });
 }

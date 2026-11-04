@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { authorFromSession } from "@/lib/ayebi/author";
 import { addTalkMessage, getTalkMessages } from "@/lib/ayebi/server";
 import { getSessionFromCookies } from "@/lib/auth-server";
 

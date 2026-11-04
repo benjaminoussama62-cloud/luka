@@ -3,32 +3,9 @@
  * The sync `libsql` driver blocks the Node event loop on every query —
  * unusable for a default-engine SERP. This client is abortable.
  */
-import { createClient, type Client } from "@libsql/client";
-import { ensureTursoMigrate } from "./database";
+import type { Client } from "@libsql/client";
+import { getAsyncClient } from "./adb";
 import { ftsMatchQueries } from "../search-index/fts-query";
-
-let _client: Client | null = null;
-
-function strip(v?: string) {
-  return (v ?? "").trim().replace(/^['"]|['"]$/g, "");
-}
-
-function getAsyncClient(): Client | null {
-  if (_client) return _client;
-  const raw = strip(process.env.TURSO_DATABASE_URL);
-  const authToken = strip(process.env.TURSO_AUTH_TOKEN);
-  if (!raw || (!raw.startsWith("libsql://") && !raw.startsWith("https://"))) return null;
-  const url = raw.replace(/^libsql:/, "https:");
-  try {
-    _client = createClient({ url, authToken: authToken || undefined });
-    // Schema + seeds run in the background on this async client — never on the
-    // sync driver (one blocking HTTP round trip per statement).
-    void ensureTursoMigrate();
-    return _client;
-  } catch {
-    return null;
-  }
-}
 
 export type AsyncFtsHit = {
   docId: string;

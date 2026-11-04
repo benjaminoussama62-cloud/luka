@@ -7,7 +7,7 @@ import { deliverSealedMail, getAccountByUser, getThread, listMessages } from "@/
 export async function GET(req: Request) {
   const user = await getSessionFromCookies();
   if (!user) return NextResponse.json({ error: "auth required" }, { status: 401 });
-  const account = getAccountByUser(user.id);
+  const account = await getAccountByUser(user.id);
   if (!account) return NextResponse.json({ error: "no mail account" }, { status: 404 });
   if (account.status === "suspended") {
     return NextResponse.json({ error: "Compte suspendu — contactez le support." }, { status: 403 });
@@ -16,13 +16,13 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const thread = url.searchParams.get("thread");
   if (thread) {
-    return NextResponse.json({ messages: getThread(account.id, thread) });
+    return NextResponse.json({ messages: await getThread(account.id, thread) });
   }
   const folder = url.searchParams.get("folder") || "inbox";
   const q = url.searchParams.get("q") || "";
   // Data-saver : la liste ne transporte que l'extrait (~140 car.) — le corps
   // complet n'est téléchargé qu'à l'ouverture via GET /messages/[id].
-  const messages = listMessages(account.id, folder, q).map((m) => ({
+  const messages = (await listMessages(account.id, folder, q)).map((m) => ({
     ...m,
     body: m.enc === 1 ? "" : m.body.replace(/\s+/g, " ").slice(0, 140),
     sealedBody: undefined,
@@ -51,12 +51,12 @@ function asWrap(v: unknown): KeyWrap | null {
 export async function POST(req: Request) {
   const user = await getSessionFromCookies();
   if (!user) return NextResponse.json({ error: "auth required" }, { status: 401 });
-  const account = getAccountByUser(user.id);
+  const account = await getAccountByUser(user.id);
   if (!account) return NextResponse.json({ error: "no mail account" }, { status: 404 });
   if (account.status === "suspended") {
     return NextResponse.json({ error: "Compte suspendu — contactez le support." }, { status: 403 });
   }
-  if (!rateLimit(`mail-send:${account.id}`, 60, 60_000)) return rateLimitResponse();
+  if (!await rateLimit(`mail-send:${account.id}`, 60, 60_000)) return rateLimitResponse();
 
   const body = (await req.json().catch(() => null)) as {
     sealed?: boolean;

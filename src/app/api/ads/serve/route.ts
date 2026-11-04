@@ -51,7 +51,7 @@ export async function POST(req: Request) {
   }
 
   const ip = clientIp(req);
-  if (!rateLimit(`ads:${app.slug}:${ip}`, 120, 60_000)) {
+  if (!await rateLimit(`ads:${app.slug}:${ip}`, 120, 60_000)) {
     return rateLimitResponse();
   }
 

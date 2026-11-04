@@ -25,7 +25,7 @@ export async function POST(req: Request) {
   if (user instanceof NextResponse) return user;
   const csrf = checkSameOrigin(req);
   if (csrf) return csrf;
-  if (!rateLimit(`money-withdraw:${user.id}`, 8, 60_000) || !rateLimit(`money-withdraw-ip:${clientIp(req)}`, 15, 60_000)) {
+  if (!await rateLimit(`money-withdraw:${user.id}`, 8, 60_000) || !await rateLimit(`money-withdraw-ip:${clientIp(req)}`, 15, 60_000)) {
     return rateLimitResponse();
   }
 

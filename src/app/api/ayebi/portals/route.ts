@@ -11,7 +11,7 @@ export async function GET() {
 export async function POST(req: Request) {
   const session = await getSessionFromCookies();
   if (!session) return NextResponse.json({ error: "Non connecté." }, { status: 401 });
-  const author = authorFromSession(session);
+  const author = await authorFromSession(session);
   if (!["admin", "moderator"].includes(author.role)) {
     return NextResponse.json({ error: "Modérateur requis." }, { status: 403 });
   }

@@ -1,3 +1,5 @@
+import * as cheerio from "cheerio";
+import { probed } from "./upstream-health";
 import {
   normalizeQueryText,
   relevanceAgainstSubjects,
@@ -197,7 +199,7 @@ export async function fetchDuckDuckGo(query: string): Promise<RawHit[]> {
 }
 
 export async function fetchDuckDuckGoHtml(query: string): Promise<RawHit[]> {
-  try {
+  return probed("duckduckgo-html", async () => {
     const res = await fetch("https://html.duckduckgo.com/html/", {
       method: "POST",
       headers: {
@@ -208,49 +210,35 @@ export async function fetchDuckDuckGoHtml(query: string): Promise<RawHit[]> {
       signal: AbortSignal.timeout(UPSTREAM_MS),
       next: { revalidate: 0 },
     });
-    if (!res.ok) return [];
-    const html = await res.text();
+    if (!res.ok) throw new Error(`ddg html http ${res.status}`);
+    const $ = cheerio.load(await res.text());
     const hits: RawHit[] = [];
-    const re =
-      /<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?<a[^>]*class="result__snippet"[^>]*>([\s\S]*?)<\/a>/gi;
-    let m: RegExpExecArray | null;
-    while ((m = re.exec(html)) && hits.length < 10) {
-      const url = decodeURIComponent(
-        m[1].includes("uddg=")
-          ? (m[1].match(/uddg=([^&]+)/)?.[1] ?? m[1])
-          : m[1],
-      );
-      const title = m[2].replace(/<[^>]+>/g, "").trim();
-      const snippet = m[3].replace(/<[^>]+>/g, "").trim();
+    // Sélecteurs DOM réels — pas de regex sur du markup : un changement de
+    // structure HTML produit 0 hit (visible dans la télémétrie) plutôt que
+    // des faux négatifs silencieux.
+    $("a.result__a").each((_, el) => {
+      if (hits.length >= 10) return false;
+      const a = $(el);
+      const raw = a.attr("href") || "";
+      const uddg = raw.match(/uddg=([^&]+)/)?.[1];
+      const url = uddg ? decodeURIComponent(uddg) : decodeURIComponent(raw);
+      const title = a.text().trim();
+      const snippet = a
+        .closest(".result")
+        .find(".result__snippet")
+        .first()
+        .text()
+        .trim();
       if (url.startsWith("http") && title) {
         hits.push({ title, url, snippet, source: "duckduckgo-html", position: hits.length });
       }
-    }
-    // Fallback simpler pattern
-    if (hits.length === 0) {
-      const simple =
-        /class="result__a"[^>]*href="([^"]+)"[^>]*>([^<]+)</gi;
-      while ((m = simple.exec(html)) && hits.length < 8) {
-        let url = m[1];
-        if (url.includes("uddg=")) {
-          url = decodeURIComponent(url.match(/uddg=([^&]+)/)?.[1] ?? url);
-        }
-        hits.push({
-          title: m[2].trim(),
-          url,
-          snippet: `Résultat web pour « ${query} »`,
-          source: "duckduckgo-html",
-        });
-      }
-    }
+    });
     return hits;
-  } catch {
-    return [];
-  }
+  });
 }
 
 export async function fetchBing(query: string): Promise<RawHit[]> {
-  try {
+  return probed("bing", async () => {
     const res = await fetch(
       `https://www.bing.com/search?q=${encodeURIComponent(query)}&count=12&setlang=fr`,
       {
@@ -262,35 +250,32 @@ export async function fetchBing(query: string): Promise<RawHit[]> {
         next: { revalidate: 0 },
       },
     );
-    if (!res.ok) return [];
-    const html = await res.text();
+    if (!res.ok) throw new Error(`bing http ${res.status}`);
+    const $ = cheerio.load(await res.text());
     const hits: RawHit[] = [];
-    const blocks = html.split(/<li class="b_algo"/i).slice(1);
-    for (const block of blocks) {
-      if (hits.length >= 10) break;
-      const link = block.match(/<h2[^>]*>\s*<a[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i);
-      if (!link) continue;
-      const url = link[1];
+    $("li.b_algo").each((_, el) => {
+      if (hits.length >= 10) return false;
+      const block = $(el);
+      const a = block.find("h2 a").first();
+      const url = a.attr("href") || "";
       if (!/^https?:\/\//i.test(url) || /bing\.com|microsoft\.com\/(fr|en)\/search/i.test(url)) {
-        continue;
+        return;
       }
-      const title = link[2].replace(/<[^>]+>/g, "").trim();
-      const snipMatch =
-        block.match(/<p class="b_lineclamp[^"]*"[^>]*>([\s\S]*?)<\/p>/i) ??
-        block.match(/<p[^>]*>([\s\S]*?)<\/p>/i);
-      const snippet = snipMatch ? cleanSnippet(snipMatch[1].replace(/<[^>]+>/g, ""), 240) : "";
+      const title = a.text().trim();
+      const snippet = cleanSnippet(
+        block.find("p.b_lineclamp4, p.b_lineclamp3, p.b_lineclamp2, p").first().text(),
+        240,
+      );
       if (title && !isJunkHit(title, url)) {
         hits.push({ title, url, snippet, source: "bing", position: hits.length });
       }
-    }
+    });
     return hits;
-  } catch {
-    return [];
-  }
+  });
 }
 
 export async function fetchMojeek(query: string): Promise<RawHit[]> {
-  try {
+  return probed("mojeek", async () => {
     const res = await fetch(
       `https://www.mojeek.com/search?q=${encodeURIComponent(query)}`,
       {
@@ -299,26 +284,23 @@ export async function fetchMojeek(query: string): Promise<RawHit[]> {
         next: { revalidate: 0 },
       },
     );
-    if (!res.ok) return [];
-    const html = await res.text();
+    if (!res.ok) throw new Error(`mojeek http ${res.status}`);
+    const $ = cheerio.load(await res.text());
     const hits: RawHit[] = [];
-    const listMatch = html.match(/<ul class="results-standard">([\s\S]*?)<\/ul>/i);
-    const list = listMatch ? listMatch[1] : html;
-    for (const block of list.split(/<li[ >]/i).slice(1)) {
-      if (hits.length >= 10) break;
-      const link = block.match(/<a[^>]*href="(https?:\/\/[^"]+)"[^>]*>([\s\S]*?)<\/a>/i);
-      if (!link || /mojeek\.com/.test(link[1])) continue;
-      const title = link[2].replace(/<[^>]+>/g, "").trim();
-      const snipMatch = block.match(/<p class="s"[^>]*>([\s\S]*?)<\/p>/i);
-      const snippet = snipMatch ? cleanSnippet(snipMatch[1].replace(/<[^>]+>/g, ""), 240) : "";
-      if (title && !isJunkHit(title, link[1])) {
-        hits.push({ title, url: link[1], snippet, source: "mojeek", position: hits.length });
+    $("ul.results-standard li, .results-standard li, body > ul li").each((_, el) => {
+      if (hits.length >= 10) return false;
+      const block = $(el);
+      const a = block.find("a[href^='http']").first();
+      const url = a.attr("href") || "";
+      if (!url || /mojeek\.com/.test(url)) return;
+      const title = a.text().trim();
+      const snippet = cleanSnippet(block.find("p.s, .s").first().text(), 240);
+      if (title && !isJunkHit(title, url)) {
+        hits.push({ title, url, snippet, source: "mojeek", position: hits.length });
       }
-    }
+    });
     return hits;
-  } catch {
-    return [];
-  }
+  });
 }
 
 /**

@@ -12,7 +12,7 @@ export const runtime = "nodejs";
 export async function POST(req: Request) {
   const user = await getSessionFromCookies();
   if (!user) return NextResponse.json({ error: "auth required" }, { status: 401 });
-  const account = getAccountByUser(user.id);
+  const account = await getAccountByUser(user.id);
   if (!account) return NextResponse.json({ error: "no mail account" }, { status: 404 });
   if (account.status === "suspended") {
     return NextResponse.json({ error: "Compte suspendu." }, { status: 403 });
@@ -31,7 +31,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Clé post-quantique illisible." }, { status: 400 });
   }
 
-  const saved = setVaultMlkemKey(account.id, pub);
+  const saved = await setVaultMlkemKey(account.id, pub);
   if ("error" in saved) return NextResponse.json({ error: saved.error }, { status: 409 });
   return NextResponse.json({ ok: true });
 }

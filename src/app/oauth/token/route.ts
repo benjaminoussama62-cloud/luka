@@ -23,7 +23,7 @@ export async function POST(req: Request) {
     if (!clientId || !clientSecret) {
       return oauthJsonError("invalid_client", "client_id et client_secret requis", 401);
     }
-    if (!verifyOAuthClientSecret(clientId, clientSecret)) {
+    if (!(await verifyOAuthClientSecret(clientId, clientSecret))) {
       return oauthJsonError("invalid_client", "Identifiants client invalides", 401);
     }
 
@@ -35,7 +35,7 @@ export async function POST(req: Request) {
         return oauthJsonError("invalid_request", "code et redirect_uri requis");
       }
 
-      const consumed = consumeAuthorizationCode({
+      const consumed = await consumeAuthorizationCode({
         code,
         clientId,
         redirectUri,
@@ -51,7 +51,7 @@ export async function POST(req: Request) {
         scope: consumed.scope,
       });
 
-      logOAuthAudit({
+      await logOAuthAudit({
         event: "token_issued",
         clientId,
         userId: consumed.userId,
@@ -69,7 +69,7 @@ export async function POST(req: Request) {
       const tokens = await refreshAccessToken({ refreshToken, clientId });
       if (!tokens) return oauthJsonError("invalid_grant", "Refresh token invalide");
 
-      logOAuthAudit({ event: "token_refreshed", clientId, ip });
+      await logOAuthAudit({ event: "token_refreshed", clientId, ip });
 
       return NextResponse.json(tokens, { headers: OAUTH_NO_STORE });
     }

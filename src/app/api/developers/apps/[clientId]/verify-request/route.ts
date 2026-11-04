@@ -12,10 +12,10 @@ export async function POST(_req: Request, ctx: Ctx) {
   if (!user) return NextResponse.json({ error: "Connexion requise" }, { status: 401 });
 
   const { clientId } = await ctx.params;
-  const ok = requestClientVerification(clientId, user.id);
+  const ok = await requestClientVerification(clientId, user.id);
   if (!ok) return NextResponse.json({ error: "Application introuvable" }, { status: 404 });
 
-  logOAuthAudit({
+  await logOAuthAudit({
     event: "client_created",
     clientId,
     userId: user.id,

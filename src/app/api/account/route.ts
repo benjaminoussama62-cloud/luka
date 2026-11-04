@@ -14,7 +14,7 @@ export const runtime = "nodejs";
  * /suppression-compte (exigé par le formulaire Data safety de Play).
  */
 export async function DELETE(req: Request) {
-  if (!rateLimit(`account-delete:${clientIp(req)}`, 5, 60_000)) {
+  if (!await rateLimit(`account-delete:${clientIp(req)}`, 5, 60_000)) {
     return rateLimitResponse();
   }
   const user = await getSessionFromCookies();

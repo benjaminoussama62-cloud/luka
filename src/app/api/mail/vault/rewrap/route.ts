@@ -23,9 +23,9 @@ function asWrap(v: unknown, minIter: number): PassWrap | null {
 export async function POST(req: Request) {
   const user = await getSessionFromCookies();
   if (!user) return NextResponse.json({ error: "auth required" }, { status: 401 });
-  const account = getAccountByUser(user.id);
+  const account = await getAccountByUser(user.id);
   if (!account) return NextResponse.json({ error: "no mail account" }, { status: 404 });
-  const vault = getVaultRecord(account.id);
+  const vault = await getVaultRecord(account.id);
   if (!vault) return NextResponse.json({ error: "Coffre absent." }, { status: 404 });
 
   const body = (await req.json().catch(() => null)) as {
@@ -37,7 +37,7 @@ export async function POST(req: Request) {
   const nonce = String(body?.nonce || "");
   const signature = String(body?.signature || "");
   if (!nonce || !signature) return NextResponse.json({ error: "Preuve manquante." }, { status: 400 });
-  if (!consumeVaultChallenge(account.id, nonce)) {
+  if (!await consumeVaultChallenge(account.id, nonce)) {
     return NextResponse.json({ error: "Défi expiré — recommencez." }, { status: 409 });
   }
   const ok = await verifyNonce(vault.ecdsaPublic, nonce, signature);
@@ -51,7 +51,7 @@ export async function POST(req: Request) {
   }
   if (!privWrap && !recoveryWrap) return NextResponse.json({ error: "Rien à modifier." }, { status: 400 });
 
-  const saved = updateVaultWraps(account.id, { privWrap: privWrap || undefined, recoveryWrap: recoveryWrap || undefined });
+  const saved = await updateVaultWraps(account.id, { privWrap: privWrap || undefined, recoveryWrap: recoveryWrap || undefined });
   if ("error" in saved) return NextResponse.json({ error: saved.error }, { status: 400 });
   return NextResponse.json({ ok: true });
 }

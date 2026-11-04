@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireDeveloperSession } from "@/lib/developers/session";
 import { getProject } from "@/lib/developers/console";
-import { getDb } from "@/lib/storage/database";
+import { adb } from "@/lib/storage/adb";
 import {
   deleteOAuthClient,
   getOAuthClient,
@@ -18,7 +18,7 @@ export async function GET(_req: Request, ctx: Ctx) {
   if ("error" in auth) return auth.error;
 
   const { clientId } = await ctx.params;
-  const app = getOAuthClient(clientId);
+  const app = await getOAuthClient(clientId);
   if (!app || (app.ownerUserId !== auth.user.id && app.ownerUserId !== "system")) {
     return NextResponse.json({ error: "Application introuvable" }, { status: 404 });
   }
@@ -31,7 +31,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
   if ("error" in auth) return auth.error;
 
   const { clientId } = await ctx.params;
-  const existing = getOAuthClient(clientId);
+  const existing = await getOAuthClient(clientId);
   if (!existing || existing.ownerUserId !== auth.user.id) {
     return NextResponse.json({ error: "Application introuvable" }, { status: 404 });
   }
@@ -49,7 +49,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
     if (!uriCheck.ok) return NextResponse.json({ error: uriCheck.error }, { status: 400 });
   }
 
-  updateOAuthClient(clientId, auth.user.id, {
+  await updateOAuthClient(clientId, auth.user.id, {
     name: body.name?.trim(),
     description: body.description,
     redirectUris: body.redirectUris?.map((u) => u.trim()).filter(Boolean),
@@ -60,17 +60,19 @@ export async function PATCH(req: Request, ctx: Ctx) {
     if (body.projectId && !getProject(body.projectId, auth.user.id)) {
       return NextResponse.json({ error: "Projet introuvable" }, { status: 404 });
     }
-    getDb()
-      .prepare("UPDATE oauth_clients SET project_id = ? WHERE client_id = ?")
-      .run(body.projectId || null, clientId);
+    await adb().run("UPDATE oauth_clients SET project_id = ? WHERE client_id = ?", [
+      body.projectId || null,
+      clientId,
+    ]);
   }
   if (body.scopes) {
-    getDb()
-      .prepare("UPDATE oauth_clients SET scopes = ? WHERE client_id = ?")
-      .run(JSON.stringify(body.scopes), clientId);
+    await adb().run("UPDATE oauth_clients SET scopes = ? WHERE client_id = ?", [
+      JSON.stringify(body.scopes),
+      clientId,
+    ]);
   }
 
-  return NextResponse.json({ app: getOAuthClient(clientId) });
+  return NextResponse.json({ app: await getOAuthClient(clientId) });
 }
 
 export async function DELETE(_req: Request, ctx: Ctx) {
@@ -78,7 +80,7 @@ export async function DELETE(_req: Request, ctx: Ctx) {
   if ("error" in auth) return auth.error;
 
   const { clientId } = await ctx.params;
-  const ok = deleteOAuthClient(clientId, auth.user.id);
+  const ok = await deleteOAuthClient(clientId, auth.user.id);
   if (!ok) return NextResponse.json({ error: "Application introuvable" }, { status: 404 });
 
   return NextResponse.json({ ok: true });

@@ -9,6 +9,7 @@
  */
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ExtrasNav, MoneyExtras } from "./MoneyExtras";
 
 type MoneyCurrency = "USD" | "CDF";
 
@@ -95,6 +96,7 @@ export function MoneyApp() {
   const [sendPrefill, setSendPrefill] = useState("");
   const [txDetail, setTxDetail] = useState<Tx | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [extrasPanel, setExtrasPanel] = useState<"convert" | "requests" | "qr" | "limits" | "kyc" | "pinreset" | null>(null);
   const [toast, setToast] = useState("");
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -287,6 +289,8 @@ export function MoneyApp() {
               </button>
             </nav>
 
+            <ExtrasNav onOpen={setExtrasPanel} />
+
             <section className="mn-history">
               <div className="mn-history-head">
                 <span className="mn-kicker">Activité</span>
@@ -371,6 +375,7 @@ export function MoneyApp() {
         />
       )}
       {txDetail && <TxDetailSheet tx={txDetail} onClose={() => setTxDetail(null)} />}
+      <MoneyExtras panel={extrasPanel} onClose={() => setExtrasPanel(null)} onDone={notify} />
       {settingsOpen && info && (
         <SettingsSheet
           info={info}

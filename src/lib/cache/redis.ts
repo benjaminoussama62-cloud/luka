@@ -13,7 +13,8 @@ import { canUseSyncDb, getDb } from "../storage/database";
 
 let _redis: import("@upstash/redis").Redis | null = null;
 
-function getRedis(): import("@upstash/redis").Redis | null {
+/** Client Upstash partagé — aussi utilisé par le rate-limit distribué. */
+export function getRedis(): import("@upstash/redis").Redis | null {
   if (_redis) return _redis;
   const url = process.env.UPSTASH_REDIS_REST_URL?.trim();
   const token = process.env.UPSTASH_REDIS_REST_TOKEN?.trim();

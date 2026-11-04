@@ -5,8 +5,8 @@
  * à vie, inscription vérifiée par téléphone.
  */
 import crypto from "crypto";
-import { getDb } from "@/lib/storage/database";
-import { applyMailSchema } from "@/lib/mail/mail-schema";
+import { adb, type Adb } from "@/lib/storage/adb";
+import { MAIL_MIGRATIONS, MAIL_SCHEMA } from "@/lib/mail/mail-schema";
 import { decryptText, encryptText, hashCode } from "@/lib/mail/mail-crypto";
 import {
   MAX_ATTACHMENTS,
@@ -32,16 +32,20 @@ const RESERVED = new Set([
 ]);
 
 let schemaApplied = false;
-function db() {
-  const d = getDb();
+/**
+ * Adaptateur async — sur Turso, jamais le driver sync (round trip HTTP
+ * bloquant par statement). Le schéma mail est déjà appliqué par la migration
+ * globale (local) et le replay async (Turso) ; l'exec ci-dessous est un
+ * filet idempotent, lancé en fond, sans ordre garanti — les statements sont
+ * tolérés individuellement.
+ */
+function db(): Adb {
+  const d = adb();
   if (!schemaApplied) {
-    try {
-      applyMailSchema(d);
-      schemaApplied = true;
-    } catch {
-      /* concurrent init — tables exist */
-      schemaApplied = true;
-    }
+    schemaApplied = true;
+    void d.exec(`${MAIL_SCHEMA};${MAIL_MIGRATIONS.join(";")}`).catch((e) =>
+      console.warn("[mail] schema ensure failed:", (e as Error).message),
+    );
   }
   return d;
 }
@@ -160,7 +164,7 @@ function parsePack<T>(raw: string | undefined): T | undefined {
   }
 }
 
-function toMessage(r: MsgRow, full: boolean): MailMessage {
+async function toMessage(r: MsgRow, full: boolean): Promise<MailMessage> {
   const enc: 0 | 1 = r.enc === 1 ? 1 : 0;
   const base = {
     id: r.id,
@@ -185,7 +189,7 @@ function toMessage(r: MsgRow, full: boolean): MailMessage {
       sealedSubject: parsePack<CipherPack>(r.subject_enc),
       sealedBody: full ? parsePack<CipherPack>(r.body_enc) : undefined,
       wrap: parsePack<KeyWrap>(r.wraps),
-      attachments: full ? listAttachmentMeta(r.id) : [],
+      attachments: full ? await listAttachmentMeta(r.id) : [],
     };
   }
   return {
@@ -197,15 +201,15 @@ function toMessage(r: MsgRow, full: boolean): MailMessage {
 
 // ── Comptes ────────────────────────────────────────────────────────────────
 
-export function getAccountByUser(userId: string): MailAccount | null {
-  const r = db()
+export async function getAccountByUser(userId: string): Promise<MailAccount | null> {
+  const r = await db()
     .prepare("SELECT * FROM mail_accounts WHERE user_id = ?")
     .get(userId) as AccountRow | undefined;
   return r ? toAccount(r) : null;
 }
 
-export function getAccountByEmail(email: string): MailAccount | null {
-  const r = db()
+export async function getAccountByEmail(email: string): Promise<MailAccount | null> {
+  const r = await db()
     .prepare("SELECT * FROM mail_accounts WHERE email = ?")
     .get(email.toLowerCase()) as AccountRow | undefined;
   return r ? toAccount(r) : null;
@@ -224,9 +228,9 @@ export function validateAddress(local: string): { ok: boolean; reason?: string }
   return { ok: true };
 }
 
-export function addressAvailable(local: string): boolean {
+export async function addressAvailable(local: string): Promise<boolean> {
   const a = local.toLowerCase();
-  const taken = db()
+  const taken = await db()
     .prepare(
       "SELECT 1 AS x FROM mail_accounts WHERE address = ? UNION SELECT 1 FROM mail_verifications WHERE address = ? AND expires_at > ?",
     )
@@ -234,8 +238,8 @@ export function addressAvailable(local: string): boolean {
   return !taken;
 }
 
-export function phoneUsed(phone: string): boolean {
-  return !!db().prepare("SELECT 1 AS x FROM mail_accounts WHERE phone = ?").get(phone);
+export async function phoneUsed(phone: string): Promise<boolean> {
+  return !!await db().prepare("SELECT 1 AS x FROM mail_accounts WHERE phone = ?").get(phone);
 }
 
 // ── Téléphone ──────────────────────────────────────────────────────────────
@@ -283,27 +287,27 @@ export function validateProfile(p: {
   return { ok: true, profile: { displayName, birthdate, recoveryEmail } };
 }
 
-export function createVerification(
+export async function createVerification(
   userId: string,
   phone: string,
   address: string,
   profile: MailProfile,
-): { id: string; code: string } | { error: string } {
+): Promise<{ id: string; code: string; } | { error: string; }> {
   const check = validateAddress(address);
   if (!check.ok) return { error: check.reason! };
   const a = address.toLowerCase();
-  if (userId && getAccountByUser(userId)) return { error: "Ce compte Ayeba a déjà une adresse mail." };
-  if (!addressAvailable(a)) return { error: "Cette adresse est déjà prise." };
-  if (phoneUsed(phone)) return { error: "Ce numéro est déjà lié à un compte Ayeba Mail." };
+  if (userId && await getAccountByUser(userId)) return { error: "Ce compte Ayeba a déjà une adresse mail." };
+  if (!(await addressAvailable(a))) return { error: "Cette adresse est déjà prise." };
+  if (await phoneUsed(phone)) return { error: "Ce numéro est déjà lié à un compte Ayeba Mail." };
 
   // Invalide les codes en cours pour ce téléphone (un seul actif).
-  db()
+  await db()
     .prepare("DELETE FROM mail_verifications WHERE phone = ? OR user_id = ?")
     .run(phone, userId);
 
   const code = String(crypto.randomInt(100000, 999999));
   const id = uid();
-  db()
+  await db()
     .prepare(
       "INSERT INTO mail_verifications (id, user_id, phone, address, code_hash, attempts, expires_at, created_at, display_name, birthdate, recovery_email) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)",
     )
@@ -312,16 +316,16 @@ export function createVerification(
 }
 
 /** Code SMS de connexion — le téléphone est l'identité, comme WhatsApp. */
-export function createSigninCode(phone: string): { code: string } | { error: string } {
-  const acc = db()
+export async function createSigninCode(phone: string): Promise<{ code: string; } | { error: string; }> {
+  const acc = await db()
     .prepare("SELECT * FROM mail_accounts WHERE phone = ?")
     .get(phone) as AccountRow | undefined;
   if (!acc) return { error: "Aucun compte Ayeba Mail avec ce numéro." };
   if ((acc.status || "active") === "suspended") return { error: "Compte suspendu." };
 
-  db().prepare("DELETE FROM mail_verifications WHERE phone = ?").run(phone);
+  await db().prepare("DELETE FROM mail_verifications WHERE phone = ?").run(phone);
   const code = String(crypto.randomInt(100000, 999999));
-  db()
+  await db()
     .prepare(
       "INSERT INTO mail_verifications (id, user_id, phone, address, code_hash, attempts, expires_at, created_at) VALUES (?, ?, ?, ?, ?, 0, ?, ?)",
     )
@@ -351,12 +355,12 @@ const AVATAR_COLORS = ["#e85d04", "#ff6b35", "#64748b", "#94a3b8", "#f97316", "#
  * aléatoire si la base n'est pas valide. Le téléphone reste à renseigner
  * (placeholder "pending:<userId>" — jamais un vrai numéro).
  */
-export function ensureMailAccount(
+export async function ensureMailAccount(
   userId: string,
   email: string,
   name?: string,
-): MailAccount | null {
-  const existing = getAccountByUser(userId);
+): Promise<MailAccount | null> {
+  const existing = await getAccountByUser(userId);
   if (existing) return existing;
   try {
     let base = (email.split("@")[0] || "")
@@ -371,7 +375,7 @@ export function ensureMailAccount(
     let address = base;
     for (
       let n = 2;
-      db().prepare("SELECT 1 AS x FROM mail_accounts WHERE address = ?").get(address) ||
+      await db().prepare("SELECT 1 AS x FROM mail_accounts WHERE address = ?").get(address) ||
       RESERVED.has(address);
       n++
     ) {
@@ -380,12 +384,12 @@ export function ensureMailAccount(
       address = `${base.slice(0, 30 - suffix.length)}${suffix}`;
     }
     const mailEmail = `${address}@${MAIL_DOMAIN}`;
-    db()
+    await db()
       .prepare(
         "INSERT INTO mail_accounts (id, user_id, address, email, phone, created_at, display_name, status) VALUES (?, ?, ?, ?, ?, ?, ?, 'active')",
       )
       .run(uid(), userId, address, mailEmail, `pending:${userId}`, now(), (name || "").trim());
-    return getAccountByUser(userId);
+    return await getAccountByUser(userId);
   } catch {
     return null;
   }
@@ -397,11 +401,11 @@ export function ensureMailAccount(
  * - sinon → crée l'utilisateur Ayeba (provider « mail », sans mot de passe) +
  *   la boîte. L'inscription Mail ne demande JAMAIS de session préalable.
  */
-export function completeMailVerification(
+export async function completeMailVerification(
   phone: string,
   code: string,
-): { ok: true; account: MailAccount; userId: string; isNew: boolean } | { ok: false; error: string } {
-  const v = db()
+): Promise<{ ok: true; account: MailAccount; userId: string; isNew: boolean; } | { ok: false; error: string; }> {
+  const v = await db()
     .prepare("SELECT * FROM mail_verifications WHERE phone = ? ORDER BY created_at DESC LIMIT 1")
     .get(phone) as VerifRow | undefined;
 
@@ -411,24 +415,24 @@ export function completeMailVerification(
     return { ok: false, error: "Trop de tentatives — demandez un nouveau code." };
   }
   if (v.code_hash !== hashCode(String(code || "").trim())) {
-    db().prepare("UPDATE mail_verifications SET attempts = attempts + 1 WHERE id = ?").run(v.id);
+    await db().prepare("UPDATE mail_verifications SET attempts = attempts + 1 WHERE id = ?").run(v.id);
     return { ok: false, error: "Code incorrect." };
   }
 
   // Connexion : le compte existe déjà pour ce numéro.
-  const existingByPhone = db()
+  const existingByPhone = await db()
     .prepare("SELECT * FROM mail_accounts WHERE phone = ?")
     .get(phone) as AccountRow | undefined;
   if (existingByPhone) {
-    db().prepare("DELETE FROM mail_verifications WHERE id = ?").run(v.id);
-    db().prepare("UPDATE mail_accounts SET last_login_at = ? WHERE id = ?").run(now(), existingByPhone.id);
+    await db().prepare("DELETE FROM mail_verifications WHERE id = ?").run(v.id);
+    await db().prepare("UPDATE mail_accounts SET last_login_at = ? WHERE id = ?").run(now(), existingByPhone.id);
     return { ok: true, account: toAccount(existingByPhone), userId: existingByPhone.user_id, isNew: false };
   }
 
   // Dernière ligne de défense contre une course : UNIQUE en base + re-check
   // sur les comptes réels uniquement (la vérification en cours réserve déjà
   // l'adresse — ne pas la compter contre elle-même).
-  const taken = db()
+  const taken = await db()
     .prepare("SELECT 1 AS x FROM mail_accounts WHERE address = ?")
     .get(v.address);
   if (taken) {
@@ -442,7 +446,7 @@ export function completeMailVerification(
   if (!userId) {
     userId = crypto.randomUUID();
     try {
-      db()
+      await db()
         .prepare(
           "INSERT INTO users (id, name, email, password_hash, avatar_color, provider, role, created_at) VALUES (?, ?, ?, '', ?, 'mail', 'contributor', ?)",
         )
@@ -459,7 +463,7 @@ export function completeMailVerification(
   }
 
   try {
-    db()
+    await db()
       .prepare(
         "INSERT INTO mail_accounts (id, user_id, address, email, phone, created_at, display_name, birthdate, recovery_email) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
       )
@@ -470,11 +474,11 @@ export function completeMailVerification(
   } catch {
     return { ok: false, error: "Cette adresse n'est plus disponible." };
   }
-  db().prepare("DELETE FROM mail_verifications WHERE id = ?").run(v.id);
+  await db().prepare("DELETE FROM mail_verifications WHERE id = ?").run(v.id);
 
-  const account = getAccountByUser(userId)!;
+  const account = (await getAccountByUser(userId))!;
   // Message de bienvenue système — première pierre de la boîte.
-  insertMessage({
+  await insertMessage({
     threadId: uid(),
     accountId: account.id,
     folder: "inbox",
@@ -491,7 +495,7 @@ export function completeMailVerification(
 
 // ── Messages ───────────────────────────────────────────────────────────────
 
-function insertMessage(m: {
+async function insertMessage(m: {
   threadId: string;
   accountId: string;
   folder: string;
@@ -503,7 +507,7 @@ function insertMessage(m: {
   kind?: string;
   read?: boolean;
 }) {
-  db()
+  await db()
     .prepare(
       `INSERT INTO mail_messages (id, thread_id, account_id, folder, from_addr, from_name, to_addrs, subject_enc, body_enc, is_read, is_starred, kind, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
@@ -547,12 +551,12 @@ export function smtpConfigured(): boolean {
  * l'expéditeur ; adresses externes → renvoyées dans `externals` pour remise au
  * relais SMTP (sendExternalBatch), ou bounce honnête si SMTP non configuré.
  */
-export function sendMail(
+export async function sendMail(
   sender: MailAccount,
   to: string[],
   subject: string,
   body: string,
-): SendResult {
+): Promise<SendResult> {
   const delivered: string[] = [];
   const bounced: { address: string; reason: string }[] = [];
   const externals: string[] = [];
@@ -567,7 +571,7 @@ export function sendMail(
       continue;
     }
     if (INTERNAL_RE.test(addr)) {
-      const acc = getAccountByEmail(addr);
+      const acc = await getAccountByEmail(addr);
       if (acc) internals.push(acc);
       else bounced.push({ address: addr, reason: "Ce compte Ayeba Mail n'existe pas" });
     } else if (smtpConfigured()) {
@@ -582,7 +586,7 @@ export function sendMail(
 
   const senderName = sender.displayName || sender.address;
   // Copie « Envoyés » chez l'expéditeur (toujours — trace fidèle).
-  insertMessage({
+  await insertMessage({
     threadId,
     accountId: sender.id,
     folder: "sent",
@@ -596,7 +600,7 @@ export function sendMail(
   });
 
   for (const acc of internals) {
-    insertMessage({
+    await insertMessage({
       threadId,
       accountId: acc.id,
       folder: "inbox",
@@ -612,7 +616,7 @@ export function sendMail(
 
   // Bounce façon Gmail : notification d'échec dans la boîte de l'expéditeur.
   for (const b of bounced) {
-    insertMessage({
+    await insertMessage({
       threadId: uid(),
       accountId: sender.id,
       folder: "inbox",
@@ -661,7 +665,7 @@ export async function sendExternalBatch(
       delivered.push(addr);
     } else {
       bounced.push({ address: addr, reason: res.error });
-      insertMessage({
+      await insertMessage({
         threadId: uid(),
         accountId: sender.id,
         folder: "inbox",
@@ -715,15 +719,15 @@ export async function receiveExternalMail(opts: {
   for (const raw of opts.to || []) {
     const addr = String(raw).trim().toLowerCase();
     if (!INTERNAL_RE.test(addr)) continue;
-    const acc = getAccountByEmail(addr);
+    const acc = await getAccountByEmail(addr);
     if (!acc || acc.status !== "active") {
       dropped.push(addr);
       continue;
     }
-    const pub = vaultPublicKey(acc.id);
+    const pub = await vaultPublicKey(acc.id);
     if (pub) {
-      const sealed = await sealMessage(pub, subj, body, files, vaultMlkemKey(acc.id) ?? undefined);
-      const messageId = insertSealed({
+      const sealed = await sealMessage(pub, subj, body, files, await vaultMlkemKey(acc.id) ?? undefined);
+      const messageId = await insertSealed({
         threadId,
         accountId: acc.id,
         folder: "inbox",
@@ -736,7 +740,7 @@ export async function receiveExternalMail(opts: {
         kind: "mail",
       });
       for (const a of sealed.attachments) {
-        db()
+        await db()
           .prepare(
             `INSERT INTO mail_attachments
              (id, message_id, account_id, name_iv, name_ct, file_iv, byte_size, sha256, data, created_at)
@@ -756,7 +760,7 @@ export async function receiveExternalMail(opts: {
           );
       }
     } else {
-      insertMessage({
+      await insertMessage({
         threadId,
         accountId: acc.id,
         folder: "inbox",
@@ -795,20 +799,20 @@ function legacyMatches(r: MsgRow, needle: string): boolean {
   );
 }
 
-export function listMessages(
+export async function listMessages(
   accountId: string,
   folder = "inbox",
   q = "",
-): MailMessage[] {
+): Promise<MailMessage[]> {
   const f = VALID_FOLDERS.has(folder) ? folder : "inbox";
   const rows = (
     f === "starred"
-      ? (db()
+      ? (await db()
           .prepare(
             `${LIST_SQL} WHERE m.account_id = ? AND m.is_starred = 1 AND m.folder != 'trash' ORDER BY m.created_at DESC LIMIT 200`,
           )
           .all(accountId) as MsgRow[])
-      : (db()
+      : (await db()
           .prepare(
             `${LIST_SQL} WHERE m.account_id = ? AND m.folder = ? ORDER BY m.created_at DESC LIMIT 200`,
           )
@@ -816,62 +820,62 @@ export function listMessages(
   );
   const needle = q.trim().toLowerCase();
   const filtered = needle ? rows.filter((r) => legacyMatches(r, needle)) : rows;
-  return filtered.map((r) => toMessage(r, false));
+  return await Promise.all(filtered.map((r) => toMessage(r, false)));
 }
 
-export function getThread(accountId: string, threadId: string): MailMessage[] {
-  const rows = db()
+export async function getThread(accountId: string, threadId: string): Promise<MailMessage[]> {
+  const rows = await db()
     .prepare(
       `${LIST_SQL} WHERE m.account_id = ? AND m.thread_id = ? ORDER BY m.created_at ASC`,
     )
     .all(accountId, threadId) as MsgRow[];
-  return rows.map((r) => toMessage(r, true));
+  return await Promise.all(rows.map((r) => toMessage(r, true)));
 }
 
-export function getMessage(accountId: string, id: string): MailMessage | null {
-  const r = db()
+export async function getMessage(accountId: string, id: string): Promise<MailMessage | null> {
+  const r = await db()
     .prepare(`${LIST_SQL} WHERE m.account_id = ? AND m.id = ?`)
     .get(accountId, id) as MsgRow | undefined;
-  return r ? toMessage(r, true) : null;
+  return r ? await toMessage(r, true) : null;
 }
 
-export function markRead(accountId: string, id: string, read = true) {
-  db()
+export async function markRead(accountId: string, id: string, read = true) {
+  await db()
     .prepare("UPDATE mail_messages SET is_read = ? WHERE account_id = ? AND id = ?")
     .run(read ? 1 : 0, accountId, id);
 }
 
-export function setStarred(accountId: string, id: string, starred: boolean) {
-  db()
+export async function setStarred(accountId: string, id: string, starred: boolean) {
+  await db()
     .prepare("UPDATE mail_messages SET is_starred = ? WHERE account_id = ? AND id = ?")
     .run(starred ? 1 : 0, accountId, id);
 }
 
-export function moveToFolder(accountId: string, id: string, folder: string) {
+export async function moveToFolder(accountId: string, id: string, folder: string) {
   if (!VALID_FOLDERS.has(folder)) return;
-  db()
+  await db()
     .prepare("UPDATE mail_messages SET folder = ? WHERE account_id = ? AND id = ?")
     .run(folder, accountId, id);
 }
 
-export function deleteMessage(accountId: string, id: string) {
-  const m = getMessage(accountId, id);
+export async function deleteMessage(accountId: string, id: string) {
+  const m = await getMessage(accountId, id);
   if (!m) return;
   if (m.folder === "trash") {
-    db().prepare("DELETE FROM mail_attachments WHERE account_id = ? AND message_id = ?").run(accountId, id);
-    db().prepare("DELETE FROM mail_messages WHERE account_id = ? AND id = ?").run(accountId, id);
+    await db().prepare("DELETE FROM mail_attachments WHERE account_id = ? AND message_id = ?").run(accountId, id);
+    await db().prepare("DELETE FROM mail_messages WHERE account_id = ? AND id = ?").run(accountId, id);
   } else {
     moveToFolder(accountId, id, "trash");
   }
 }
 
 /** Message système (back-office) dans la boîte d'un compte. */
-export function sendSystemMessage(accountId: string, subject: string, body: string) {
-  const acc = db()
+export async function sendSystemMessage(accountId: string, subject: string, body: string) {
+  const acc = await db()
     .prepare("SELECT email FROM mail_accounts WHERE id = ?")
     .get(accountId) as { email: string } | undefined;
   if (!acc) return false;
-  insertMessage({
+  await insertMessage({
     threadId: uid(),
     accountId,
     folder: "inbox",
@@ -888,10 +892,10 @@ export function sendSystemMessage(accountId: string, subject: string, body: stri
 const AVATAR_RE = /^data:image\/(png|jpe?g|webp);base64,[A-Za-z0-9+/=]+$/;
 const AVATAR_MAX = 180_000; // ~128px jpeg/webp tient sous 130 KB
 
-export function updateAccountProfile(
+export async function updateAccountProfile(
   accountId: string,
   patch: { displayName?: string; avatar?: string | null; signature?: string },
-): { ok: true } | { error: string } {
+): Promise<{ ok: true; } | { error: string; }> {
   const sets: string[] = [];
   const args: unknown[] = [];
 
@@ -918,18 +922,18 @@ export function updateAccountProfile(
   }
   if (!sets.length) return { error: "Rien à modifier." };
 
-  db()
+  await db()
     .prepare(`UPDATE mail_accounts SET ${sets.join(", ")} WHERE id = ?`)
     .run(...args, accountId);
   return { ok: true };
 }
 
-export function setAccountStatus(accountId: string, status: "active" | "suspended") {
-  db().prepare("UPDATE mail_accounts SET status = ? WHERE id = ?").run(status, accountId);
+export async function setAccountStatus(accountId: string, status: "active" | "suspended") {
+  await db().prepare("UPDATE mail_accounts SET status = ? WHERE id = ?").run(status, accountId);
 }
 
-export function unreadCount(accountId: string): number {
-  const r = db()
+export async function unreadCount(accountId: string): Promise<number> {
+  const r = await db()
     .prepare(
       "SELECT COUNT(*) AS c FROM mail_messages WHERE account_id = ? AND folder = 'inbox' AND is_read = 0",
     )
@@ -945,8 +949,8 @@ function asBuffer(v: unknown): Buffer {
   return Buffer.alloc(0);
 }
 
-function listAttachmentMeta(messageId: string): MailAttachmentMeta[] {
-  const rows = db()
+async function listAttachmentMeta(messageId: string): Promise<MailAttachmentMeta[]> {
+  const rows = await db()
     .prepare(
       "SELECT id, byte_size, file_iv, name_iv, name_ct FROM mail_attachments WHERE message_id = ? ORDER BY created_at ASC",
     )
@@ -968,8 +972,8 @@ function listAttachmentMeta(messageId: string): MailAttachmentMeta[] {
 
 // ── Push notifications (FCM) ────────────────────────────────────────────────
 
-export function registerPushToken(accountId: string, token: string, platform: string) {
-  db()
+export async function registerPushToken(accountId: string, token: string, platform: string) {
+  await db()
     .prepare(
       `INSERT INTO mail_push_tokens (token, account_id, platform, created_at)
        VALUES (?, ?, ?, ?)
@@ -978,15 +982,15 @@ export function registerPushToken(accountId: string, token: string, platform: st
     .run(token, accountId, platform, now());
 }
 
-export function unregisterPushToken(token: string) {
-  db().prepare("DELETE FROM mail_push_tokens WHERE token = ?").run(token);
+export async function unregisterPushToken(token: string) {
+  await db().prepare("DELETE FROM mail_push_tokens WHERE token = ?").run(token);
 }
 
 /** Notifie tous les appareils du compte qu'un mail externe vient d'arriver. */
 async function notifyAccountPush(accountId: string, fromName: string, subject: string) {
   const { fcmConfigured, sendPush } = await import("@/lib/mail/fcm");
   if (!fcmConfigured()) return;
-  const rows = db()
+  const rows = await db()
     .prepare("SELECT token FROM mail_push_tokens WHERE account_id = ?")
     .all(accountId) as { token: string }[];
   for (const r of rows) {
@@ -1015,8 +1019,8 @@ function parsePassWrap(raw: string): PassWrap | null {
   return w;
 }
 
-export function vaultPublicKey(accountId: string): string | null {
-  const r = db()
+export async function vaultPublicKey(accountId: string): Promise<string | null> {
+  const r = await db()
     .prepare("SELECT vault_ecdh_pub AS pub FROM mail_accounts WHERE id = ?")
     .get(accountId) as { pub?: string } | undefined;
   const pub = r?.pub || "";
@@ -1024,8 +1028,8 @@ export function vaultPublicKey(accountId: string): string | null {
 }
 
 /** Clé publique ML-KEM-768 du coffre — null si coffre pré-PQ. */
-export function vaultMlkemKey(accountId: string): string | null {
-  const r = db()
+export async function vaultMlkemKey(accountId: string): Promise<string | null> {
+  const r = await db()
     .prepare("SELECT vault_mlkem_pub AS pub FROM mail_accounts WHERE id = ?")
     .get(accountId) as { pub?: string } | undefined;
   const pub = r?.pub || "";
@@ -1034,16 +1038,19 @@ export function vaultMlkemKey(accountId: string): string | null {
 }
 
 /** Enregistre la clé PQ d'un coffre existant (upgrade transparent au déverrouillage). */
-export function setVaultMlkemKey(accountId: string, pub: string): { ok: true } | { error: string } {
-  if (!getVaultRecord(accountId)) return { error: "Coffre absent." };
-  db()
+export async function setVaultMlkemKey(
+  accountId: string,
+  pub: string,
+): Promise<{ ok: true } | { error: string }> {
+  if (!(await getVaultRecord(accountId))) return { error: "Coffre absent." };
+  await db()
     .prepare("UPDATE mail_accounts SET vault_mlkem_pub = ? WHERE id = ? AND vault_mlkem_pub = ''")
     .run(pub, accountId);
   return { ok: true };
 }
 
-export function getVaultRecord(accountId: string): VaultRecord | null {
-  const r = db()
+export async function getVaultRecord(accountId: string): Promise<VaultRecord | null> {
+  const r = await db()
     .prepare(
       "SELECT vault_ecdh_pub, vault_ecdsa_pub, vault_mlkem_pub, vault_priv_wrap, vault_recovery_wrap, vault_fp FROM mail_accounts WHERE id = ?",
     )
@@ -1071,16 +1078,16 @@ export function getVaultRecord(accountId: string): VaultRecord | null {
   };
 }
 
-export function saveVault(
+export async function saveVault(
   accountId: string,
   v: VaultRecord,
-): { ok: true } | { error: string } {
-  const row = db()
+): Promise<{ ok: true } | { error: string }> {
+  const row = await db()
     .prepare("SELECT vault_ecdh_pub AS pub FROM mail_accounts WHERE id = ?")
     .get(accountId) as { pub?: string } | undefined;
   if (!row) return { error: "Compte introuvable." };
   if (row.pub) return { error: "Le coffre existe déjà." };
-  db()
+  await db()
     .prepare(
       `UPDATE mail_accounts
        SET vault_ecdh_pub = ?, vault_ecdsa_pub = ?, vault_mlkem_pub = ?, vault_priv_wrap = ?, vault_recovery_wrap = ?, vault_fp = ?
@@ -1098,30 +1105,30 @@ export function saveVault(
   return { ok: true };
 }
 
-export function updateVaultWraps(
+export async function updateVaultWraps(
   accountId: string,
   patch: { privWrap?: PassWrap; recoveryWrap?: PassWrap },
-): { ok: true } | { error: string } {
-  if (!getVaultRecord(accountId)) return { error: "Coffre absent." };
+): Promise<{ ok: true } | { error: string }> {
+  if (!(await getVaultRecord(accountId))) return { error: "Coffre absent." };
   if (patch.privWrap) {
-    db()
+    await db()
       .prepare("UPDATE mail_accounts SET vault_priv_wrap = ? WHERE id = ?")
       .run(JSON.stringify(patch.privWrap), accountId);
   }
   if (patch.recoveryWrap) {
-    db()
+    await db()
       .prepare("UPDATE mail_accounts SET vault_recovery_wrap = ? WHERE id = ?")
       .run(JSON.stringify(patch.recoveryWrap), accountId);
   }
   return { ok: true };
 }
 
-export function issueVaultChallenge(accountId: string): { nonce: string } {
+export async function issueVaultChallenge(accountId: string): Promise<{ nonce: string; }> {
   const nonce = crypto.randomBytes(32).toString("base64url");
-  db()
+  await db()
     .prepare("DELETE FROM mail_vault_challenges WHERE account_id = ? OR expires_at < ?")
     .run(accountId, now());
-  db()
+  await db()
     .prepare(
       "INSERT INTO mail_vault_challenges (id, account_id, nonce, expires_at) VALUES (?, ?, ?, ?)",
     )
@@ -1129,39 +1136,55 @@ export function issueVaultChallenge(accountId: string): { nonce: string } {
   return { nonce };
 }
 
-export function consumeVaultChallenge(accountId: string, nonce: string): boolean {
-  const row = db()
+export async function consumeVaultChallenge(accountId: string, nonce: string): Promise<boolean> {
+  const row = await db()
     .prepare(
       "SELECT id, expires_at FROM mail_vault_challenges WHERE account_id = ? AND nonce = ?",
     )
     .get(accountId, nonce) as { id: string; expires_at: string } | undefined;
   if (!row) return false;
-  db().prepare("DELETE FROM mail_vault_challenges WHERE id = ?").run(row.id);
+  await db().prepare("DELETE FROM mail_vault_challenges WHERE id = ?").run(row.id);
   return row.expires_at >= now();
 }
 
 export type MailKeyStatus = "ok" | "no-vault" | "missing";
 
-export function lookupMailKeys(
+export async function lookupMailKeys(
   emails: string[],
-): { email: string; status: MailKeyStatus; ecdhPublic?: string; mlkemPublic?: string }[] {
-  return emails.slice(0, 20).map((raw) => {
+): Promise<{ email: string; status: MailKeyStatus; ecdhPublic?: string | undefined; mlkemPublic?: string | undefined; }[]> {
+  const out = [];
+  for (const raw of emails.slice(0, 20)) {
     const email = raw.trim().toLowerCase();
-    if (!INTERNAL_RE.test(email)) return { email, status: "missing" as const };
-    const acc = getAccountByEmail(email);
-    if (!acc || acc.status !== "active") return { email, status: "missing" as const };
-    const pub = vaultPublicKey(acc.id);
-    if (!pub) return { email, status: "no-vault" as const };
-    return { email, status: "ok" as const, ecdhPublic: pub, mlkemPublic: vaultMlkemKey(acc.id) ?? undefined };
-  });
+    if (!INTERNAL_RE.test(email)) {
+      out.push({ email, status: "missing" as const });
+      continue;
+    }
+    const acc = await getAccountByEmail(email);
+    if (!acc || acc.status !== "active") {
+      out.push({ email, status: "missing" as const });
+      continue;
+    }
+    const pub = await vaultPublicKey(acc.id);
+    if (!pub) {
+      out.push({ email, status: "no-vault" as const });
+      continue;
+    }
+    out.push({
+      email,
+      status: "ok" as const,
+      ecdhPublic: pub,
+      mlkemPublic: (await vaultMlkemKey(acc.id)) ?? undefined,
+    });
+  }
+  return out;
 }
 
 /** Scelle les messages encore lisibles par le serveur dans le coffre du compte. */
 export async function migrateLegacyToVault(accountId: string): Promise<number> {
-  const pub = vaultPublicKey(accountId);
+  const pub = await vaultPublicKey(accountId);
   if (!pub) return 0;
-  const mlkem = vaultMlkemKey(accountId) ?? undefined;
-  const rows = db()
+  const mlkem = (await vaultMlkemKey(accountId)) ?? undefined;
+  const rows = await db()
     .prepare(
       "SELECT id, subject_enc, body_enc FROM mail_messages WHERE account_id = ? AND enc = 0",
     )
@@ -1169,7 +1192,7 @@ export async function migrateLegacyToVault(accountId: string): Promise<number> {
   let n = 0;
   for (const row of rows) {
     const sealed = await sealText(pub, decryptText(row.subject_enc), decryptText(row.body_enc), mlkem);
-    db()
+    await db()
       .prepare(
         `UPDATE mail_messages
          SET enc = 1, subject_enc = ?, body_enc = ?, wraps = ?
@@ -1197,22 +1220,22 @@ type UploadRow = {
   data: unknown;
 };
 
-export function saveUploadBlob(
+export async function saveUploadBlob(
   accountId: string,
   opts: { bytes: Buffer; fileIv: string; nameIv: string; nameCt: string },
-): { id: string } | { error: string } {
+): Promise<{ id: string } | { error: string }> {
   if (opts.bytes.length < 16 || opts.bytes.length > MAX_CIPHER_BYTES) {
     return { error: "Pièce jointe trop lourde — 3 Mo maximum." };
   }
   if (![opts.fileIv, opts.nameIv, opts.nameCt].every((s) => typeof s === "string" && s.length > 8 && s.length < 8000)) {
     return { error: "En-tête de pièce jointe invalide." };
   }
-  db()
+  await db()
     .prepare("DELETE FROM mail_upload_blobs WHERE created_at < ?")
     .run(new Date(Date.now() - 24 * 3600_000).toISOString());
   const id = uid();
   const sha = crypto.createHash("sha256").update(opts.bytes).digest("hex");
-  db()
+  await db()
     .prepare(
       `INSERT INTO mail_upload_blobs
        (id, account_id, byte_size, sha256, file_iv, name_iv, name_ct, data, created_at)
@@ -1222,13 +1245,16 @@ export function saveUploadBlob(
   return { id };
 }
 
-function loadOwnedBlobs(accountId: string, ids: string[]): UploadRow[] | { error: string } {
+async function loadOwnedBlobs(
+  accountId: string,
+  ids: string[],
+): Promise<{ error: string } | UploadRow[]> {
   if (ids.length > MAX_ATTACHMENTS) return { error: "3 pièces jointes maximum." };
   if (new Set(ids).size !== ids.length) return { error: "Pièce jointe en double." };
   const out: UploadRow[] = [];
   for (const id of ids) {
     if (!/^[a-f0-9]{24}$/.test(id)) return { error: "Pièce jointe invalide." };
-    const row = db()
+    const row = await db()
       .prepare("SELECT * FROM mail_upload_blobs WHERE id = ? AND account_id = ?")
       .get(id, accountId) as UploadRow | undefined;
     if (!row) return { error: "Pièce jointe expirée — joignez le fichier à nouveau." };
@@ -1242,14 +1268,14 @@ function loadOwnedBlobs(accountId: string, ids: string[]): UploadRow[] | { error
   return out;
 }
 
-function attachBlobs(messageId: string, accountId: string, blobs: UploadRow[]) {
+async function attachBlobs(messageId: string, accountId: string, blobs: UploadRow[]) {
   const stmt = db().prepare(
     `INSERT INTO mail_attachments
      (id, message_id, account_id, name_iv, name_ct, file_iv, byte_size, sha256, data, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   for (const b of blobs) {
-    stmt.run(
+    await stmt.run(
       uid(),
       messageId,
       accountId,
@@ -1264,17 +1290,17 @@ function attachBlobs(messageId: string, accountId: string, blobs: UploadRow[]) {
   }
 }
 
-function dropUploads(accountId: string, ids: string[]) {
+async function dropUploads(accountId: string, ids: string[]) {
   const stmt = db().prepare("DELETE FROM mail_upload_blobs WHERE account_id = ? AND id = ?");
-  for (const id of ids) stmt.run(accountId, id);
+  for (const id of ids) await stmt.run(accountId, id);
 }
 
-export function readAttachment(
+export async function readAttachment(
   accountId: string,
   id: string,
-): { bytes: Buffer; byteSize: number } | null {
+): Promise<{ bytes: Buffer<ArrayBufferLike>; byteSize: number; } | null> {
   if (!/^[a-f0-9]{24}$/.test(id)) return null;
-  const row = db()
+  const row = await db()
     .prepare(
       "SELECT data, sha256, byte_size FROM mail_attachments WHERE id = ? AND account_id = ?",
     )
@@ -1286,7 +1312,7 @@ export function readAttachment(
   return { bytes, byteSize: Number(row.byte_size) };
 }
 
-function insertSealed(m: {
+async function insertSealed(m: {
   threadId: string;
   accountId: string;
   folder: string;
@@ -1298,9 +1324,9 @@ function insertSealed(m: {
   wrap: KeyWrap;
   read?: boolean;
   kind?: string;
-}): string {
+}): Promise<string> {
   const id = uid();
-  db()
+  await db()
     .prepare(
       `INSERT INTO mail_messages
        (id, thread_id, account_id, folder, from_addr, from_name, to_addrs, subject_enc, body_enc, is_read, is_starred, kind, created_at, enc, wraps)
@@ -1338,9 +1364,9 @@ async function insertSealedNotice(
   subject: string,
   body: string,
 ) {
-  const pub = vaultPublicKey(accountId);
+  const pub = await vaultPublicKey(accountId);
   if (!pub) {
-    insertMessage({
+    await await insertMessage({
       threadId: uid(),
       accountId,
       folder: "inbox",
@@ -1353,8 +1379,8 @@ async function insertSealedNotice(
     });
     return;
   }
-  const sealed = await sealText(pub, subject, body, vaultMlkemKey(accountId) ?? undefined);
-  insertSealed({
+  const sealed = await sealText(pub, subject, body, await vaultMlkemKey(accountId) ?? undefined);
+  await insertSealed({
     threadId: uid(),
     accountId,
     folder: "inbox",
@@ -1390,21 +1416,21 @@ export async function deliverSealedMail(
   input: SealedDelivery,
 ): Promise<SendResult & { error?: string }> {
   const empty = { ok: false, delivered: [] as string[], bounced: [] as { address: string; reason: string }[], externals: [] as string[] };
-  if (!vaultPublicKey(sender.id)) return { ...empty, error: "Activez le coffre avant d'envoyer." };
+  if (!(await vaultPublicKey(sender.id))) return { ...empty, error: "Activez le coffre avant d'envoyer." };
   if (!validCipher(input.subjectCipher, 20_000) || !validCipher(input.bodyCipher)) {
     return { ...empty, error: "Message chiffré invalide." };
   }
   const selfWrap = input.wraps[sender.email];
   if (!validWrap(selfWrap)) return { ...empty, error: "Votre copie chiffrée est absente." };
 
-  const blobs = loadOwnedBlobs(sender.id, input.blobIds || []);
+  const blobs = await loadOwnedBlobs(sender.id, input.blobIds || []);
   if ("error" in blobs) return { ...empty, error: blobs.error };
 
   const threadId = uid();
   const senderName = sender.displayName || sender.address;
 
   if (input.draft) {
-    const id = insertSealed({
+    const id = await insertSealed({
       threadId,
       accountId: sender.id,
       folder: "drafts",
@@ -1416,8 +1442,8 @@ export async function deliverSealedMail(
       wrap: selfWrap,
       read: true,
     });
-    attachBlobs(id, sender.id, blobs);
-    dropUploads(sender.id, blobs.map((b) => b.id));
+    await attachBlobs(id, sender.id, blobs);
+    await dropUploads(sender.id, blobs.map((b) => b.id));
     return { ok: true, delivered: [], bounced: [], externals: [] };
   }
 
@@ -1435,10 +1461,10 @@ export async function deliverSealedMail(
       continue;
     }
     if (INTERNAL_RE.test(addr)) {
-      const acc = getAccountByEmail(addr);
+      const acc = await getAccountByEmail(addr);
       if (!acc || acc.status !== "active") {
         bounced.push({ address: addr, reason: "Ce compte Ayeba Mail n'existe pas" });
-      } else if (!vaultPublicKey(acc.id)) {
+      } else if (!(await vaultPublicKey(acc.id))) {
         bounced.push({ address: addr, reason: "Ce correspondant n'a pas activé le coffre de bout en bout" });
       } else if (!validWrap(input.wraps[addr])) {
         bounced.push({ address: addr, reason: "Enveloppe de chiffrement manquante pour ce correspondant" });
@@ -1460,7 +1486,7 @@ export async function deliverSealedMail(
     }
   }
 
-  const sentId = insertSealed({
+  const sentId = await insertSealed({
     threadId,
     accountId: sender.id,
     folder: "sent",
@@ -1472,10 +1498,10 @@ export async function deliverSealedMail(
     wrap: selfWrap,
     read: true,
   });
-  attachBlobs(sentId, sender.id, blobs);
+  await attachBlobs(sentId, sender.id, blobs);
 
   for (const acc of internals) {
-    const id = insertSealed({
+    const id = await insertSealed({
       threadId,
       accountId: acc.id,
       folder: "inbox",
@@ -1486,7 +1512,7 @@ export async function deliverSealedMail(
       bodyCipher: input.bodyCipher,
       wrap: input.wraps[acc.email],
     });
-    attachBlobs(id, acc.id, blobs);
+    await attachBlobs(id, acc.id, blobs);
     delivered.push(acc.email);
   }
 
@@ -1547,6 +1573,6 @@ export async function deliverSealedMail(
     );
   }
 
-  dropUploads(sender.id, blobs.map((b) => b.id));
+  await dropUploads(sender.id, blobs.map((b) => b.id));
   return { ok: delivered.length > 0, delivered, bounced, externals: [] };
 }

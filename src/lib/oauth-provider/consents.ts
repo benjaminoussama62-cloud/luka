@@ -1,4 +1,4 @@
-import { getDb } from "@/lib/storage/database";
+import { adb } from "@/lib/storage/adb";
 import { logOAuthAudit } from "./audit";
 
 export type ConnectedApp = {
@@ -13,18 +13,17 @@ export type ConnectedApp = {
   verified: boolean;
 };
 
-export function listUserConnectedApps(userId: string): ConnectedApp[] {
-  const db = getDb();
-  const rows = db
-    .prepare(
-      `SELECT c.client_id, c.name, c.description, c.logo_url, c.website_url, c.tier, c.verified,
-              uc.scope, uc.granted_at
-       FROM oauth_user_consents uc
-       JOIN oauth_clients c ON c.client_id = uc.client_id
-       WHERE uc.user_id = ?
-       ORDER BY uc.granted_at DESC`,
-    )
-    .all(userId) as {
+export async function listUserConnectedApps(userId: string): Promise<ConnectedApp[]> {
+  const db = adb();
+  const rows = (await db.all(
+    `SELECT c.client_id, c.name, c.description, c.logo_url, c.website_url, c.tier, c.verified,
+            uc.scope, uc.granted_at
+     FROM oauth_user_consents uc
+     JOIN oauth_clients c ON c.client_id = uc.client_id
+     WHERE uc.user_id = ?
+     ORDER BY uc.granted_at DESC`,
+    [userId],
+  )) as {
     client_id: string;
     name: string;
     description: string;
@@ -49,26 +48,32 @@ export function listUserConnectedApps(userId: string): ConnectedApp[] {
   }));
 }
 
-export function revokeUserAppAccess(userId: string, clientId: string, ip?: string) {
-  const db = getDb();
+export async function revokeUserAppAccess(userId: string, clientId: string, ip?: string) {
+  const db = adb();
   const now = new Date().toISOString();
 
-  db.prepare("DELETE FROM oauth_user_consents WHERE user_id = ? AND client_id = ?").run(
-    userId,
-    clientId,
-  );
+  // Consentement + jetons révoqués dans la même transaction — jamais un état
+  // où le consentement est retiré mais un refresh token reste vivant.
+  await db.transaction(async (tx) => {
+    await tx.run("DELETE FROM oauth_user_consents WHERE user_id = ? AND client_id = ?", [
+      userId,
+      clientId,
+    ]);
 
-  db.prepare(
-    `UPDATE oauth_access_tokens SET revoked_at = ?
-     WHERE user_id = ? AND client_id = ? AND revoked_at IS NULL`,
-  ).run(now, userId, clientId);
+    await tx.run(
+      `UPDATE oauth_access_tokens SET revoked_at = ?
+       WHERE user_id = ? AND client_id = ? AND revoked_at IS NULL`,
+      [now, userId, clientId],
+    );
 
-  db.prepare(
-    `UPDATE oauth_refresh_tokens SET revoked_at = ?
-     WHERE user_id = ? AND client_id = ? AND revoked_at IS NULL`,
-  ).run(now, userId, clientId);
+    await tx.run(
+      `UPDATE oauth_refresh_tokens SET revoked_at = ?
+       WHERE user_id = ? AND client_id = ? AND revoked_at IS NULL`,
+      [now, userId, clientId],
+    );
+  });
 
-  logOAuthAudit({
+  await logOAuthAudit({
     event: "consent_revoked",
     clientId,
     userId,

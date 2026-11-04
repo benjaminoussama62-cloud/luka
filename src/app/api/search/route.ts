@@ -34,7 +34,7 @@ export async function POST(req: Request) {
   try {
     const ip =
       req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "local";
-    if (!rateLimit(`search:${ip}`, 180, 60_000)) {
+    if (!await rateLimit(`search:${ip}`, 180, 60_000)) {
       return NextResponse.json(
         { error: "Trop de requêtes — réessayez dans une minute." },
         { status: 429 },
@@ -129,6 +129,19 @@ export async function POST(req: Request) {
           if (urls.length) {
             if (turso) await enqueueUrlsAsync(urls, 70);
             else urls.forEach((u) => enqueueUrl(u, 70));
+          }
+        }
+        // L'index apprend aussi du vrai web : les meilleurs résultats live
+        // (Bing/DDG/Brave…) entrent en file de crawl — pas seulement Wikipedia.
+        // Le crawler respecte robots.txt et déduplique via ON CONFLICT.
+        if (!body.privateMode && resultCount > 0) {
+          const urls = (serp.results ?? [])
+            .slice(0, 5)
+            .map((r) => r.url)
+            .filter((u) => /^https?:\/\//i.test(u) && !u.includes("ayeba.app"));
+          if (urls.length) {
+            if (turso) await enqueueUrlsAsync(urls, 40);
+            else urls.forEach((u) => enqueueUrl(u, 40));
           }
         }
       } catch (e) {

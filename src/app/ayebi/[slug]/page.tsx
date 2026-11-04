@@ -33,7 +33,7 @@ export default async function AyebiArticlePage({ params }: { params: Promise<{ s
   ]);
   if (!article) notFound();
 
-  const author = session ? authorFromSession(session) : null;
+  const author = session ? await authorFromSession(session) : null;
   const scored = scoreArticleQuality(article);
   const articleWithScore = {
     ...article,

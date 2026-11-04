@@ -13,12 +13,12 @@ export async function POST(req: Request) {
   const clientSecret = basic?.clientSecret || body.client_secret?.trim();
   const token = body.token?.trim();
 
-  if (!clientId || !clientSecret || !verifyOAuthClientSecret(clientId, clientSecret)) {
+  if (!clientId || !clientSecret || !(await verifyOAuthClientSecret(clientId, clientSecret))) {
     return oauthJsonError("invalid_client", undefined, 401);
   }
   if (!token) return oauthJsonError("invalid_request", "token requis");
 
-  const session = resolveAccessToken(token);
+  const session = await resolveAccessToken(token);
   if (!session) {
     return NextResponse.json({ active: false }, { headers: OAUTH_NO_STORE });
   }

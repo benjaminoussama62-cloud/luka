@@ -12,7 +12,7 @@ const LANGS: Record<string, string> = {
 export async function POST(req: Request) {
   const user = await getSessionFromCookies();
   if (!user) return NextResponse.json({ error: "auth required" }, { status: 401 });
-  if (!rateLimit(`mail-translate:${clientIp(req)}`, 40, 60_000)) return rateLimitResponse();
+  if (!await rateLimit(`mail-translate:${clientIp(req)}`, 40, 60_000)) return rateLimitResponse();
 
   const body = (await req.json().catch(() => null)) as
     | { text?: string; target?: string }

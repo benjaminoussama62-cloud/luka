@@ -10,7 +10,7 @@ export async function OPTIONS(req: Request) {
 export async function POST(req: Request) {
   const cors = jfcCorsHeaders(req);
   try {
-    if (!rateLimit(`jfc-auth:${clientIp(req)}`, 20, 60_000)) {
+    if (!await rateLimit(`jfc-auth:${clientIp(req)}`, 20, 60_000)) {
       return rateLimitResponse();
     }
     const body = (await req.json()) as {

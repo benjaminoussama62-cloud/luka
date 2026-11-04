@@ -32,7 +32,7 @@ export default async function OAuthAuthorizePage({ searchParams }: Props) {
     else if (Array.isArray(v) && v[0]) qs.set(k, v[0]);
   }
 
-  const parsed = parseAuthorizeParams(qs);
+  const parsed = await parseAuthorizeParams(qs);
   if ("error" in parsed) {
     return (
       <div className="oauth-consent-shell">
@@ -44,21 +44,21 @@ export default async function OAuthAuthorizePage({ searchParams }: Props) {
     );
   }
 
-  const client = getOAuthClient(parsed.clientId);
+  const client = await getOAuthClient(parsed.clientId);
   if (!client) {
     redirect(buildRedirectWithError(parsed.redirectUri, "invalid_client", parsed.state));
   }
 
   // Per-client scope restrictions from the developer console.
-  const allowed = getClientAllowedScopes(parsed.clientId);
+  const allowed = await getClientAllowedScopes(parsed.clientId);
   if (allowed && !parseScopeString(parsed.scope).every((s) => allowed.includes(s))) {
     redirect(buildRedirectWithError(parsed.redirectUri, "invalid_scope", parsed.state));
   }
 
   const session = await getSessionFromCookies();
-  if (session && hasUserConsent(session.id, parsed.clientId, parsed.scope)) {
+  if (session && (await hasUserConsent(session.id, parsed.clientId, parsed.scope))) {
     const scopes = parseScopeString(parsed.scope);
-    const code = createAuthorizationCode({
+    const code = await createAuthorizationCode({
       clientId: parsed.clientId,
       userId: session.id,
       redirectUri: parsed.redirectUri,
@@ -67,7 +67,7 @@ export default async function OAuthAuthorizePage({ searchParams }: Props) {
       codeChallenge: parsed.codeChallenge,
       codeChallengeMethod: parsed.codeChallengeMethod,
     });
-    recordUserConsent(session.id, parsed.clientId, parsed.scope);
+    await recordUserConsent(session.id, parsed.clientId, parsed.scope);
     redirect(buildRedirectWithCode(parsed.redirectUri, code, parsed.state));
   }
 

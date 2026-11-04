@@ -9,7 +9,7 @@ import {
 
 export async function POST(req: Request) {
   try {
-    if (!rateLimit(`auth:${clientIp(req)}`, 12, 60_000)) {
+    if (!await rateLimit(`auth:${clientIp(req)}`, 12, 60_000)) {
       return rateLimitResponse();
     }
     const body = (await req.json()) as {

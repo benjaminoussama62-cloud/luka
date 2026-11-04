@@ -5,14 +5,14 @@ import { sendSms, smsConfigured } from "@/lib/mail/sms";
 
 /** Connexion Ayeba Mail : code SMS sur le numéro du compte. */
 export async function POST(req: Request) {
-  if (!rateLimit(`mail-signin:${clientIp(req)}`, 10, 60_000)) return rateLimitResponse();
+  if (!await rateLimit(`mail-signin:${clientIp(req)}`, 10, 60_000)) return rateLimitResponse();
 
   const body = (await req.json().catch(() => null)) as { phone?: string } | null;
   const phone = normalizePhone(String(body?.phone || ""));
   if (!phone) return NextResponse.json({ error: "Numéro de téléphone invalide." }, { status: 400 });
-  if (!rateLimit(`mail-otp:${phone}`, 4, 10 * 60_000)) return rateLimitResponse();
+  if (!await rateLimit(`mail-otp:${phone}`, 4, 10 * 60_000)) return rateLimitResponse();
 
-  const v = createSigninCode(phone);
+  const v = await createSigninCode(phone);
   if ("error" in v) return NextResponse.json({ error: v.error }, { status: 404 });
 
   const sent = await sendSms(phone, `Ayeba Mail — votre code de connexion : ${v.code} (valide 5 min)`);

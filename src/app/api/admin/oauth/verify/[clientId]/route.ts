@@ -22,10 +22,10 @@ export async function POST(_req: Request, ctx: Ctx) {
   }
 
   const { clientId } = await ctx.params;
-  const ok = verifyOAuthClient(clientId);
+  const ok = await verifyOAuthClient(clientId);
   if (!ok) return NextResponse.json({ error: "Client introuvable" }, { status: 404 });
 
-  logOAuthAudit({
+  await logOAuthAudit({
     event: "client_verified",
     clientId,
     userId: user.id,

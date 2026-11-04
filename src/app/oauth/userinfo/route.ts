@@ -13,7 +13,7 @@ export async function GET(req: Request) {
   }
 
   const token = auth.slice(7).trim();
-  const session = resolveAccessToken(token);
+  const session = await resolveAccessToken(token);
   if (!session) {
     return NextResponse.json({ error: "invalid_token" }, { status: 401 });
   }

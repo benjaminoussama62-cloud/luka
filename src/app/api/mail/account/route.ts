@@ -5,7 +5,7 @@ import { getAccountByUser, unreadCount, updateAccountProfile } from "@/lib/mail/
 export async function GET() {
   const user = await getSessionFromCookies();
   if (!user) return NextResponse.json({ account: null }, { status: 401 });
-  const account = getAccountByUser(user.id);
+  const account = await getAccountByUser(user.id);
   if (!account) return NextResponse.json({ account: null });
   return NextResponse.json({
     account: {
@@ -17,7 +17,7 @@ export async function GET() {
       status: account.status,
       createdAt: account.createdAt,
     },
-    unread: unreadCount(account.id),
+    unread: await unreadCount(account.id),
   });
 }
 
@@ -25,7 +25,7 @@ export async function GET() {
 export async function PATCH(req: Request) {
   const user = await getSessionFromCookies();
   if (!user) return NextResponse.json({ error: "session requise" }, { status: 401 });
-  const account = getAccountByUser(user.id);
+  const account = await getAccountByUser(user.id);
   if (!account) return NextResponse.json({ error: "aucune boîte" }, { status: 404 });
   if (account.status === "suspended") {
     return NextResponse.json({ error: "compte suspendu" }, { status: 403 });
@@ -38,7 +38,7 @@ export async function PATCH(req: Request) {
   } | null;
   if (!body) return NextResponse.json({ error: "corps invalide" }, { status: 400 });
 
-  const res = updateAccountProfile(account.id, {
+  const res = await updateAccountProfile(account.id, {
     displayName: body.displayName,
     avatar: body.avatar,
     signature: body.signature,

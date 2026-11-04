@@ -47,7 +47,7 @@ export async function POST(req: Request) {
     stub: body.stub,
   };
 
-  const result = await saveArticle(article, authorFromSession(session), String(body.editSummary ?? ""), {
+  const result = await saveArticle(article, await authorFromSession(session), String(body.editSummary ?? ""), {
     create: true,
   });
   if ("error" in result) {

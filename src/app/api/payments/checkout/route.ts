@@ -14,7 +14,7 @@ export async function POST(req: Request) {
   const user = await requireStudioUser();
   if (user instanceof NextResponse) return user;
 
-  if (!rateLimit(`pay:${clientIp(req)}`, 10, 60_000)) {
+  if (!await rateLimit(`pay:${clientIp(req)}`, 10, 60_000)) {
     return rateLimitResponse();
   }
 

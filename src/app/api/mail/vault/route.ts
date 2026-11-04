@@ -14,7 +14,7 @@ export const runtime = "nodejs";
 async function accountOrError() {
   const user = await getSessionFromCookies();
   if (!user) return { error: NextResponse.json({ error: "auth required" }, { status: 401 }) };
-  const account = getAccountByUser(user.id);
+  const account = await getAccountByUser(user.id);
   if (!account) return { error: NextResponse.json({ error: "no mail account" }, { status: 404 }) };
   if (account.status === "suspended") {
     return { error: NextResponse.json({ error: "Compte suspendu." }, { status: 403 }) };
@@ -35,7 +35,7 @@ export async function GET() {
   const ctx = await accountOrError();
   if ("error" in ctx && ctx.error) return ctx.error;
   const account = ctx.account!;
-  const vault = getVaultRecord(account.id);
+  const vault = await getVaultRecord(account.id);
   if (!vault) return NextResponse.json({ vault: null });
   await migrateLegacyToVault(account.id);
   return NextResponse.json({ vault });
@@ -45,7 +45,7 @@ export async function POST(req: Request) {
   const ctx = await accountOrError();
   if ("error" in ctx && ctx.error) return ctx.error;
   const account = ctx.account!;
-  if (getVaultRecord(account.id)) {
+  if (await getVaultRecord(account.id)) {
     return NextResponse.json({ error: "Le coffre existe déjà." }, { status: 409 });
   }
 
@@ -87,7 +87,7 @@ export async function POST(req: Request) {
   }
 
   const fingerprint = await fingerprintSpki(ecdhPublic);
-  const saved = saveVault(account.id, {
+  const saved = await saveVault(account.id, {
     ecdhPublic,
     ecdsaPublic,
     mlkemPublic,

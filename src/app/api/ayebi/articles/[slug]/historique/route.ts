@@ -37,7 +37,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
     return NextResponse.json({ error: "Numéro de révision requis." }, { status: 400 });
   }
 
-  const result = restoreRevision(slug, revision, authorFromSession(session));
+  const result = restoreRevision(slug, revision, await authorFromSession(session));
   if ("error" in result) {
     return NextResponse.json({ error: result.error }, { status: 400 });
   }

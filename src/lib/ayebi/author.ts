@@ -4,10 +4,10 @@ import type { AyebiRole } from "./db-sqlite";
 
 export type AyebiAuthor = { id: string; name: string; role: AyebiRole };
 
-export function authorFromSession(session: SessionUser): AyebiAuthor {
+export async function authorFromSession(session: SessionUser): Promise<AyebiAuthor> {
   return {
     id: session.id,
     name: session.name,
-    role: getUserRole(session.id),
+    role: await getUserRole(session.id),
   };
 }

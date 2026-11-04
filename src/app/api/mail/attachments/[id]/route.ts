@@ -8,10 +8,10 @@ export const runtime = "nodejs";
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   const user = await getSessionFromCookies();
   if (!user) return NextResponse.json({ error: "auth required" }, { status: 401 });
-  const account = getAccountByUser(user.id);
+  const account = await getAccountByUser(user.id);
   if (!account) return NextResponse.json({ error: "no mail account" }, { status: 404 });
   const { id } = await ctx.params;
-  const file = readAttachment(account.id, id);
+  const file = await readAttachment(account.id, id);
   if (!file) return NextResponse.json({ error: "Introuvable." }, { status: 404 });
   return new NextResponse(new Uint8Array(file.bytes), {
     status: 200,

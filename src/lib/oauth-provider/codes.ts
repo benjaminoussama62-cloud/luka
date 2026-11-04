@@ -1,11 +1,11 @@
-import { getDb } from "@/lib/storage/database";
+import { adb } from "@/lib/storage/adb";
 import { generateAuthCode, verifyPkce } from "./crypto";
 import type { OAuthScopeId } from "./scopes";
 import { scopeToString } from "./scopes";
 
 const CODE_TTL_MS = 10 * 60 * 1000;
 
-export function createAuthorizationCode(input: {
+export async function createAuthorizationCode(input: {
   clientId: string;
   userId: string;
   redirectUri: string;
@@ -14,26 +14,27 @@ export function createAuthorizationCode(input: {
   codeChallenge?: string;
   codeChallengeMethod?: string;
 }) {
-  const db = getDb();
+  const db = adb();
   const code = generateAuthCode();
   const now = new Date();
   const expiresAt = new Date(now.getTime() + CODE_TTL_MS).toISOString();
 
-  db.prepare(
+  await db.run(
     `INSERT INTO oauth_authorization_codes
      (code, client_id, user_id, redirect_uri, scope, state, code_challenge, code_challenge_method, expires_at, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    code,
-    input.clientId,
-    input.userId,
-    input.redirectUri,
-    scopeToString(input.scopes),
-    input.state || "",
-    input.codeChallenge || null,
-    input.codeChallengeMethod || null,
-    expiresAt,
-    now.toISOString(),
+    [
+      code,
+      input.clientId,
+      input.userId,
+      input.redirectUri,
+      scopeToString(input.scopes),
+      input.state || "",
+      input.codeChallenge || null,
+      input.codeChallengeMethod || null,
+      expiresAt,
+      now.toISOString(),
+    ],
   );
 
   return code;
@@ -52,16 +53,16 @@ type CodeRow = {
   used_at: string | null;
 };
 
-export function consumeAuthorizationCode(input: {
+export async function consumeAuthorizationCode(input: {
   code: string;
   clientId: string;
   redirectUri: string;
   codeVerifier?: string;
-}): { userId: string; scope: string } | null {
-  const db = getDb();
-  const row = db
-    .prepare("SELECT * FROM oauth_authorization_codes WHERE code = ?")
-    .get(input.code) as CodeRow | undefined;
+}): Promise<{ userId: string; scope: string } | null> {
+  const db = adb();
+  const row = (await db.get("SELECT * FROM oauth_authorization_codes WHERE code = ?", [
+    input.code,
+  ])) as CodeRow | undefined;
 
   if (!row) return null;
   if (row.used_at) return null;
@@ -75,28 +76,38 @@ export function consumeAuthorizationCode(input: {
     if (!verifyPkce(input.codeVerifier, row.code_challenge, method)) return null;
   }
 
-  db.prepare("UPDATE oauth_authorization_codes SET used_at = ? WHERE code = ?").run(
-    new Date().toISOString(),
-    input.code,
+  // Consommation atomique : l'UPDATE gardé ne réussit que si le code est
+  // encore vierge. Deux échanges concurrents du même code — un seul gagne,
+  // l'autre voit changes = 0 et repart avec invalid_grant.
+  const claimed = await db.run(
+    "UPDATE oauth_authorization_codes SET used_at = ? WHERE code = ? AND used_at IS NULL",
+    [new Date().toISOString(), input.code],
   );
+  if (claimed.changes !== 1) return null;
 
   return { userId: row.user_id, scope: row.scope };
 }
 
-export function recordUserConsent(userId: string, clientId: string, scope: string) {
-  const db = getDb();
-  db.prepare(
+export async function recordUserConsent(userId: string, clientId: string, scope: string) {
+  const db = adb();
+  await db.run(
     `INSERT INTO oauth_user_consents (user_id, client_id, scope, granted_at)
      VALUES (?, ?, ?, ?)
      ON CONFLICT(user_id, client_id) DO UPDATE SET scope = excluded.scope, granted_at = excluded.granted_at`,
-  ).run(userId, clientId, scope, new Date().toISOString());
+    [userId, clientId, scope, new Date().toISOString()],
+  );
 }
 
-export function hasUserConsent(userId: string, clientId: string, requestedScope: string): boolean {
-  const db = getDb();
-  const row = db
-    .prepare("SELECT scope FROM oauth_user_consents WHERE user_id = ? AND client_id = ?")
-    .get(userId, clientId) as { scope: string } | undefined;
+export async function hasUserConsent(
+  userId: string,
+  clientId: string,
+  requestedScope: string,
+): Promise<boolean> {
+  const db = adb();
+  const row = (await db.get(
+    "SELECT scope FROM oauth_user_consents WHERE user_id = ? AND client_id = ?",
+    [userId, clientId],
+  )) as { scope: string } | undefined;
   if (!row) return false;
   const granted = new Set(row.scope.split(/\s+/));
   const needed = requestedScope.split(/\s+/).filter(Boolean);

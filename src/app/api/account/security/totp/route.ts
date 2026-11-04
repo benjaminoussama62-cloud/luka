@@ -13,7 +13,7 @@ export const runtime = "nodejs";
 export async function GET() {
   const user = await getSessionFromCookies();
   if (!user) return NextResponse.json({ error: "Connexion requise" }, { status: 401 });
-  return NextResponse.json(getUserSecurity(user.id));
+  return NextResponse.json(await getUserSecurity(user.id));
 }
 
 export async function POST(req: Request) {
@@ -22,19 +22,19 @@ export async function POST(req: Request) {
 
   const body = (await req.json()) as { action?: string; code?: string };
   if (body.action === "begin") {
-    const secret = beginTotpSetup(user.id);
+    const secret = await beginTotpSetup(user.id);
     return NextResponse.json({
       secret,
       uri: totpProvisioningUri(secret, user.email),
     });
   }
   if (body.action === "confirm" && body.code) {
-    const result = confirmTotpSetup(user.id, body.code);
+    const result = await confirmTotpSetup(user.id, body.code);
     if ("error" in result) return NextResponse.json(result, { status: 400 });
     return NextResponse.json(result);
   }
   if (body.action === "disable" && body.code) {
-    const result = disableTotp(user.id, body.code);
+    const result = await disableTotp(user.id, body.code);
     if ("error" in result) return NextResponse.json(result, { status: 400 });
     return NextResponse.json(result);
   }

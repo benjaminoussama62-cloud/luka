@@ -10,6 +10,6 @@ export async function POST(req: Request) {
     (fd?.get("token") as string | null)?.trim() ||
     (await req.json().catch(() => ({}))).token?.trim?.();
 
-  if (token) revokeToken(token);
+  if (token) await revokeToken(token);
   return new NextResponse(null, { status: 200 });
 }

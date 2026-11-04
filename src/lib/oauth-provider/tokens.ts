@@ -1,4 +1,4 @@
-import { getDb } from "@/lib/storage/database";
+import { adb } from "@/lib/storage/adb";
 import { findUserById } from "@/lib/db";
 import { generateOpaqueToken, hashToken } from "./crypto";
 import { createIdToken } from "./oidc";
@@ -13,7 +13,7 @@ export async function issueTokens(input: {
   scope: string;
   includeIdToken?: boolean;
 }): Promise<TokenResponse> {
-  const db = getDb();
+  const db = adb();
   const accessToken = generateOpaqueToken();
   const refreshToken = generateOpaqueToken();
   const accessHash = hashToken(accessToken);
@@ -22,23 +22,27 @@ export async function issueTokens(input: {
   const accessExp = new Date(now.getTime() + ACCESS_TTL_SEC * 1000).toISOString();
   const refreshExp = new Date(now.getTime() + REFRESH_TTL_SEC * 1000).toISOString();
 
-  db.prepare(
-    `INSERT INTO oauth_access_tokens (token_hash, client_id, user_id, scope, expires_at, created_at)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-  ).run(accessHash, input.clientId, input.userId, input.scope, accessExp, now.toISOString());
+  await db.transaction(async (tx) => {
+    await tx.run(
+      `INSERT INTO oauth_access_tokens (token_hash, client_id, user_id, scope, expires_at, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [accessHash, input.clientId, input.userId, input.scope, accessExp, now.toISOString()],
+    );
 
-  db.prepare(
-    `INSERT INTO oauth_refresh_tokens (token_hash, access_token_hash, client_id, user_id, scope, expires_at, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    refreshHash,
-    accessHash,
-    input.clientId,
-    input.userId,
-    input.scope,
-    refreshExp,
-    now.toISOString(),
-  );
+    await tx.run(
+      `INSERT INTO oauth_refresh_tokens (token_hash, access_token_hash, client_id, user_id, scope, expires_at, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        refreshHash,
+        accessHash,
+        input.clientId,
+        input.userId,
+        input.scope,
+        refreshExp,
+        now.toISOString(),
+      ],
+    );
+  });
 
   const response: TokenResponse = {
     access_token: accessToken,
@@ -65,18 +69,17 @@ export async function issueTokens(input: {
   return response;
 }
 
-export function resolveAccessToken(token: string): {
+export async function resolveAccessToken(token: string): Promise<{
   userId: string;
   clientId: string;
   scope: string;
-} | null {
-  const db = getDb();
+} | null> {
+  const db = adb();
   const hash = hashToken(token);
-  const row = db
-    .prepare(
-      "SELECT user_id, client_id, scope, expires_at, revoked_at FROM oauth_access_tokens WHERE token_hash = ?",
-    )
-    .get(hash) as
+  const row = (await db.get(
+    "SELECT user_id, client_id, scope, expires_at, revoked_at FROM oauth_access_tokens WHERE token_hash = ?",
+    [hash],
+  )) as
     | {
         user_id: string;
         client_id: string;
@@ -96,13 +99,12 @@ export async function refreshAccessToken(input: {
   refreshToken: string;
   clientId: string;
 }): Promise<TokenResponse | null> {
-  const db = getDb();
+  const db = adb();
   const hash = hashToken(input.refreshToken);
-  const row = db
-    .prepare(
-      "SELECT access_token_hash, user_id, scope, expires_at, revoked_at FROM oauth_refresh_tokens WHERE token_hash = ? AND client_id = ?",
-    )
-    .get(hash, input.clientId) as
+  const row = (await db.get(
+    "SELECT access_token_hash, user_id, scope, expires_at, revoked_at FROM oauth_refresh_tokens WHERE token_hash = ? AND client_id = ?",
+    [hash, input.clientId],
+  )) as
     | {
         access_token_hash: string;
         user_id: string;
@@ -115,14 +117,18 @@ export async function refreshAccessToken(input: {
   if (!row || row.revoked_at) return null;
   if (new Date(row.expires_at).getTime() < Date.now()) return null;
 
-  db.prepare("UPDATE oauth_access_tokens SET revoked_at = ? WHERE token_hash = ?").run(
-    new Date().toISOString(),
-    row.access_token_hash,
-  );
-  db.prepare("UPDATE oauth_refresh_tokens SET revoked_at = ? WHERE token_hash = ?").run(
-    new Date().toISOString(),
-    hash,
-  );
+  // Rotation atomique : l'ancien couple access/refresh est révoqué dans la
+  // même transaction — un refresh rejoué après rotation ne peut rien émettre.
+  await db.transaction(async (tx) => {
+    await tx.run("UPDATE oauth_access_tokens SET revoked_at = ? WHERE token_hash = ?", [
+      new Date().toISOString(),
+      row.access_token_hash,
+    ]);
+    await tx.run("UPDATE oauth_refresh_tokens SET revoked_at = ? WHERE token_hash = ?", [
+      new Date().toISOString(),
+      hash,
+    ]);
+  });
 
   return issueTokens({
     clientId: input.clientId,
@@ -131,10 +137,18 @@ export async function refreshAccessToken(input: {
   });
 }
 
-export function revokeToken(token: string) {
-  const db = getDb();
+export async function revokeToken(token: string) {
+  const db = adb();
   const hash = hashToken(token);
   const now = new Date().toISOString();
-  db.prepare("UPDATE oauth_access_tokens SET revoked_at = ? WHERE token_hash = ?").run(now, hash);
-  db.prepare("UPDATE oauth_refresh_tokens SET revoked_at = ? WHERE token_hash = ?").run(now, hash);
+  await db.transaction(async (tx) => {
+    await tx.run("UPDATE oauth_access_tokens SET revoked_at = ? WHERE token_hash = ?", [
+      now,
+      hash,
+    ]);
+    await tx.run("UPDATE oauth_refresh_tokens SET revoked_at = ? WHERE token_hash = ?", [
+      now,
+      hash,
+    ]);
+  });
 }

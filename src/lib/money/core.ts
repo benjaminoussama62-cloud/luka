@@ -330,6 +330,13 @@ export async function resolveRecipient(identifier: string): Promise<Recipient | 
   if (!id) return null;
   const d = await db();
 
+  // Référence interne : "user:<id>" (demandes de paiement, flux système).
+  if (id.startsWith("user:")) {
+    const uid = id.slice(5).trim();
+    const wallet = await getOrCreateWallet(uid);
+    return { userId: uid, wallet, label: uid };
+  }
+
   if (id.startsWith("@") || HANDLE_RE.test(normalizeHandle(id))) {
     const row = (await d.get("SELECT * FROM money_wallets WHERE handle = ?", [
       normalizeHandle(id),
@@ -485,6 +492,16 @@ async function creditBalance(
   return Number(row.amount_minor);
 }
 
+// Limites : import local différé (features.ts importe core.ts — cycle).
+export async function checkLimits(
+  wallet: MoneyWallet,
+  currency: MoneyCurrency,
+  amountMinor: number,
+): Promise<void> {
+  const { checkLimits: impl } = await import("./features");
+  return impl(wallet, currency, amountMinor);
+}
+
 // ── Transfert interne (zéro frais, instantané) ──────────────────────
 
 export async function executeTransfer(input: {
@@ -520,6 +537,7 @@ export async function executeTransfer(input: {
     throw new MoneyError("self_transfer", "Impossible de s'envoyer de l'argent à soi-même");
   }
   assertWalletUsable(recipient.wallet);
+  await checkLimits(sender, currency, amountMinor);
 
   const id = txId("mtx");
   try {

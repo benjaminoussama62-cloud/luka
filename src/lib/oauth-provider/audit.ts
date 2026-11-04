@@ -1,4 +1,4 @@
-import { getDb } from "@/lib/storage/database";
+import { adb } from "@/lib/storage/adb";
 
 export type OAuthAuditEvent =
   | "authorize_start"
@@ -14,7 +14,7 @@ export type OAuthAuditEvent =
   | "login_failed"
   | "login_success";
 
-export function logOAuthAudit(input: {
+export async function logOAuthAudit(input: {
   event: OAuthAuditEvent;
   clientId?: string;
   userId?: string;
@@ -22,31 +22,31 @@ export function logOAuthAudit(input: {
   detail?: string;
 }) {
   try {
-    const db = getDb();
-    db.prepare(
+    const db = adb();
+    await db.run(
       `INSERT INTO oauth_audit_log (event_type, client_id, user_id, ip, detail, created_at)
        VALUES (?, ?, ?, ?, ?, ?)`,
-    ).run(
-      input.event,
-      input.clientId || null,
-      input.userId || null,
-      input.ip || null,
-      input.detail || "",
-      new Date().toISOString(),
+      [
+        input.event,
+        input.clientId || null,
+        input.userId || null,
+        input.ip || null,
+        input.detail || "",
+        new Date().toISOString(),
+      ],
     );
   } catch (e) {
     console.error("[oauth/audit]", e);
   }
 }
 
-export function listAuditForClient(clientId: string, limit = 50) {
-  const db = getDb();
-  return db
-    .prepare(
-      `SELECT event_type, user_id, ip, detail, created_at
-       FROM oauth_audit_log WHERE client_id = ? ORDER BY id DESC LIMIT ?`,
-    )
-    .all(clientId, limit) as {
+export async function listAuditForClient(clientId: string, limit = 50) {
+  const db = adb();
+  return (await db.all(
+    `SELECT event_type, user_id, ip, detail, created_at
+     FROM oauth_audit_log WHERE client_id = ? ORDER BY id DESC LIMIT ?`,
+    [clientId, limit],
+  )) as {
     event_type: string;
     user_id: string | null;
     ip: string | null;

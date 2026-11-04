@@ -9,7 +9,7 @@ export async function GET() {
   const auth = await requireDeveloperSession();
   if ("error" in auth) return auth.error;
 
-  const apps = listOAuthClientsByOwner(auth.user.id);
+  const apps = await listOAuthClientsByOwner(auth.user.id);
   return NextResponse.json({ apps });
 }
 
@@ -31,7 +31,7 @@ export async function POST(req: Request) {
   const uriCheck = validateRedirectUriList(redirectUris);
   if (!uriCheck.ok) return NextResponse.json({ error: uriCheck.error }, { status: 400 });
 
-  const app = createOAuthClient({
+  const app = await createOAuthClient({
     name,
     description: body.description,
     websiteUrl: body.websiteUrl,

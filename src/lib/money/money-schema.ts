@@ -113,6 +113,35 @@ CREATE TABLE IF NOT EXISTS money_audit (
 );
 
 CREATE INDEX IF NOT EXISTS idx_money_audit_user ON money_audit(user_id, id);
+
+CREATE TABLE IF NOT EXISTS money_kyc (
+  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  full_name TEXT NOT NULL DEFAULT '',
+  birthdate TEXT NOT NULL DEFAULT '',
+  id_type TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','verified','rejected')),
+  submitted_at TEXT NOT NULL,
+  reviewed_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS money_requests (
+  id TEXT PRIMARY KEY,
+  from_user_id TEXT NOT NULL,
+  from_wallet_id TEXT NOT NULL,
+  to_identifier TEXT NOT NULL,
+  to_user_id TEXT,
+  to_wallet_id TEXT,
+  currency TEXT NOT NULL CHECK(currency IN ('USD','CDF')),
+  amount_minor INTEGER NOT NULL CHECK(amount_minor > 0),
+  note TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','paid','declined','expired','cancelled')),
+  tx_id TEXT,
+  created_at TEXT NOT NULL,
+  resolved_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_money_requests_to ON money_requests(to_user_id, status);
+CREATE INDEX IF NOT EXISTS idx_money_requests_from ON money_requests(from_user_id, status);
 `;
 
 export function applyMoneySchema(db: AyebaDatabase) {

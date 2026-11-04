@@ -6,14 +6,14 @@ import { clientIp, rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { completeMailVerification, normalizePhone } from "@/lib/mail/mail";
 
 export async function POST(req: Request) {
-  if (!rateLimit(`mail-verify:${clientIp(req)}`, 20, 60_000)) return rateLimitResponse();
+  if (!await rateLimit(`mail-verify:${clientIp(req)}`, 20, 60_000)) return rateLimitResponse();
 
   const body = (await req.json().catch(() => null)) as { phone?: string; code?: string } | null;
   const phone = normalizePhone(String(body?.phone || ""));
   const code = String(body?.code || "").trim();
   if (!phone || !code) return NextResponse.json({ error: "Numéro et code requis." }, { status: 400 });
 
-  const r = completeMailVerification(phone, code);
+  const r = await completeMailVerification(phone, code);
   if (!r.ok) return NextResponse.json({ error: r.error }, { status: 409 });
 
   // La vérification SMS crée la session — jamais de login Google/Gmail ici.

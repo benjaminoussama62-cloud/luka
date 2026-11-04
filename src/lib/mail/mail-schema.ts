@@ -111,7 +111,7 @@ CREATE INDEX IF NOT EXISTS idx_mail_push_acc ON mail_push_tokens(account_id);
 `;
 
 // Colonnes ajoutées après coup — ALTER idempotent via try/catch.
-const MIGRATIONS = [
+export const MAIL_MIGRATIONS = [
   "ALTER TABLE mail_accounts ADD COLUMN display_name TEXT NOT NULL DEFAULT ''",
   "ALTER TABLE mail_accounts ADD COLUMN birthdate TEXT NOT NULL DEFAULT ''",
   "ALTER TABLE mail_accounts ADD COLUMN recovery_email TEXT NOT NULL DEFAULT ''",
@@ -140,7 +140,7 @@ export function applyMailSchema(db: AyebaDatabase) {
       console.warn("[db] mail schema statement skipped:", (e as Error).message);
     }
   }
-  for (const sql of MIGRATIONS) {
+  for (const sql of MAIL_MIGRATIONS) {
     try {
       db.exec(sql);
     } catch {

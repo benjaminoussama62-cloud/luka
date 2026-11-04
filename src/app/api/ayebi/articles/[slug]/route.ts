@@ -50,7 +50,7 @@ export async function PUT(req: Request, ctx: { params: Promise<{ slug: string }>
     stub: body.stub ?? current?.stub,
   };
 
-  const result = await saveArticle(article, authorFromSession(session), String(body.editSummary ?? ""));
+  const result = await saveArticle(article, await authorFromSession(session), String(body.editSummary ?? ""));
   if ("error" in result) {
     return NextResponse.json({ error: result.error }, { status: 400 });
   }

@@ -139,11 +139,11 @@ export async function adminLogin(input: {
   }
 
   // 2FA: mandatory whenever the account has TOTP enabled.
-  if (userRequiresTotp(user.id)) {
+  if (await userRequiresTotp(user.id)) {
     if (!input.totpCode) {
       return { ok: false, error: "Code de vérification requis.", totpRequired: true };
     }
-    if (!verifyUserTotp(user.id, input.totpCode)) {
+    if (!(await verifyUserTotp(user.id, input.totpCode))) {
       recordAttempt(email, input.ip, false, "bad_totp");
       return { ok: false, error: "Code de vérification invalide.", totpRequired: true };
     }
