@@ -71,7 +71,11 @@
     </div>
     <div class="word">AYEBA</div>
     <script>
-      location.replace("https://ayeba.app/?app=1");
+      // Laisse l'animation de trace jouer ~1s avant de charger le site —
+      // comme l'ecran de chargement d'Ayeba Mail.
+      window.setTimeout(function () {
+        location.replace("https://ayeba.app/?app=1");
+      }, 1100);
     </script>
   </body>
 </html>
