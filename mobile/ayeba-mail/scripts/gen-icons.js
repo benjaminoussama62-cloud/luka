@@ -28,15 +28,15 @@ const BG_GRADIENT = `<linearGradient id="ayebaBg" x1="0%" y1="0%" x2="100%" y2="
     <stop offset="100%" stop-color="#12141c"/>
   </linearGradient>`;
 
-// Foreground adaptatif : LE LOGO COMPLET rendu plein cadre (échelle 108/512).
-// Le fond dégradé remplit la tuile jusqu'aux bords — quel que soit le masque du
-// launcher (squircle, cercle…), on voit le logo dans son intégralité : fond sombre
-// + contour lumineux + enveloppe centrée (l'enveloppe reste dans la zone sûre).
+// Foreground adaptatif : LE LOGO COMPLET plein cadre — mais le contour cyan est
+// RENTRÉ (~14% de marge au lieu de 4%) pour survivre au masque du launcher :
+// sur la tuile on voit toujours le logo dans son intégralité (fond + contour +
+// enveloppe), même en masque circulaire.
 const foregroundSvg = (size) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" width="${size}" height="${size}">
   <defs>${GRADIENT}${BG_GRADIENT}</defs>
   <g transform="scale(0.2109375)">
     <rect width="512" height="512" rx="108" fill="url(#ayebaBg)"/>
-    <rect x="22" y="22" width="468" height="468" rx="92" fill="none" stroke="rgba(0,180,255,0.35)" stroke-width="6"/>
+    <rect x="72" y="72" width="368" height="368" rx="78" fill="none" stroke="rgba(0,180,255,0.35)" stroke-width="7"/>
     <rect x="104" y="158" width="304" height="196" rx="30" fill="none" stroke="url(#ayebaA)" stroke-width="24"/>
     <path d="M118 182 L256 296 L394 182" fill="none" stroke="url(#ayebaA)" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/>
   </g>
@@ -57,20 +57,13 @@ const foregroundSvg = (size) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox
       .toFile(path.join(out, "ic_launcher_foreground.png"));
     console.log(`${dir}: launcher ${sizes.launcher}px, foreground ${sizes.foreground}px`);
   }
-  // Splash système : logo COMPLET (carré arrondi + contour + enveloppe), centré sur
-  // fond noir — l'icône dans son intégralité comme demandé.
-  // + wordmark « Ayeba Mail » (branding en bas du splash, API 31+).
-  const splashBrandSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 96" width="520" height="96">
-    <text x="260" y="62" font-family="Segoe UI, Arial, sans-serif" font-size="44" font-weight="600"
-      fill="#E8EAF0" text-anchor="middle" letter-spacing="1.5">Ayeba Mail</text>
-  </svg>`;
+  // Splash système : logo COMPLET en haute résolution (720px — net sur les
+  // grands écrans 1440p), centré sur fond noir. Le nom « Ayeba Mail » est
+  // rendu par l'écran de chargement natif (typographie propre garantie).
   const nodpi = path.join(RES, "drawable-nodpi");
   fs.mkdirSync(nodpi, { recursive: true });
-  const splashIcon = await sharp(fullIcon, { density: 400 }).resize(300, 300).png().toBuffer();
+  const splashIcon = await sharp(fullIcon, { density: 800 }).resize(720, 720).png().toBuffer();
   await sharp(splashIcon).toFile(path.join(nodpi, "ic_splash_logo.png"));
-  await sharp(Buffer.from(splashBrandSvg), { density: 300 })
-    .png()
-    .toFile(path.join(nodpi, "ic_splash_brand.png"));
   console.log("OK — icônes générées");
 })().catch((e) => {
   console.error(e);

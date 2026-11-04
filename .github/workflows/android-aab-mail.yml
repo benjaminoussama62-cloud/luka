@@ -64,8 +64,8 @@ jobs:
           chmod +x gradlew
           ./gradlew bundleRelease --stacktrace
         env:
-          AYEBA_VERSION: "1.0.12"
-          AYEBA_VERSION_CODE: "13"
+          AYEBA_VERSION: "1.0.13"
+          AYEBA_VERSION_CODE: "14"
 
       - name: Upload AAB artifact
         uses: actions/upload-artifact@v4
