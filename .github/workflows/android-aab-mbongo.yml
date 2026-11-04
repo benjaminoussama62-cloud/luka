@@ -40,29 +40,34 @@ jobs:
           echo "$KS_B64" | base64 -d > android.keystore
           echo "Keystore loaded from GitHub secret."
 
-      - name: Build release AAB
+      - name: Build release AAB + APK
         run: |
           chmod +x gradlew
-          ./gradlew bundleRelease --stacktrace
+          ./gradlew bundleRelease assembleRelease --stacktrace
         env:
           KEYSTORE_PASSWORD: ${{ secrets.MBONGO_KEYSTORE_PASS }}
           KEY_PASSWORD: ${{ secrets.MBONGO_KEYSTORE_PASS }}
           KEY_ALIAS: ayeba-money
 
-      - name: Upload AAB artifact
+      - name: Upload AAB + APK artifacts
         uses: actions/upload-artifact@v4
         with:
           name: AyebaMbongo-PlayStore-aab
-          path: mobile/android-twa/twa-app/app/build/outputs/bundle/release/app-release.aab
+          path: |
+            mobile/android-twa/twa-app/app/build/outputs/bundle/release/app-release.aab
+            mobile/android-twa/twa-app/app/build/outputs/apk/release/app-release.apk
           retention-days: 30
 
-      - name: Publish AAB on GitHub Releases (download sans login)
+      - name: Publish AAB + APK on GitHub Releases (download sans login)
         uses: softprops/action-gh-release@v2
         with:
           tag_name: mbongo-1.0.0
           name: Ayeba Mbongo 1.0.0
           body: |
             Fichier Play Store : **app-release.aab** → renommer `AyebaMbongo-1.0.0.aab`
+            Test direct : **app-release.apk** → installer sur Android
             Package : `app.ayeba.mbongo` — versionCode 1
-          files: mobile/android-twa/twa-app/app/build/outputs/bundle/release/app-release.aab
+          files: |
+            mobile/android-twa/twa-app/app/build/outputs/bundle/release/app-release.aab
+            mobile/android-twa/twa-app/app/build/outputs/apk/release/app-release.apk
           overwrite_files: true
