@@ -33,8 +33,8 @@ const BG_GRADIENT = `<linearGradient id="ayebaBg" x1="0%" y1="0%" x2="100%" y2="
 // applis, le fond dégradé vient du layer background (drawable plein cadre).
 const foregroundSvg = (size) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" width="${size}" height="${size}">
   <defs>${GRADIENT}</defs>
-  <rect x="13" y="13" width="82" height="82" rx="17" fill="none" stroke="rgba(0,180,255,0.35)" stroke-width="1.6"/>
-  <g transform="translate(54,54) scale(0.2426) translate(-256,-256)">
+  <rect x="11" y="11" width="86" height="86" rx="18" fill="none" stroke="rgba(0,180,255,0.4)" stroke-width="1.8"/>
+  <g transform="translate(54,54) scale(0.30) translate(-256,-256)">
     <rect x="104" y="158" width="304" height="196" rx="30" fill="none" stroke="url(#ayebaA)" stroke-width="24"/>
     <path d="M118 182 L256 296 L394 182" fill="none" stroke="url(#ayebaA)" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/>
   </g>
