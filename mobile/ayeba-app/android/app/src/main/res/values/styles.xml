@@ -19,7 +19,7 @@
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
         <item name="android:background">@drawable/ayeba_splash</item>
         <item name="android:windowSplashScreenBackground">@color/ayebaBlack</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_splash_empty</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ayeba_mark</item>
         <item name="postSplashScreenTheme">@style/AppTheme.NoActionBar</item>
         <item name="android:statusBarColor">@color/ayebaBlack</item>
         <item name="android:navigationBarColor">@color/ayebaBlack</item>
