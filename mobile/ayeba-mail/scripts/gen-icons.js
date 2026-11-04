@@ -23,14 +23,22 @@ const GRADIENT = `<linearGradient id="ayebaA" x1="20%" y1="10%" x2="80%" y2="90%
     <stop offset="100%" stop-color="#e85d04"/>
   </linearGradient>`;
 
-// Foreground adaptatif : enveloppe seule sur fond transparent.
-// Zone sûre circulaire Android = ~66% du canvas (72/108) — l'enveloppe (304px de large
-// dans son repère 512) est mise à l'échelle 0.24 → ~73px, pleine zone sûre, trait épais.
+const BG_GRADIENT = `<linearGradient id="ayebaBg" x1="0%" y1="0%" x2="100%" y2="100%">
+    <stop offset="0%" stop-color="#0a0a0e"/>
+    <stop offset="100%" stop-color="#12141c"/>
+  </linearGradient>`;
+
+// Foreground adaptatif : LE LOGO COMPLET rendu plein cadre (échelle 108/512).
+// Le fond dégradé remplit la tuile jusqu'aux bords — quel que soit le masque du
+// launcher (squircle, cercle…), on voit le logo dans son intégralité : fond sombre
+// + contour lumineux + enveloppe centrée (l'enveloppe reste dans la zone sûre).
 const foregroundSvg = (size) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" width="${size}" height="${size}">
-  <defs>${GRADIENT}</defs>
-  <g transform="translate(54,54) scale(0.24) translate(-256,-256)">
-    <rect x="104" y="158" width="304" height="196" rx="30" fill="none" stroke="url(#ayebaA)" stroke-width="32"/>
-    <path d="M118 182 L256 296 L394 182" fill="none" stroke="url(#ayebaA)" stroke-width="32" stroke-linecap="round" stroke-linejoin="round"/>
+  <defs>${GRADIENT}${BG_GRADIENT}</defs>
+  <g transform="scale(0.2109375)">
+    <rect width="512" height="512" rx="108" fill="url(#ayebaBg)"/>
+    <rect x="22" y="22" width="468" height="468" rx="92" fill="none" stroke="rgba(0,180,255,0.35)" stroke-width="6"/>
+    <rect x="104" y="158" width="304" height="196" rx="30" fill="none" stroke="url(#ayebaA)" stroke-width="24"/>
+    <path d="M118 182 L256 296 L394 182" fill="none" stroke="url(#ayebaA)" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/>
   </g>
 </svg>`;
 
@@ -49,6 +57,18 @@ const foregroundSvg = (size) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox
       .toFile(path.join(out, "ic_launcher_foreground.png"));
     console.log(`${dir}: launcher ${sizes.launcher}px, foreground ${sizes.foreground}px`);
   }
+  // Splash système : enveloppe dégradée SEULE sur transparent (façon Gmail — le « M » seul),
+  // + wordmark « Ayeba Mail » pour la zone branding en bas de l'écran.
+  const splashLogoSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 384" width="384" height="384">
+    <defs>${GRADIENT}</defs>
+    <g transform="translate(192,192) scale(0.72) translate(-256,-256)">
+      <rect x="104" y="158" width="304" height="196" rx="30" fill="none" stroke="url(#ayebaA)" stroke-width="26"/>
+      <path d="M118 182 L256 296 L394 182" fill="none" stroke="url(#ayebaA)" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+  </svg>`;
+  const nodpi = path.join(RES, "drawable-nodpi");
+  fs.mkdirSync(nodpi, { recursive: true });
+  await sharp(Buffer.from(splashLogoSvg)).png().toFile(path.join(nodpi, "ic_splash_logo.png"));
   console.log("OK — icônes générées");
 })().catch((e) => {
   console.error(e);
