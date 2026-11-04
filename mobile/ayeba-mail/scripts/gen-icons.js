@@ -57,18 +57,20 @@ const foregroundSvg = (size) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox
       .toFile(path.join(out, "ic_launcher_foreground.png"));
     console.log(`${dir}: launcher ${sizes.launcher}px, foreground ${sizes.foreground}px`);
   }
-  // Splash système : enveloppe dégradée SEULE sur transparent (façon Gmail — le « M » seul),
-  // + wordmark « Ayeba Mail » pour la zone branding en bas de l'écran.
-  const splashLogoSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 384" width="384" height="384">
-    <defs>${GRADIENT}</defs>
-    <g transform="translate(192,192) scale(0.72) translate(-256,-256)">
-      <rect x="104" y="158" width="304" height="196" rx="30" fill="none" stroke="url(#ayebaA)" stroke-width="26"/>
-      <path d="M118 182 L256 296 L394 182" fill="none" stroke="url(#ayebaA)" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>
-    </g>
+  // Splash système : logo COMPLET (carré arrondi + contour + enveloppe), centré sur
+  // fond noir — l'icône dans son intégralité comme demandé.
+  // + wordmark « Ayeba Mail » (branding en bas du splash, API 31+).
+  const splashBrandSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 96" width="520" height="96">
+    <text x="260" y="62" font-family="Segoe UI, Arial, sans-serif" font-size="44" font-weight="600"
+      fill="#E8EAF0" text-anchor="middle" letter-spacing="1.5">Ayeba Mail</text>
   </svg>`;
   const nodpi = path.join(RES, "drawable-nodpi");
   fs.mkdirSync(nodpi, { recursive: true });
-  await sharp(Buffer.from(splashLogoSvg)).png().toFile(path.join(nodpi, "ic_splash_logo.png"));
+  const splashIcon = await sharp(fullIcon, { density: 400 }).resize(300, 300).png().toBuffer();
+  await sharp(splashIcon).toFile(path.join(nodpi, "ic_splash_logo.png"));
+  await sharp(Buffer.from(splashBrandSvg), { density: 300 })
+    .png()
+    .toFile(path.join(nodpi, "ic_splash_brand.png"));
   console.log("OK — icônes générées");
 })().catch((e) => {
   console.error(e);
