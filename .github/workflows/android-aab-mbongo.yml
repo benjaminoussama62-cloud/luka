@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - "mobile/android-twa/**"
+      - "mobile/ayeba-mbongo/**"
       - ".github/workflows/android-aab-mbongo.yml"
 
 jobs:
@@ -14,10 +14,14 @@ jobs:
       contents: write
     defaults:
       run:
-        working-directory: mobile/android-twa/twa-app
+        working-directory: mobile/ayeba-mbongo
 
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
 
       - uses: actions/setup-java@v4
         with:
@@ -30,35 +34,43 @@ jobs:
           yes | sdkmanager --licenses || true
           sdkmanager "platforms;android-36" "build-tools;36.0.0" || true
 
-      - name: Prepare upload keystore (same key every build)
+      - name: Install deps & Capacitor sync
+        run: |
+          npm install --no-package-lock
+          npm run build:offline
+          npx cap sync android
+          node scripts/patch-android.js
+
+      - name: Prepare upload keystore (clé de signature Mbongo)
         env:
           KS_B64: ${{ secrets.MBONGO_KEYSTORE_BASE64 }}
           KS_PASS: ${{ secrets.MBONGO_KEYSTORE_PASS }}
         run: |
           test -n "$KS_B64" || { echo "Missing MBONGO_KEYSTORE_BASE64 secret"; exit 1; }
           test -n "$KS_PASS" || { echo "Missing MBONGO_KEYSTORE_PASS secret"; exit 1; }
-          echo "$KS_B64" | base64 -d > android.keystore
+          echo "$KS_B64" | base64 -d > android/mbongo-upload.keystore
+          printf 'storePassword=%s\nkeyPassword=%s\nkeyAlias=ayeba-money\nstoreFile=../mbongo-upload.keystore\n' "$KS_PASS" "$KS_PASS" > android/keystore.properties
           echo "Keystore loaded from GitHub secret."
 
       - name: Build release AAB + APK
         run: |
+          cd android
           chmod +x gradlew
           ./gradlew bundleRelease assembleRelease --stacktrace
         env:
-          KEYSTORE_PASSWORD: ${{ secrets.MBONGO_KEYSTORE_PASS }}
-          KEY_PASSWORD: ${{ secrets.MBONGO_KEYSTORE_PASS }}
-          KEY_ALIAS: ayeba-money
+          AYEBA_VERSION: "1.0.0"
+          AYEBA_VERSION_CODE: "2"
 
       - name: Upload AAB + APK artifacts
         uses: actions/upload-artifact@v4
         with:
           name: AyebaMbongo-PlayStore-aab
           path: |
-            mobile/android-twa/twa-app/app/build/outputs/bundle/release/app-release.aab
-            mobile/android-twa/twa-app/app/build/outputs/apk/release/app-release.apk
+            mobile/ayeba-mbongo/android/app/build/outputs/bundle/release/app-release.aab
+            mobile/ayeba-mbongo/android/app/build/outputs/apk/release/app-release.apk
           retention-days: 30
 
-      - name: Publish AAB + APK on GitHub Releases (download sans login)
+      - name: Publish AAB + APK on GitHub Releases
         uses: softprops/action-gh-release@v2
         with:
           tag_name: mbongo-1.0.0
@@ -66,8 +78,8 @@ jobs:
           body: |
             Fichier Play Store : **app-release.aab** → renommer `AyebaMbongo-1.0.0.aab`
             Test direct : **app-release.apk** → installer sur Android
-            Package : `app.ayeba.mbongo` — versionCode 1
+            Package : `app.ayeba.mbongo` — app Capacitor (splash animé, zéro barre Chrome)
           files: |
-            mobile/android-twa/twa-app/app/build/outputs/bundle/release/app-release.aab
-            mobile/android-twa/twa-app/app/build/outputs/apk/release/app-release.apk
+            mobile/ayeba-mbongo/android/app/build/outputs/bundle/release/app-release.aab
+            mobile/ayeba-mbongo/android/app/build/outputs/apk/release/app-release.apk
           overwrite_files: true

@@ -1,0 +1,33 @@
+{
+  "name": "ayeba-mbongo-mobile",
+  "version": "1.0.7",
+  "private": true,
+  "description": "Ayeba Mbongo — portefeuille mobile (Capacitor)",
+  "scripts": {
+    "build:offline": "node scripts/build-offline.js",
+    "cap:sync": "npm run build:offline && npx cap sync",
+    "cap:copy": "npm run build:offline && npx cap copy",
+    "android:add": "npx cap add android",
+    "ios:add": "npx cap add ios",
+    "android": "npx cap open android",
+    "ios": "npx cap open ios",
+    "android:apk": "npm run build:offline && cd android && gradlew.bat assembleRelease",
+    "android:release": "npm run build:offline && cd android && gradlew.bat bundleRelease",
+    "postinstall": "node scripts/patch-android.js"
+  },
+  "dependencies": {
+    "@capacitor/android": "^6.2.0",
+    "@capacitor/core": "^6.2.0",
+    "@capacitor/ios": "^6.2.0",
+    "@capacitor/push-notifications": "^6.0.5",
+    "@capacitor/splash-screen": "^6.0.3",
+    "@capacitor/status-bar": "^6.0.2"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.2.0",
+    "esbuild": "^0.28.1",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "typescript": "^5"
+  }
+}

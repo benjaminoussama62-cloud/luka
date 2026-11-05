@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Ayeba Mbongo</string>
+    <string name="title_activity_main">Ayeba Mbongo</string>
+    <string name="package_name">app.ayeba.mbongo</string>
+    <string name="custom_url_scheme">app.ayeba.mbongo</string>
+</resources>
