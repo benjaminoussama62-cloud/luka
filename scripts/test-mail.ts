@@ -61,70 +61,70 @@ const u1 = mkUser("alice@x.cd");
 const u2 = mkUser("bob@x.cd");
 const PROF1 = { displayName: "Alice Test", birthdate: "1995-06-15", recoveryEmail: "" };
 const PROF2 = { displayName: "Bob Deux", birthdate: "1992-03-20", recoveryEmail: "" };
-const v1 = createVerification(u1, "+243812345678", "alice.test", PROF1);
-check("code généré 6 chiffres", "code" in v1 && /^\d{6}$/.test(v1.code));
+const v1 = await createVerification(u1, "+243812345678", "alice.test", PROF1);
+check("code généré 6 chiffres", "code" in v1 && /^\d{6}$/.test(String(v1.code)));
 
-const vDup = createVerification(u2, "+243812345679", "alice.test", PROF2);
-check("adresse prise bloquée (verif en cours)", "error" in vDup && /prise/.test(vDup.error));
+const vDup = await createVerification(u2, "+243812345679", "alice.test", PROF2);
+check("adresse prise bloquée (verif en cours)", "error" in vDup && /prise/.test(String(vDup.error)));
 
-const badCode = completeMailVerification("+243812345678", "000000");
-check("mauvais code refusé", !badCode.ok && /incorrect/i.test(badCode.error));
+const badCode = await completeMailVerification("+243812345678", "000000");
+check("mauvais code refusé", !badCode.ok && /incorrect/i.test(String(badCode.error)));
 
 if ("code" in v1) {
-  const acc = completeMailVerification("+243812345678", v1.code);
+  const acc = await completeMailVerification("+243812345678", String(v1.code));
   check("compte créé avec bon code", acc.ok);
   check("email = alice.test@ayeba.app", acc.ok && acc.account.email === "alice.test@ayeba.app");
 }
 
 // Inscription anonyme (sans session préalable) — le compte Ayeba est créé.
-const vAnon = createVerification("", "+243812345700", "anon.test", { displayName: "Anon", birthdate: "1990-01-01", recoveryEmail: "" });
+const vAnon = await createVerification("", "+243812345700", "anon.test", { displayName: "Anon", birthdate: "1990-01-01", recoveryEmail: "" });
 if ("code" in vAnon) {
-  const ra = completeMailVerification("+243812345700", vAnon.code);
+  const ra = await completeMailVerification("+243812345700", String(vAnon.code));
   check("inscription sans session → user créé", ra.ok && ra.isNew && ra.account.email === "anon.test@ayeba.app");
   check("user provider mail en base", !!db.prepare("SELECT 1 x FROM users WHERE provider='mail' AND email='anon.test@ayeba.app'").get());
 }
 
-const vPhone = createVerification(u2, "+243812345678", "bob.test", PROF2);
-check("même numéro refusé", "error" in vPhone && /numéro/i.test(vPhone.error));
+const vPhone = await createVerification(u2, "+243812345678", "bob.test", PROF2);
+check("même numéro refusé", "error" in vPhone && /numéro/i.test(String(vPhone.error)));
 
-const acc1 = getAccountByUser(u1)!;
-check("bienvenue système en boîte", listMessages(acc1.id, "inbox").some((m) => m.kind === "system"));
+const acc1 = (await getAccountByUser(u1))!;
+check("bienvenue système en boîte", (await listMessages(acc1.id, "inbox")).some((m) => m.kind === "system"));
 check("nom complet enregistré", acc1.displayName === "Alice Test");
 
 console.log("\n── Envoi interne + bounce ──");
-const v2 = createVerification(u2, "+243812345679", "bob.test", PROF2);
-if ("code" in v2) completeMailVerification("+243812345679", v2.code);
-const acc2 = getAccountByUser(u2)!;
+const v2 = await createVerification(u2, "+243812345679", "bob.test", PROF2);
+if ("code" in v2) await completeMailVerification("+243812345679", String(v2.code));
+const acc2 = (await getAccountByUser(u2))!;
 
-const r = sendMail(acc1, ["bob.test@ayeba.app", "personne@ayeba.app"], "Test réel", "Corps du message");
+const r = await sendMail(acc1, ["bob.test@ayeba.app", "personne@ayeba.app"], "Test réel", "Corps du message");
 check("livré à bob.test", r.delivered.includes("bob.test@ayeba.app"));
 check("bounce personne@ayeba.app", r.bounced.some((b) => b.address === "personne@ayeba.app"));
 
-const inbox2 = listMessages(acc2.id, "inbox");
+const inbox2 = await listMessages(acc2.id, "inbox");
 check("bob reçoit le mail en inbox", inbox2.some((m) => m.subject === "Test réel" && m.from === "alice.test@ayeba.app"));
 check("nom affiché de l'expéditeur", inbox2.some((m) => m.fromName === "Alice Test"));
-check("non lu comptabilisé", unreadCount(acc2.id) >= 1);
+check("non lu comptabilisé", await unreadCount(acc2.id) >= 1);
 
-const inbox1 = listMessages(acc1.id, "inbox");
+const inbox1 = await listMessages(acc1.id, "inbox");
 check("bounce dans la boîte de alice", inbox1.some((m) => m.kind === "bounce" && /personne@ayeba\.app/.test(m.body)));
-check("copie envoyés chez alice", listMessages(acc1.id, "sent").some((m) => m.subject === "Test réel"));
+check("copie envoyés chez alice", (await listMessages(acc1.id, "sent")).some((m) => m.subject === "Test réel"));
 
-const ext = sendMail(acc1, ["x@gmail.com"], "Ext", "corps");
+const ext = await sendMail(acc1, ["x@gmail.com"], "Ext", "corps");
 check("externe refusé honnêtement", ext.bounced.some((b) => /externe/i.test(b.reason)) && !ext.delivered.length);
 
 console.log("\n── Connexion par téléphone ──");
-const sc = createSigninCode("+243812345678");
+const sc = await createSigninCode("+243812345678");
 check("code connexion généré", "code" in sc);
-check("numéro inconnu refusé", "error" in createSigninCode("+243000000000"));
+check("numéro inconnu refusé", "error" in await createSigninCode("+243000000000"));
 if ("code" in sc) {
-  const r = completeMailVerification("+243812345678", sc.code);
+  const r = await completeMailVerification("+243812345678", String(sc.code));
   check("connexion sans recréer le compte", r.ok && !r.isNew && r.account.email === "alice.test@ayeba.app");
 }
 
 console.log("\n── Isolation ──");
-check("bob ne voit pas les mails d'alice", !listMessages(acc2.id, "sent").length);
-check("lookup par email", getAccountByEmail("alice.test@ayeba.app")?.userId === u1);
-check("unicité casse", !addressAvailable("ALICE.TEST"));
+check("bob ne voit pas les mails d'alice", !(await listMessages(acc2.id, "sent")).length);
+check("lookup par email", (await getAccountByEmail("alice.test@ayeba.app"))?.userId === u1);
+check("unicité casse", !await addressAvailable("ALICE.TEST"));
 
 console.log(`\n${pass} réussis, ${fail} échoués`);
 process.exit(fail ? 1 : 0);
