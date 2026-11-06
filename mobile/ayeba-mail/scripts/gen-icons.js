@@ -28,13 +28,13 @@ const BG_GRADIENT = `<linearGradient id="ayebaBg" x1="0%" y1="0%" x2="100%" y2="
     <stop offset="100%" stop-color="#12141c"/>
   </linearGradient>`;
 
-// Foreground adaptatif : contour arrondi (rentré à ~13% pour survivre au masque)
-// + enveloppe AGRANDIE (×1.15) — le contenu remplit la tuile comme les autres
-// applis, le fond dégradé vient du layer background (drawable plein cadre).
+// Foreground adaptatif : le logo À L'IDENTIQUE — mêmes coordonnées que
+// icon-mail.svg (échelle 108/512). Le fond dégradé vient du layer background ;
+// le masque du launcher dessine les coins → la tuile = le logo complet.
 const foregroundSvg = (size) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" width="${size}" height="${size}">
   <defs>${GRADIENT}</defs>
-  <rect x="11" y="11" width="86" height="86" rx="18" fill="none" stroke="rgba(0,180,255,0.4)" stroke-width="1.8"/>
-  <g transform="translate(54,54) scale(0.30) translate(-256,-256)">
+  <g transform="scale(0.2109375)">
+    <rect x="22" y="22" width="468" height="468" rx="92" fill="none" stroke="rgba(0,180,255,0.35)" stroke-width="6"/>
     <rect x="104" y="158" width="304" height="196" rx="30" fill="none" stroke="url(#ayebaA)" stroke-width="24"/>
     <path d="M118 182 L256 296 L394 182" fill="none" stroke="url(#ayebaA)" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/>
   </g>
