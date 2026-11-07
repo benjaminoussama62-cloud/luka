@@ -70,12 +70,47 @@
       <div class="letter">A</div>
     </div>
     <div class="word">AYEBA</div>
+    <div id="err" style="display:none;max-width:320px;text-align:center"></div>
     <script>
-      // Laisse l'animation de trace jouer ~1s avant de charger le site —
-      // comme l'ecran de chargement d'Ayeba Mail.
-      window.setTimeout(function () {
-        location.replace("https://ayeba.app/?app=1");
-      }, 1100);
+      var TARGET = "https://ayeba.app/?app=1";
+      var started = Date.now();
+      var MIN_ANIM = 1100;
+
+      function showError(msg) {
+        var el = document.getElementById("err");
+        el.style.display = "block";
+        el.innerHTML =
+          '<div style="font-size:.95rem;color:#f87171;margin-bottom:6px">Connexion impossible</div>' +
+          '<div style="font-size:.75rem;color:#8a94a6;margin-bottom:18px">' + msg + "</div>" +
+          '<button onclick="location.reload()" style="background:linear-gradient(90deg,#00b4ff,#e85d04);' +
+          'border:0;border-radius:20px;padding:10px 28px;color:#fff;font-size:.9rem;cursor:pointer">Réessayer</button>';
+      }
+
+      // Diagnostic : on teste vraiment la connectivite AVANT de naviguer,
+      // pour afficher la vraie erreur au lieu de la page generique.
+      function go() {
+        var wait = Math.max(0, MIN_ANIM - (Date.now() - started));
+        setTimeout(function () {
+          var ctrl = new AbortController();
+          var to = setTimeout(function () { ctrl.abort(); }, 9000);
+          fetch("https://ayeba.app/favicon.ico?diag=" + Date.now(), {
+            mode: "no-cors",
+            cache: "no-store",
+            signal: ctrl.signal,
+          })
+            .then(function () {
+              clearTimeout(to);
+              location.replace(TARGET);
+            })
+            .catch(function (e) {
+              clearTimeout(to);
+              showError(e && e.name === "AbortError" ? "Délai dépassé — vérifie ta connexion." : "Réseau inaccessible : " + (e && e.message ? e.message : "erreur inconnue"));
+            });
+        }, wait);
+      }
+
+      if (document.readyState === "complete") go();
+      else window.addEventListener("load", go);
     </script>
   </body>
 </html>

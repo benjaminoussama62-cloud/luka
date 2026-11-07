@@ -74,8 +74,8 @@ jobs:
           chmod +x gradlew
           ./gradlew bundleRelease --stacktrace
         env:
-          AYEBA_VERSION: "1.0.16"
-          AYEBA_VERSION_CODE: "17"
+          AYEBA_VERSION: "1.0.17"
+          AYEBA_VERSION_CODE: "18"
 
       - name: Upload AAB artifact
         uses: actions/upload-artifact@v4
@@ -87,8 +87,8 @@ jobs:
       - name: Publish AAB on GitHub Releases (download sans login)
         uses: softprops/action-gh-release@v2
         env:
-          AYEBA_VERSION: "1.0.16"
-          AYEBA_VERSION_CODE: "17"
+          AYEBA_VERSION: "1.0.17"
+          AYEBA_VERSION_CODE: "18"
         with:
           tag_name: mobile-${{ env.AYEBA_VERSION }}
           name: AYEBA Mobile ${{ env.AYEBA_VERSION }}

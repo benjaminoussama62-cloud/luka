@@ -3,13 +3,13 @@
   "appName": "AYEBA",
   "webDir": "www",
   "server": {
-    "url": "https://ayeba.app/?app=1",
-    "cleartext": false,
     "androidScheme": "https",
+    "cleartext": false,
     "errorPath": "error.html",
     "allowNavigation": [
       "ayeba.app",
-      "*.ayeba.app"
+      "*.ayeba.app",
+      "localhost"
     ]
   },
   "android": {
