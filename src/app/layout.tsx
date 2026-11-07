@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
+import localFont from "next/font/local";
 import { MobileAppBootstrap } from "@/components/MobileAppBootstrap";
 import { PwaRegister } from "@/components/PwaRegister";
 import { VercelMetrics } from "@/components/monitoring/VercelMetrics";
@@ -12,28 +12,30 @@ import { AyebaJsonLd } from "@/components/seo/AyebaJsonLd";
 import { siteMetadataBase } from "@/lib/site-url";
 import "./globals.css";
 
-const brand = Inter({
+// Polices auto-hébergées — plus aucun fetch Google Fonts au build,
+// ce qui faisait échouer les déploiements Vercel de façon aléatoire.
+const brand = localFont({
+  src: "../../public/fonts/inter-var.woff2",
   variable: "--font-brand",
-  subsets: ["latin"],
-  weight: ["500", "600", "700"],
+  weight: "100 900",
 });
 
-const display = Inter({
+const display = localFont({
+  src: "../../public/fonts/inter-var.woff2",
   variable: "--font-display",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+  weight: "100 900",
 });
 
-const body = Inter({
+const body = localFont({
+  src: "../../public/fonts/inter-var.woff2",
   variable: "--font-body",
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
+  weight: "100 900",
 });
 
-const mono = JetBrains_Mono({
+const mono = localFont({
+  src: "../../public/fonts/jetbrains-mono-var.woff2",
   variable: "--font-mono",
-  subsets: ["latin"],
-  weight: ["400", "500"],
+  weight: "100 900",
 });
 
 export const metadata: Metadata = {
