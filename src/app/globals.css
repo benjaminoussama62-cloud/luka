@@ -5264,3 +5264,44 @@ body.ayeba-mobile-chrome .ayeba-home-shell {
     border-radius: 999px !important;
   }
 }
+
+/* ── Page d'erreur InAppBrowser (site qui refuse l'iframe) ── */
+.ayeba-inapp-error {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 0.9rem; padding: 2rem; text-align: center;
+  background: radial-gradient(120% 50% at 50% -10%, rgba(0,160,255,.14), transparent 60%), #050507;
+}
+.ayeba-inapp-error-mark { filter: drop-shadow(0 8px 30px rgba(0,180,255,.25)); }
+.ayeba-inapp-error h3 { margin: 0; font-size: 1.1rem; font-weight: 650; color: #e8ecf1; }
+.ayeba-inapp-error p { margin: 0; font-size: .85rem; color: #8b93a3; line-height: 1.6; }
+.ayeba-inapp-error p b { color: #7df0ff; }
+.ayeba-inapp-error-actions button {
+  margin-top: .4rem; border: 0; cursor: pointer;
+  background: linear-gradient(135deg, #7df0ff, #00b4ff 55%, #e85d04);
+  color: #04121a; border-radius: 999px; padding: .75rem 1.8rem;
+  font-size: .85rem; font-weight: 700; letter-spacing: .02em;
+}
+
+/* ── Barre navigateur mobile : identité Ayeba (cyan/orange, verre sombre) ── */
+.ayeba-mobile-browser {
+  border-top: 1px solid rgba(0, 180, 255, 0.18);
+  background: rgba(7, 8, 12, 0.9);
+  box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+.ayeba-mobile-omni-pill {
+  border: 1px solid rgba(0, 180, 255, 0.22);
+  border-radius: 999px;
+  background: rgba(0, 180, 255, 0.06);
+}
+.ayeba-mobile-omni-lock { color: #7df0ff; opacity: 1; }
+.ayeba-mobile-browser-bar button { color: #9fb4c8; }
+.ayeba-mobile-browser-bar button:active {
+  background: rgba(0, 180, 255, 0.14);
+  color: #7df0ff;
+}
+.ayeba-mobile-browser-bar button.is-starred {
+  color: #7df0ff;
+  filter: drop-shadow(0 0 6px rgba(0, 180, 255, 0.5));
+}
+.ayeba-mobile-pagemenu-btn { color: #e85d04 !important; }

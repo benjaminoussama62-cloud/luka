@@ -52,9 +52,27 @@ export function InAppBrowser({
   const [sslIssue, setSslIssue] = useState<SslIssue | null>(null);
   const [threat, setThreat] = useState<Threat | null>(null);
   const [findInset, setFindInset] = useState(0);
+  const [blocked, setBlocked] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
   const prevTabRef = useRef<string | null>(null);
   const native = typeof window !== "undefined" && nativeBrowserAvailable();
+
+  // Pré-vol : X-Frame-Options / CSP frame-ancestors — le site bloque l'iframe
+  // → page d'erreur AYEBA plutôt que l'erreur générique du système.
+  useEffect(() => {
+    if (native) return;
+    let dead = false;
+    setBlocked(false);
+    fetch(`/api/frame-check?url=${encodeURIComponent(frameUrl)}`)
+      .then((r) => r.json())
+      .then((d: { blocked?: boolean }) => {
+        if (!dead && d.blocked) setBlocked(true);
+      })
+      .catch(() => {});
+    return () => {
+      dead = true;
+    };
+  }, [native, frameUrl]);
   // Mode mobile : uniquement dans l'app native — le site web mobile
   // reste un site, le chrome navigateur ne s'y affiche jamais.
   const mobile = typeof window !== "undefined" && isMobileApp();
@@ -302,6 +320,28 @@ export function InAppBrowser({
               </div>
             ) : null}
           </>
+        ) : blocked ? (
+          <div className="ayeba-inapp-error" role="alert">
+            <div className="ayeba-inapp-error-mark" aria-hidden>
+              <svg width="56" height="56" viewBox="0 0 512 512">
+                <rect width="512" height="512" rx="108" fill="#0a0a0e" />
+                <rect x="22" y="22" width="468" height="468" rx="92" fill="none" stroke="rgba(0,180,255,.35)" strokeWidth="6" />
+                <path d="M176 344 256 196 336 344" fill="none" stroke="#00b4ff" strokeWidth="30" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M214 290h84" stroke="#00b4ff" strokeWidth="24" strokeLinecap="round" />
+              </svg>
+            </div>
+            <h3>Page indisponible</h3>
+            <p>
+              <b>{hostOfUrl(frameUrl)}</b> refuse l'affichage intégré.
+              <br />
+              Ouvrez ce site dans un nouvel onglet ou un autre navigateur.
+            </p>
+            <div className="ayeba-inapp-error-actions">
+              <button type="button" onClick={() => window.open(frameUrl, "_blank", "noopener")}>
+                Ouvrir dans un nouvel onglet
+              </button>
+            </div>
+          </div>
         ) : (
           <iframe
             key={iframeKey()}
