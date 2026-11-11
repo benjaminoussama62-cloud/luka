@@ -172,6 +172,15 @@ CREATE TABLE IF NOT EXISTS money_otps (
 );
 CREATE INDEX IF NOT EXISTS idx_money_otps_user ON money_otps(user_id, purpose);
 
+CREATE TABLE IF NOT EXISTS magic_tokens (
+  token TEXT PRIMARY KEY,
+  email TEXT NOT NULL,
+  next TEXT NOT NULL DEFAULT '/mbongo',
+  expires_at TEXT NOT NULL,
+  used_at TEXT,
+  created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS money_push_tokens (
   user_id TEXT NOT NULL,
   token TEXT NOT NULL,

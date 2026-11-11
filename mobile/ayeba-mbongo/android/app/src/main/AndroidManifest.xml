@@ -21,6 +21,14 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!-- Lien magique de connexion : ouvre dans l'app, pas le navigateur -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="ayeba.app" android:pathPrefix="/api/auth/magic" />
+            </intent-filter>
+
         </activity>
 
         <service

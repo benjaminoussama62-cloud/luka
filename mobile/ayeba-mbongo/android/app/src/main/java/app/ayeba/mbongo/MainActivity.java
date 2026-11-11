@@ -60,6 +60,24 @@ public class MainActivity extends BridgeActivity {
         .setDuration(450)
         .withEndAction(() -> root.removeView(overlay))
         .start(), 2400);
+
+    // Deep-link : lien magique de connexion reçu depuis le mail.
+    handleIntentUrl(getIntent());
+  }
+
+  @Override
+  protected void onNewIntent(android.content.Intent intent) {
+    super.onNewIntent(intent);
+    setIntent(intent);
+    handleIntentUrl(intent);
+  }
+
+  /** Si l'app est ouverte via un lien ayeba.app (lien magique), le WebView suit l'URL. */
+  private void handleIntentUrl(android.content.Intent intent) {
+    if (intent != null && intent.getData() != null
+        && "ayeba.app".equals(intent.getData().getHost())) {
+      getBridge().getWebView().loadUrl(intent.getData().toString());
+    }
   }
 
   @Override

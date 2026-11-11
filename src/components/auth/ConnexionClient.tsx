@@ -56,6 +56,8 @@ export function ConnexionClient({ next }: { next: string }) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [oauthVisible, setOauthVisible] = useState(false);
+  const [mode, setMode] = useState<"magic" | "password">("magic");
+  const [magicSent, setMagicSent] = useState(false);
 
   useEffect(() => {
     if (ready && user) router.replace(dest);
@@ -67,6 +69,8 @@ export function ConnexionClient({ next }: { next: string }) {
     if (auth === "failed" || auth === "config") {
       setError("Connexion refusée ou indisponible. Réessayez ou utilisez l'email.");
     }
+    const errParam = params.get("error");
+    if (errParam) setError(errParam);
     // OAuth visible uniquement dans le navigateur desktop AYEBA ET
     // seulement pour une session navigateur pure — jamais quand la
     // destination est un produit (compte Ayeba exigé).
@@ -81,6 +85,18 @@ export function ConnexionClient({ next }: { next: string }) {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    if (mode === "magic") {
+      const res = await fetch("/api/auth/magic", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, next: dest }),
+      });
+      const data = await res.json().catch(() => ({}));
+      setLoading(false);
+      if (res.ok) setMagicSent(true);
+      else setError((data as { error?: string }).error || "Impossible d'envoyer le lien");
+      return;
+    }
     const err = await loginWithEmail(email, password);
     setLoading(false);
     if (err) {
@@ -131,28 +147,51 @@ export function ConnexionClient({ next }: { next: string }) {
           </div>
         ) : null}
 
-        <form onSubmit={onSubmit} className="space-y-3">
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="Email"
-            required
-            className="ayeba-glass w-full rounded-xl px-4 py-3 text-white outline-none focus:border-[var(--line-bright)]"
-          />
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Mot de passe"
-            required
-            className="ayeba-glass w-full rounded-xl px-4 py-3 text-white outline-none focus:border-[var(--line-bright)]"
-          />
-          {error && <p className="text-sm text-[var(--bad)]">{error}</p>}
-          <button type="submit" disabled={loading} className="ayeba-cta w-full py-3">
-            {loading ? "…" : "Entrer"}
-          </button>
-        </form>
+        {magicSent ? (
+          <div className="rounded-xl border border-[var(--line-bright)] bg-white/[0.03] p-5 text-center">
+            <p className="text-sm font-medium text-white">Lien envoyé ✓</p>
+            <p className="mt-2 text-xs leading-relaxed text-[var(--muted)]">
+              Ouvre ta boîte mail et clique le lien de connexion — valable 15 minutes.
+              Il te ramène directement ici.
+            </p>
+            <button type="button" onClick={() => setMagicSent(false)}
+              className="mt-4 text-xs text-[var(--orange)]">
+              Renvoyer / autre adresse
+            </button>
+          </div>
+        ) : (
+          <form onSubmit={onSubmit} className="space-y-3">
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Email"
+              required
+              className="ayeba-glass w-full rounded-xl px-4 py-3 text-white outline-none focus:border-[var(--line-bright)]"
+            />
+            {mode === "password" && (
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Mot de passe"
+                required
+                className="ayeba-glass w-full rounded-xl px-4 py-3 text-white outline-none focus:border-[var(--line-bright)]"
+              />
+            )}
+            {error && <p className="text-sm text-[var(--bad)]">{error}</p>}
+            <button type="submit" disabled={loading} className="ayeba-cta w-full py-3">
+              {loading ? "…" : mode === "magic" ? "Recevoir le lien de connexion" : "Entrer"}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setMode(mode === "magic" ? "password" : "magic"); setError(null); }}
+              className="w-full text-center text-xs text-[var(--faint)] hover:text-[var(--muted)]"
+            >
+              {mode === "magic" ? "J'ai un mot de passe →" : "← Recevoir un lien par mail"}
+            </button>
+          </form>
+        )}
 
         <p className="mt-5 text-center text-sm text-[var(--muted)]">
           Pas de compte ?{" "}
