@@ -45,12 +45,33 @@ export async function notifyUser(
     "— Ayeba Mbongo",
     "https://ayeba.app/mbongo",
   ].join("\n");
+  const html = `<!doctype html><html><body style="margin:0;padding:0;background:#050507;font-family:Arial,Helvetica,sans-serif">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#050507;padding:32px 16px">
+    <tr><td align="center"><table role="presentation" width="440" cellpadding="0" cellspacing="0" style="max-width:440px;width:100%;background:#0d0f14;border:1px solid #1e2430;border-radius:16px;padding:32px 28px">
+      <tr><td>
+        <p style="margin:0 0 4px;font-size:20px;font-weight:700;color:#eafcff;letter-spacing:2px">AYEBA <span style="color:#e85d04">MBONGO</span></p>
+        <p style="margin:0 0 20px;font-size:10px;color:#7df0ff;letter-spacing:3px">${subject.toUpperCase()}</p>
+        <p style="margin:0 0 18px;font-size:14px;line-height:1.7;color:#c8d4dd">${lines
+          .filter(Boolean)
+          .map((l) => l === "" ? "<br>" : l.replace(/&/g, "&amp;").replace(/</g, "&lt;"))
+          .join("<br>")}</p>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:6px 0 18px">
+          <a href="https://ayeba.app/mbongo" style="display:inline-block;background:linear-gradient(90deg,#1a7f96,#e85d04);color:#fff;text-decoration:none;font-weight:700;font-size:13px;letter-spacing:1px;padding:12px 30px;border-radius:12px">OUVRIR AYEBA MBONGO</a>
+        </td></tr></table>
+        <p style="margin:0;font-size:11px;line-height:1.5;color:#5a6674;border-top:1px solid #1e2430;padding-top:14px">
+          Si vous n'êtes pas à l'origine de cette opération, changez immédiatement votre code PIN
+          dans Ayeba Mbongo et contactez le support.
+        </p>
+      </td></tr>
+    </table></td></tr></table>
+  </body></html>`;
   const res = await sendExternalMail({
     from: FROM,
     fromName: "Ayeba Mbongo",
     to,
     subject: `Ayeba Mbongo — ${subject}`,
     text,
+    html,
   });
   // Push instantané (FCM) — le mail reste la garantie si le push échoue.
   try {
