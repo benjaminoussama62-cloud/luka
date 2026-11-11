@@ -510,6 +510,8 @@ export async function executeTransfer(input: {
   amountMinor: number;
   currency: MoneyCurrency;
   pin: unknown;
+  /** Vrai uniquement quand un OTP email a déjà été vérifié (paiements carte). */
+  otpVerified?: boolean;
   idemKey: string;
   meta?: Record<string, unknown>;
   ip?: string;
@@ -528,7 +530,9 @@ export async function executeTransfer(input: {
     return { tx: await getTransactionOrThrow(idem.replayTxId), replayed: true };
   }
 
-  const sender = await requirePin(userId, input.pin);
+  const sender = input.otpVerified
+    ? await (async () => { const w = await getOrCreateWallet(userId); assertWalletUsable(w); return w; })()
+    : await requirePin(userId, input.pin);
   const recipient = await resolveRecipient(input.to);
   if (!recipient) {
     throw new MoneyError("recipient_not_found", "Destinataire introuvable — @adresse, email ou téléphone Ayeba", 404);

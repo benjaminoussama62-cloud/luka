@@ -153,10 +153,24 @@ CREATE TABLE IF NOT EXISTS money_cards (
   expiry TEXT NOT NULL,
   cvv TEXT NOT NULL,
   brand TEXT NOT NULL DEFAULT 'AYEBA',
+  card_name TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','frozen','closed')),
   partners_only INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS money_otps (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  purpose TEXT NOT NULL,
+  code_hash TEXT NOT NULL,
+  payload TEXT NOT NULL DEFAULT '{}',
+  attempts INTEGER NOT NULL DEFAULT 0,
+  expires_at TEXT NOT NULL,
+  used_at TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_money_otps_user ON money_otps(user_id, purpose);
 `;
 
 export function applyMoneySchema(db: AyebaDatabase) {

@@ -195,6 +195,16 @@ export async function createRequest(input: {
     throw new MoneyError("self_request", "Impossible de se demander à soi-même");
   }
   const d = await moneyDb();
+  // Anti-spam : max 10 demandes ouvertes en sortie, max 3 vers le même destinataire.
+  const { n: openCount } = (await d.get(
+    "SELECT COUNT(*) AS n FROM money_requests WHERE from_user_id = ? AND status = 'open'", [input.userId],
+  )) as { n: number };
+  if (openCount >= 10) throw new MoneyError("too_many_requests", "Trop de demandes en attente — attends qu'elles soient traitées", 429);
+  const { n: toSame } = (await d.get(
+    "SELECT COUNT(*) AS n FROM money_requests WHERE from_user_id = ? AND to_user_id = ? AND status = 'open'",
+    [input.userId, recipient.userId],
+  )) as { n: number };
+  if (toSame >= 3) throw new MoneyError("spam_protection", "Tu as déjà des demandes ouvertes vers cette personne", 429);
   const rid = id("mrq");
   await d.run(
     `INSERT INTO money_requests (id, from_user_id, from_wallet_id, to_identifier, to_user_id, to_wallet_id, currency, amount_minor, note, status, created_at)
@@ -206,6 +216,17 @@ export async function createRequest(input: {
     ],
   );
   await audit(input.userId, wallet.id, "request_create", { rid, to: input.to, amountMinor: input.amountMinor, currency: input.currency });
+  // Notification sécurisée : lien vers le panneau Demandes (jamais de montant
+  // payable dans le mail — le destinataire confirme DANS l'app avec son PIN).
+  const me = await getOrCreateWallet(input.userId);
+  const { notifyUser } = await import("./notify");
+  void notifyUser(recipient.userId, recipient.wallet.id, "Demande d'argent reçue", [
+    `${me.handle ? "@" + me.handle : "Un utilisateur Mbongo"} vous demande ${minorToMajorString(input.amountMinor, input.currency)} ${input.currency === "USD" ? "USD" : "FC"}.`,
+    input.note ? `Motif : ${input.note.slice(0, 120)}` : "",
+    "Connectez-vous à Ayeba Mbongo → Services → Demandes pour payer ou refuser :",
+    "https://ayeba.app/mbongo",
+    "Ne partagez JAMAIS votre PIN — il n'est demandé que dans l'application.",
+  ].filter(Boolean));
   return rid;
 }
 
