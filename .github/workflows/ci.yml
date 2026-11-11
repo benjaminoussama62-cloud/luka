@@ -1,0 +1,32 @@
+name: ci
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci --ignore-scripts
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Lint
+        # 192 erreurs pré-existantes dans la base — le signal est rapporté
+        # sans bloquer le pipeline le temps de la dette remboursée.
+        continue-on-error: true
+        run: npm run lint
+
+      - name: Tests
+        run: npx vitest run

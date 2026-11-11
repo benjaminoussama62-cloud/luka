@@ -55,6 +55,7 @@ type Msg = {
   attachmentCount?: number;
   attachments?: { id: string; byteSize: number; fileIv: string; nameIv: string; nameCt: string }[];
   snoozeUntil?: string | null;
+  unsubscribe?: string;
 };
 
 type OpenFile = { id: string; name: string; mime: string; iv: string; size: number; key?: CryptoKey };
@@ -835,6 +836,32 @@ export function MailApp() {
   const toggleSelectAll = () =>
     setSelected((s) => (allVisibleSelected ? new Set([...s].filter((id) => !visible.some((m) => m.id === id))) : new Set([...s, ...visible.map((m) => m.id)])));
 
+  // Code 4–8 chiffres façon OTP — détecté d'abord près d'un mot-clé, sinon
+  // le premier nombre isolé plausibe (copie en un geste, comme Gmail).
+  const detectedCode = open?.body
+    ? (/code|otp|vérifi|verifi|pin|sécurit|securit|confirm|validation|mot de passe|password/i.test(open.body) &&
+        /(?:code|otp|pin|est|is|:)[^0-9]{0,25}(\d{4,8})\b/i.exec(open.body)?.[1]) ||
+      /\b(\d{6})\b/.exec(open.body)?.[1] ||
+      /\b(\d{4,8})\b/.exec(open.body)?.[1] ||
+      null
+    : null;
+
+  const copyCode = () => {
+    if (!detectedCode) return;
+    void navigator.clipboard?.writeText(detectedCode).then(
+      () => showToast(`Code ${detectedCode} copié.`),
+      () => showToast(`Code : ${detectedCode}`),
+    );
+  };
+
+  const unsubscribe = () => {
+    const u = open?.unsubscribe?.trim();
+    if (!u) return;
+    if (/^https?:\/\//i.test(u)) window.open(u, "_blank", "noopener,noreferrer");
+    else if (/^mailto:/i.test(u)) window.location.href = u;
+    showToast("Demande de désabonnement ouverte.");
+  };
+
   // ── Webmail ──
   return (
     <div className="mail-root">
@@ -1315,6 +1342,21 @@ export function MailApp() {
                       : "Déchiffré sur cet appareil. Ayeba n’a pas le texte."
                     : "Chiffré au repos sur les serveurs Ayeba — pas de bout en bout. Message système, échec de remise, ou reçu avant le coffre."}
                 </p>
+
+                {(detectedCode || open.unsubscribe) && (
+                  <div className="mail-smart-actions">
+                    {detectedCode && (
+                      <button className="mail-smart-chip" onClick={copyCode} title="Copier le code">
+                        <IcCheck size={13} /> Code détecté : <strong>{detectedCode}</strong> — copier
+                      </button>
+                    )}
+                    {open.unsubscribe && (
+                      <button className="mail-smart-chip" onClick={unsubscribe} title={open.unsubscribe.slice(0, 120)}>
+                        Se désabonner
+                      </button>
+                    )}
+                  </div>
+                )}
 
                 {(thread.length ? thread : [{ msg: open, subject: open.subject, body: open.body, files: openFiles }]).map((t) => (
                   <article key={t.msg.id} className={`mail-msg ${t.msg.id === open.id ? "focus" : ""}`}>

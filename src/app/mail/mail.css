@@ -1342,3 +1342,23 @@
     -webkit-touch-callout: none;
   }
 }
+
+/* Actions intelligentes du lecteur — code à copier / désabonnement */
+.mail-smart-actions {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  margin: 4px 0 14px;
+}
+.mail-smart-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  font-size: 12.5px; font-weight: 600;
+  cursor: pointer;
+  transition: background .15s, transform .1s;
+}
+.mail-smart-chip:hover { background: color-mix(in srgb, var(--accent) 20%, transparent); }
+.mail-smart-chip:active { transform: scale(.97); }
+.mail-smart-chip strong { font-variant-numeric: tabular-nums; letter-spacing: .04em; }

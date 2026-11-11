@@ -33,6 +33,17 @@ export async function POST(req: Request) {
     const { default: PostalMime } = await import("postal-mime");
     const raw = Buffer.from(await req.arrayBuffer());
     const parsed = await PostalMime.parse(raw);
+    // En-tête quelconque — postal-mime expose Map / Array<{key,value}> / Record selon version.
+    const header = (name: string): string => {
+      const h = parsed.headers as unknown;
+      if (h instanceof Map) return String(h.get(name) || "");
+      if (Array.isArray(h)) {
+        const e = h.find((x) => String(x?.key || "").toLowerCase() === name);
+        return e ? String(e.value || "") : "";
+      }
+      if (h && typeof h === "object") return String((h as Record<string, unknown>)[name] || "");
+      return "";
+    };
     body = {
       from: parsed.from?.address,
       fromName: parsed.from?.name || "",
@@ -42,10 +53,8 @@ export async function POST(req: Request) {
       subject: parsed.subject || "",
       text: parsed.text || "",
       html: parsed.html || "",
-      messageId:
-        parsed.messageId ||
-        (parsed.headers instanceof Map ? parsed.headers.get("message-id") : undefined) ||
-        "",
+      messageId: parsed.messageId || header("message-id"),
+      listUnsub: header("list-unsubscribe").replace(/[<>]/g, " ").trim().split(/\s+/)[0] || "",
       attachments: (parsed.attachments || [])
         .filter((a) => a.disposition !== "inline")
         .map((a) => ({
@@ -67,6 +76,7 @@ export async function POST(req: Request) {
         text?: string;
         html?: string;
         messageId?: string;
+        listUnsub?: string;
         attachments?: { name?: string; mime?: string; bytes?: Uint8Array }[];
       }
     | null;
@@ -107,6 +117,7 @@ export async function POST(req: Request) {
     body: text || "(message vide)",
     html: body.html,
     messageId: body.messageId,
+    listUnsub: body.listUnsub,
     attachments: attachments.length ? attachments : undefined,
   });
 

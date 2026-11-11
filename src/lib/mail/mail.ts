@@ -116,6 +116,8 @@ export type MailMessage = {
   attachments: MailAttachmentMeta[];
   /** ISO — échéance de mise en attente (dossier « snoozed »), sinon null. */
   snoozeUntil?: string | null;
+  /** En-tête List-Unsubscribe du mail entrant (URL ou mailto:), sinon vide. */
+  unsubscribe?: string;
 };
 
 type MsgRow = {
@@ -136,6 +138,7 @@ type MsgRow = {
   wraps?: string;
   att_count?: number;
   snooze_until?: string | null;
+  list_unsub?: string;
 };
 
 const uid = () => crypto.randomBytes(12).toString("hex");
@@ -184,6 +187,7 @@ async function toMessage(r: MsgRow, full: boolean): Promise<MailMessage> {
     attachmentCount: Number(r.att_count || 0),
     attachments: [] as MailAttachmentMeta[],
     snoozeUntil: r.snooze_until || null,
+    unsubscribe: r.list_unsub || "",
   };
   if (enc === 1) {
     return {
@@ -510,11 +514,12 @@ async function insertMessage(m: {
   body: string;
   kind?: string;
   read?: boolean;
+  listUnsub?: string;
 }) {
   await db()
     .prepare(
-      `INSERT INTO mail_messages (id, thread_id, account_id, folder, from_addr, from_name, to_addrs, subject_enc, body_enc, is_read, is_starred, kind, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
+      `INSERT INTO mail_messages (id, thread_id, account_id, folder, from_addr, from_name, to_addrs, subject_enc, body_enc, is_read, is_starred, kind, created_at, list_unsub)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
     )
     .run(
       uid(),
@@ -529,6 +534,7 @@ async function insertMessage(m: {
       m.read ? 1 : 0,
       m.kind || "mail",
       now(),
+      (m.listUnsub || "").slice(0, 500),
     );
 }
 
@@ -701,12 +707,14 @@ export async function receiveExternalMail(opts: {
   body: string;
   html?: string;
   messageId?: string;
+  listUnsub?: string;
   attachments?: { name: string; mime: string; bytes: Uint8Array }[];
 }): Promise<{ delivered: string[]; dropped: string[] }> {
   const delivered: string[] = [];
   const dropped: string[] = [];
   const from = String(opts.from || "").slice(0, 200);
   const subj = String(opts.subject || "(sans objet)").slice(0, 300);
+  const listUnsub = String(opts.listUnsub || "").slice(0, 500);
   const body = String(opts.body || "").slice(0, 200_000);
   const threadId = opts.messageId ? `ext-${opts.messageId.slice(0, 80)}` : uid();
   // Pièces jointes : même garde-fou que l'envoi (max 3, taille plafonnée),
@@ -742,6 +750,7 @@ export async function receiveExternalMail(opts: {
         bodyCipher: sealed.bodyCipher,
         wrap: sealed.wrap,
         kind: "mail",
+        listUnsub,
       });
       for (const a of sealed.attachments) {
         await db()
@@ -774,6 +783,7 @@ export async function receiveExternalMail(opts: {
         subject: subj,
         body,
         kind: "mail",
+        listUnsub,
       });
     }
     delivered.push(addr);
@@ -1366,13 +1376,14 @@ async function insertSealed(m: {
   wrap: KeyWrap;
   read?: boolean;
   kind?: string;
+  listUnsub?: string;
 }): Promise<string> {
   const id = uid();
   await db()
     .prepare(
       `INSERT INTO mail_messages
-       (id, thread_id, account_id, folder, from_addr, from_name, to_addrs, subject_enc, body_enc, is_read, is_starred, kind, created_at, enc, wraps)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 1, ?)`,
+       (id, thread_id, account_id, folder, from_addr, from_name, to_addrs, subject_enc, body_enc, is_read, is_starred, kind, created_at, enc, wraps, list_unsub)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 1, ?, ?)`,
     )
     .run(
       id,
@@ -1388,6 +1399,7 @@ async function insertSealed(m: {
       m.kind || "mail",
       now(),
       JSON.stringify(m.wrap),
+      (m.listUnsub || "").slice(0, 500),
     );
   return id;
 }

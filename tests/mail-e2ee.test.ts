@@ -61,7 +61,7 @@ describe("coffre e2e", () => {
     const bob = seedAccount("bobe2e");
     const aliceVault = await generateVault("phrase-alice-solide");
     const bobVault = await generateVault("phrase-bob-solide-2");
-    expect(saveVault(alice.id, {
+    expect(await saveVault(alice.id, {
       ecdhPublic: aliceVault.session.ecdhPublic,
       ecdsaPublic: aliceVault.session.ecdsaPublic,
       mlkemPublic: aliceVault.session.mlkemPublic,
@@ -69,7 +69,7 @@ describe("coffre e2e", () => {
       recoveryWrap: aliceVault.recoveryWrap,
       fingerprint: aliceVault.session.fingerprint,
     })).toEqual({ ok: true });
-    expect(saveVault(bob.id, {
+    expect(await saveVault(bob.id, {
       ecdhPublic: bobVault.session.ecdhPublic,
       ecdsaPublic: bobVault.session.ecdsaPublic,
       mlkemPublic: bobVault.session.mlkemPublic,
@@ -100,7 +100,7 @@ describe("coffre e2e", () => {
     const file = new Uint8Array([1, 2, 3, 4, 9, 8, 7]);
     const name = await encryptUtf8(key, JSON.stringify({ name: "note.txt", mime: "text/plain" }));
     const encFile = await encryptBytes(key, file);
-    const saved = saveUploadBlob(alice.id, {
+    const saved = await saveUploadBlob(alice.id, {
       bytes: Buffer.from(encFile.ct),
       fileIv: encFile.iv,
       nameIv: name.iv,
@@ -135,10 +135,10 @@ describe("coffre e2e", () => {
     expect(blob.body_enc).not.toContain("Le corps");
     expect(blob.body_enc).not.toContain("note.txt");
 
-    const inbox = listMessages(bob.id, "inbox").find((m) => m.enc === 1);
+    const inbox = (await listMessages(bob.id, "inbox")).find((m) => m.enc === 1);
     expect(inbox?.subject).toBe("");
     expect(inbox?.attachmentCount).toBe(1);
-    const full = getMessage(bob.id, inbox!.id)!;
+    const full = (await getMessage(bob.id, inbox!.id))!;
     const contentKey = await openContentKey(unlocked, full.wrap!);
     expect(await decryptUtf8(contentKey, full.sealedSubject!)).toBe("Sujet secret");
     expect(await decryptUtf8(contentKey, full.sealedBody!)).toBe("Le corps ne doit jamais être en clair.");
@@ -155,7 +155,7 @@ describe("coffre e2e", () => {
   it("hybride post-quantique : wrap avec kc ML-KEM, décodage et déterminisme", async () => {
     const alice = seedAccount("alicepq");
     const vault = await generateVault("phrase-pq-solide");
-    saveVault(alice.id, {
+    await saveVault(alice.id, {
       ecdhPublic: vault.session.ecdhPublic,
       ecdsaPublic: vault.session.ecdsaPublic,
       mlkemPublic: vault.session.mlkemPublic,
@@ -200,7 +200,7 @@ describe("coffre e2e", () => {
   it("scelle un mail externe entrant et refuse l'envoi hors coffre sans confirmation", async () => {
     const bob = seedAccount("bobe2ein");
     const vault = await generateVault("phrase-inbound-ok");
-    saveVault(bob.id, {
+    await saveVault(bob.id, {
       ecdhPublic: vault.session.ecdhPublic,
       ecdsaPublic: vault.session.ecdsaPublic,
       mlkemPublic: vault.session.mlkemPublic,
@@ -216,7 +216,7 @@ describe("coffre e2e", () => {
       body: "Texte arrivé en clair puis scellé",
     });
     expect(received.delivered).toEqual([bob.email]);
-    const msg = listMessages(bob.id, "inbox").find((m) => m.from === "ami@gmail.com");
+    const msg = (await listMessages(bob.id, "inbox")).find((m) => m.from === "ami@gmail.com");
     expect(msg?.enc).toBe(1);
     expect(msg?.subject).toBe("");
     const raw = getDb()
@@ -229,7 +229,7 @@ describe("coffre e2e", () => {
     vi.stubEnv("SMTP_PASS", "p");
     const alice = seedAccount("aliceext");
     const av = await generateVault("phrase-externe-alice");
-    saveVault(alice.id, {
+    await saveVault(alice.id, {
       ecdhPublic: av.session.ecdhPublic,
       ecdsaPublic: av.session.ecdsaPublic,
       mlkemPublic: av.session.mlkemPublic,

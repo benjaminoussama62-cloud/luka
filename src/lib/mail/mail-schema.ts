@@ -129,7 +129,62 @@ export const MAIL_MIGRATIONS = [
   "ALTER TABLE mail_messages ADD COLUMN enc INTEGER NOT NULL DEFAULT 0",
   "ALTER TABLE mail_messages ADD COLUMN wraps TEXT NOT NULL DEFAULT ''",
   "ALTER TABLE mail_messages ADD COLUMN snooze_until TEXT",
+  "ALTER TABLE mail_messages ADD COLUMN list_unsub TEXT NOT NULL DEFAULT ''",
+  "ALTER TABLE mail_api_keys ADD COLUMN key_prefix TEXT NOT NULL DEFAULT ''",
 ];
+
+// ── Service transactionnel — tables dédiées (CREATE IF NOT EXISTS) ──────────
+export const MAIL_TX_SCHEMA = `
+CREATE TABLE IF NOT EXISTS mail_api_keys (
+  id TEXT PRIMARY KEY,
+  app TEXT NOT NULL,
+  key_hash TEXT NOT NULL UNIQUE,
+  key_prefix TEXT NOT NULL DEFAULT '',
+  label TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'active',
+  created_at TEXT NOT NULL,
+  revoked_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS mail_outbound_queue (
+  id TEXT PRIMARY KEY,
+  app TEXT NOT NULL,
+  type TEXT NOT NULL,
+  to_addr TEXT NOT NULL,
+  locale TEXT NOT NULL DEFAULT 'fr',
+  data TEXT NOT NULL DEFAULT '{}',
+  idem_key TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  attempts INTEGER NOT NULL DEFAULT 0,
+  last_error TEXT NOT NULL DEFAULT '',
+  next_retry TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  sent_at TEXT
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_mail_tx_idem ON mail_outbound_queue(app, idem_key);
+CREATE INDEX IF NOT EXISTS idx_mail_tx_status ON mail_outbound_queue(status, next_retry);
+CREATE INDEX IF NOT EXISTS idx_mail_tx_to ON mail_outbound_queue(to_addr, created_at);
+
+CREATE TABLE IF NOT EXISTS mail_suppressions (
+  address TEXT PRIMARY KEY,
+  reason TEXT NOT NULL,
+  source TEXT NOT NULL DEFAULT 'webhook',
+  created_at TEXT NOT NULL
+);
+`;
+
+export function applyMailTxSchema(db: AyebaDatabase) {
+  for (const raw of MAIL_TX_SCHEMA.split(";")) {
+    const stmt = raw.trim();
+    if (!stmt) continue;
+    try {
+      db.exec(stmt);
+    } catch (e) {
+      console.warn("[db] tx schema statement skipped:", (e as Error).message);
+    }
+  }
+}
 
 export function applyMailSchema(db: AyebaDatabase) {
   for (const raw of MAIL_SCHEMA.split(";")) {
@@ -148,4 +203,5 @@ export function applyMailSchema(db: AyebaDatabase) {
       /* colonne déjà présente */
     }
   }
+  applyMailTxSchema(db);
 }

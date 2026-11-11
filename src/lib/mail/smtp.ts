@@ -7,6 +7,7 @@
  * DKIM optionnel : si DKIM_PRIVATE_KEY + DKIM_SELECTOR sont configurés, les
  * messages sortants sont signés (déliverabilité Gmail/Outlook).
  */
+import crypto from "crypto";
 import nodemailer from "nodemailer";
 import type { Transporter } from "nodemailer";
 import { smtpConfigured } from "./mail";
@@ -51,7 +52,11 @@ export async function sendExternalMail(opts: {
   to: string;
   subject: string;
   text: string;
+  html?: string;
   replyTo?: string;
+  /** Désabonnement conforme RFC 2369/8058 — exigé par Gmail pour les bulk senders. */
+  unsubscribeUrl?: string;
+  headers?: Record<string, string>;
   attachments?: { filename: string; content: Buffer; contentType: string }[];
 }): Promise<ExternalSendResult> {
   const t = getTransporter();
@@ -63,6 +68,7 @@ export async function sendExternalMail(opts: {
       to: opts.to,
       subject: opts.subject,
       text: opts.text,
+      ...(opts.html ? { html: opts.html } : {}),
       replyTo: opts.replyTo || opts.from,
       attachments: opts.attachments?.map((a) => ({
         filename: a.filename,
@@ -72,6 +78,14 @@ export async function sendExternalMail(opts: {
       headers: {
         "X-Mailer": "Ayeba Mail",
         "X-Ayeba-From": opts.from,
+        "X-Entity-Ref-ID": crypto.randomBytes(8).toString("hex"),
+        ...(opts.unsubscribeUrl
+          ? {
+              "List-Unsubscribe": `<${opts.unsubscribeUrl}>`,
+              "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+            }
+          : {}),
+        ...(opts.headers || {}),
       },
     });
     return { ok: true };
