@@ -6,11 +6,9 @@
 import crypto from "crypto";
 import { moneyDb } from "./db";
 
-const PROJECT_ID = process.env.FCM_PROJECT_ID || "ayeba-mbongo";
-
 let cachedToken: { token: string; exp: number } | null = null;
 
-function serviceAccount(): { client_email: string; private_key: string } | null {
+function serviceAccount(): { client_email: string; private_key: string; project_id?: string } | null {
   const raw = process.env.FCM_SERVICE_ACCOUNT || process.env.FCM_SERV_ACCOUNT;
   if (raw) {
     try {
@@ -73,8 +71,9 @@ export async function pushUser(userId: string, title: string, body: string): Pro
   if (!rows.length) return;
   try {
     const tok = await accessToken(sa);
+    const projectId = sa.project_id || process.env.FCM_PROJECT_ID || "ayeba-mbongo";
     await Promise.all(rows.map((r) =>
-      fetch(`https://fcm.googleapis.com/v1/projects/${PROJECT_ID}/messages:send`, {
+      fetch(`https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`, {
         method: "POST",
         headers: { Authorization: `Bearer ${tok}`, "Content-Type": "application/json" },
         body: JSON.stringify({
