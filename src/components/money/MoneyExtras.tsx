@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-type MoneyExtrasPanel = "convert" | "requests" | "qr" | "limits" | "kyc" | "pinreset" | null;
+type MoneyExtrasPanel = "convert" | "requests" | "qr" | "limits" | "kyc" | "pinreset" | "card" | null;
 
 async function call(path: string, options?: RequestInit): Promise<Record<string, unknown> & { error?: string }> {
   const res = await fetch(path, {
@@ -47,6 +47,7 @@ export function ExtrasNav({ onOpen }: { onOpen: (p: NonNullable<MoneyExtrasPanel
     { id: "requests", label: "Demandes" },
     { id: "qr", label: "Ma carte QR" },
     { id: "limits", label: "Plafonds" },
+    { id: "card", label: "Carte virtuelle" },
     { id: "kyc", label: "Vérification" },
     { id: "pinreset", label: "PIN oublié" },
   ];
@@ -86,12 +87,17 @@ export function MoneyExtras({ panel, onClose, onDone }: {
   const [requests, setRequests] = useState<Array<{ id: string; direction: string; toIdentifier: string; currency: string; amountMinor: number; note: string; mine: boolean }>>([]);
   const [kyc, setKyc] = useState<{ status: string; full_name: string } | null>(null);
   const [kycLoaded, setKycLoaded] = useState(false);
+  const [card, setCard] = useState<{ number: string; last4: string; expiry: string; cvv: string; status: string; partners: string[] } | null>(null);
+  const [cardLoaded, setCardLoaded] = useState(false);
+  const [revealed, setRevealed] = useState(false);
+  const [partner, setPartner] = useState("sombateka");
 
   useEffect(() => {
     setErr("");
     if (panel === "convert") call("/api/mbongo/convert").then((d) => setRate(d.rate as number)).catch(() => {});
     if (panel === "requests") call("/api/mbongo/requests").then((d) => setRequests(d.requests as typeof requests)).catch(() => {});
     if (panel === "kyc") call("/api/mbongo/kyc").then((d) => { setKyc(d.kyc as typeof kyc); setKycLoaded(true); }).catch(() => setKycLoaded(true));
+    if (panel === "card") { setRevealed(false); call("/api/mbongo/card").then((d) => { setCard(d.card as typeof card); setCardLoaded(true); }).catch(() => setCardLoaded(true)); }
   }, [panel]);
 
   if (!panel) return null;
@@ -252,6 +258,73 @@ export function MoneyExtras({ panel, onClose, onDone }: {
           onClick={() => run(() => call("/api/mbongo/pin-reset", { method: "POST", body: JSON.stringify({ password, pin: newPin }) }), "PIN réinitialisé")}>
           Réinitialiser
         </button>
+      </Sheet>
+    );
+  }
+
+  if (panel === "card") {
+    if (!cardLoaded) return <Sheet title="Carte virtuelle" onClose={onClose}><p>Chargement…</p></Sheet>;
+    if (!card) {
+      return (
+        <Sheet title="Carte virtuelle" onClose={onClose}>
+          <p className="mn-hint">Crée ta carte virtuelle Ayeba — liée à ton solde, utilisable chez <b>Sombateka, Omega, Tala, Jemsa</b> et tous les produits Ayeba.</p>
+          <PinField value={pin} onChange={setPin} label="Code PIN" />
+          {err && <p className="mn-err">{err}</p>}
+          <button type="button" className="mn-btn-primary" disabled={busy || !pinOk}
+            onClick={() => run(() => call("/api/mbongo/card", { method: "POST", body: JSON.stringify({ action: "issue", pin }) }).then(() => call("/api/mbongo/card").then((d) => { setCard(d.card as typeof card); setCardLoaded(true); })), "Carte créée")}>
+            Créer ma carte
+          </button>
+        </Sheet>
+      );
+    }
+    return (
+      <Sheet title="Carte virtuelle" onClose={onClose}>
+        <div className="mn-vcard">
+          <div className="mn-vcard-top"><span className="mn-vcard-chip" /><span className="mn-vcard-brand">AYEBA</span></div>
+          <div className="mn-vcard-num">{card.number}</div>
+          <div className="mn-vcard-row"><span>EXP {card.expiry}</span><span>CVV {card.cvv}</span><span>••• {card.last4}</span></div>
+          <div className="mn-vcard-name">Carte partenaire Ayeba Mbongo</div>
+          {card.status !== "active" && <div className="mn-vcard-frozen">Gelée</div>}
+        </div>
+        {!revealed ? (
+          <>
+            <PinField value={pin} onChange={setPin} label="PIN pour afficher les données" />
+            {err && <p className="mn-err">{err}</p>}
+            <button type="button" className="mn-btn-primary" disabled={busy || !pinOk}
+              onClick={async () => { setBusy(true); setErr(""); try { const d = await call(`/api/mbongo/card?pin=${pin}`); setCard(d.card as typeof card); setRevealed(true); } catch (e) { setErr(e instanceof Error ? e.message : "Erreur"); } setBusy(false); }}>
+              Afficher le numéro
+            </button>
+          </>
+        ) : (
+          <>
+            <p className="mn-hint">Payer avec la carte — débit direct de ton solde :</p>
+            <label className="mn-field"><span>Marchand partenaire</span>
+              <select value={partner} onChange={(e) => setPartner(e.target.value)}>
+                <option value="sombateka">Sombateka</option>
+                <option value="omega">Omega</option>
+                <option value="tala">Tala</option>
+                <option value="jemsa">Jemsa</option>
+                <option value="ayeba">Produits Ayeba</option>
+              </select>
+            </label>
+            <label className="mn-field"><span>Montant</span><input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" /></label>
+            <label className="mn-field"><span>Devise</span>
+              <select value={cur} onChange={(e) => setCur(e.target.value as "USD" | "CDF")}>
+                <option value="USD">USD</option><option value="CDF">CDF</option>
+              </select>
+            </label>
+            <PinField value={pin} onChange={setPin} label="Code PIN" />
+            {err && <p className="mn-err">{err}</p>}
+            <button type="button" className="mn-btn-primary" disabled={busy || !pinOk || !amount}
+              onClick={() => run(() => call("/api/mbongo/card", { method: "POST", body: JSON.stringify({ action: "spend", partner, amount, currency: cur, pin }) }), "Paiement effectué")}>
+              Payer
+            </button>
+            <button type="button" className="mn-btn-ghost" disabled={busy}
+              onClick={() => run(() => call("/api/mbongo/card", { method: "POST", body: JSON.stringify({ action: card.status === "active" ? "freeze" : "unfreeze" }) }).then(() => call("/api/mbongo/card").then((d) => setCard(d.card as typeof card))), card.status === "active" ? "Carte gelée" : "Carte réactivée")}>
+              {card.status === "active" ? "Geler la carte" : "Réactiver la carte"}
+            </button>
+          </>
+        )}
       </Sheet>
     );
   }

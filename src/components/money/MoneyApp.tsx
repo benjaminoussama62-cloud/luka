@@ -96,7 +96,7 @@ export function MoneyApp() {
   const [sendPrefill, setSendPrefill] = useState("");
   const [txDetail, setTxDetail] = useState<Tx | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [extrasPanel, setExtrasPanel] = useState<"convert" | "requests" | "qr" | "limits" | "kyc" | "pinreset" | null>(null);
+  const [extrasPanel, setExtrasPanel] = useState<"convert" | "requests" | "qr" | "limits" | "kyc" | "pinreset" | "card" | null>(null);
   const [toast, setToast] = useState("");
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 

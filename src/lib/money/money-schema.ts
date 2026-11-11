@@ -142,6 +142,21 @@ CREATE TABLE IF NOT EXISTS money_requests (
 
 CREATE INDEX IF NOT EXISTS idx_money_requests_to ON money_requests(to_user_id, status);
 CREATE INDEX IF NOT EXISTS idx_money_requests_from ON money_requests(from_user_id, status);
+
+CREATE TABLE IF NOT EXISTS money_cards (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL UNIQUE,
+  wallet_id TEXT NOT NULL REFERENCES money_wallets(id) ON DELETE CASCADE,
+  pan_hash TEXT NOT NULL,
+  pan_last4 TEXT NOT NULL,
+  pan_full TEXT NOT NULL,
+  expiry TEXT NOT NULL,
+  cvv TEXT NOT NULL,
+  brand TEXT NOT NULL DEFAULT 'AYEBA',
+  status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','frozen','closed')),
+  partners_only INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL
+);
 `;
 
 export function applyMoneySchema(db: AyebaDatabase) {

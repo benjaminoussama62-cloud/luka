@@ -600,3 +600,13 @@ a.mn-btn-primary { text-decoration: none; display: inline-block; }
 .mn-faq { border: 1px solid rgba(255,255,255,.08); border-radius: 12px; padding: 12px 14px; background: rgba(255,255,255,.03); }
 .mn-faq summary { cursor: pointer; font-size: 13.5px; font-weight: 600; color: #fff; }
 .mn-faq p { font-size: 13px; color: var(--muted, #9ca3af); line-height: 1.6; margin: 8px 0 0; }
+
+.mn-vcard{position:relative;background:linear-gradient(135deg,#0d1b2e 0%,#13293f 55%,#0a1522 100%);border:1px solid rgba(125,240,255,.35);border-radius:18px;padding:20px 22px;margin:0 0 18px;color:#eafcff;box-shadow:0 12px 32px rgba(0,0,0,.45),inset 0 1px 0 rgba(125,240,255,.15)}
+.mn-vcard-top{display:flex;justify-content:space-between;align-items:center}
+.mn-vcard-chip{width:38px;height:28px;border-radius:6px;background:linear-gradient(135deg,#e8b64c,#b8860b);box-shadow:inset 0 0 0 1px rgba(0,0,0,.25)}
+.mn-vcard-brand{font-weight:800;letter-spacing:.18em;font-size:13px;background:linear-gradient(90deg,#7df0ff,#e85d04);-webkit-background-clip:text;background-clip:text;color:transparent}
+.mn-vcard-num{font-family:ui-monospace,Consolas,monospace;font-size:19px;letter-spacing:.12em;margin:18px 0 12px}
+.mn-vcard-row{display:flex;gap:18px;font-size:11px;letter-spacing:.08em;opacity:.85}
+.mn-vcard-name{font-size:11px;opacity:.6;margin-top:10px;text-transform:uppercase;letter-spacing:.14em}
+.mn-vcard-frozen{position:absolute;top:14px;right:16px;background:#e85d04;color:#fff;font-size:10px;font-weight:700;padding:3px 8px;border-radius:6px;letter-spacing:.1em}
+.mn-btn-ghost{background:none;border:1px solid rgba(125,240,255,.35);color:#7df0ff;border-radius:10px;padding:10px;width:100%;margin-top:10px;font-weight:600}
