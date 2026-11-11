@@ -610,3 +610,12 @@ a.mn-btn-primary { text-decoration: none; display: inline-block; }
 .mn-vcard-name{font-size:11px;opacity:.6;margin-top:10px;text-transform:uppercase;letter-spacing:.14em}
 .mn-vcard-frozen{position:absolute;top:14px;right:16px;background:#e85d04;color:#fff;font-size:10px;font-weight:700;padding:3px 8px;border-radius:6px;letter-spacing:.1em}
 .mn-btn-ghost{background:none;border:1px solid rgba(125,240,255,.35);color:#7df0ff;border-radius:10px;padding:10px;width:100%;margin-top:10px;font-weight:600}
+
+.mn-hero-top{display:flex;justify-content:space-between;align-items:center}
+.mn-eye{background:none;border:1px solid rgba(125,240,255,.3);color:#7df0ff;font-size:11px;padding:4px 10px;border-radius:8px;letter-spacing:.06em}
+.mn-search{background:rgba(255,255,255,.06);border:1px solid rgba(125,240,255,.2);border-radius:8px;color:#eafcff;padding:5px 10px;font-size:12px;width:130px}
+.mn-search::placeholder{color:rgba(234,252,255,.4)}
+.mn-scan{margin-top:8px;text-align:center}
+.mn-scan-box{margin-top:8px}
+.mn-scan-video{width:100%;border-radius:12px;border:1px solid rgba(125,240,255,.35);background:#000;aspect-ratio:4/3;object-fit:cover}
+.mn-receipt-note{text-align:center;margin-top:8px;font-size:11px}

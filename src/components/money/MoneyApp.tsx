@@ -72,8 +72,8 @@ async function api(path: string, options?: RequestInit) {
   });
   const data = (await res.json().catch(() => ({}))) as { error?: string; code?: string };
   if (!res.ok) {
-    const err = new Error(data.error || `Erreur ${res.status}`) as Error & { code?: string };
-    err.code = data.code;
+    const err = new Error(res.status === 401 ? "Session expirée — reconnecte-toi à ton compte Ayeba" : data.error || `Erreur ${res.status}`) as Error & { code?: string };
+    err.code = res.status === 401 ? "session_expired" : data.code;
     throw err;
   }
   return data;
@@ -94,6 +94,8 @@ export function MoneyApp() {
   const [filter, setFilter] = useState<TxFilter>("all");
   const [panel, setPanel] = useState<Panel>(null);
   const [sendPrefill, setSendPrefill] = useState("");
+  const [hideBal, setHideBal] = useState(() => typeof window !== "undefined" && localStorage.getItem("mn_hide") === "1");
+  const [txQuery, setTxQuery] = useState("");
   const [txDetail, setTxDetail] = useState<Tx | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [extrasPanel, setExtrasPanel] = useState<"convert" | "requests" | "qr" | "limits" | "kyc" | "pinreset" | "card" | null>(null);
@@ -199,7 +201,8 @@ export function MoneyApp() {
 
   const hasPin = info?.wallet.hasPin ?? false;
   const frozen = info?.wallet.status === "frozen";
-  const visibleTxs = txs.filter((t) => matchFilter(t, filter));
+  const visibleTxs = txs.filter((t) => matchFilter(t, filter)
+    && (!txQuery || `${t.kind} ${t.direction} ${t.amount} ${t.currency} ${t.reference} ${t.counterparty ?? ""} ${t.provider ?? ""}`.toLowerCase().includes(txQuery.toLowerCase())));
   const hasMonth = info && (info.month.USD.in + info.month.USD.out + info.month.CDF.in + info.month.CDF.out) > 0;
 
   return (
@@ -240,19 +243,25 @@ export function MoneyApp() {
             )}
 
             <section className="mn-hero">
-              <span className="mn-kicker">Vos soldes</span>
+              <div className="mn-hero-top">
+                <span className="mn-kicker">Vos soldes</span>
+                <button type="button" className="mn-eye" aria-label={hideBal ? "Afficher le solde" : "Masquer le solde"}
+                  onClick={() => { const n = !hideBal; setHideBal(n); localStorage.setItem("mn_hide", n ? "1" : "0"); }}>
+                  {hideBal ? "◡ Afficher" : "👁 Masquer"}
+                </button>
+              </div>
               <div className="mn-balances">
                 <div className="mn-bal">
                   <span className="mn-bal-cur">USD — Dollars</span>
                   <b>
-                    {info?.balances.USD.display ?? "…"}
+                    {hideBal ? "••••" : info?.balances.USD.display ?? "…"}
                     <em>$</em>
                   </b>
                 </div>
                 <div className="mn-bal">
                   <span className="mn-bal-cur">CDF — Francs congolais</span>
                   <b>
-                    {info?.balances.CDF.display ?? "…"}
+                    {hideBal ? "••••" : info?.balances.CDF.display ?? "…"}
                     <em>FC</em>
                   </b>
                 </div>
@@ -295,6 +304,7 @@ export function MoneyApp() {
               <div className="mn-history-head">
                 <span className="mn-kicker">Activité</span>
                 <div className="mn-history-tools">
+                  <input className="mn-search" value={txQuery} onChange={(e) => setTxQuery(e.target.value)} placeholder="Rechercher…" aria-label="Rechercher une transaction" />
                   <a className="mn-btn mn-btn-mini" href="/api/mbongo/statement" download>
                     <IconFile /> Relevé CSV
                   </a>
@@ -671,6 +681,11 @@ function TxDetailSheet({ tx, onClose }: { tx: Tx; onClose: () => void }) {
             </div>
           ))}
         </dl>
+        <button type="button" className="mn-btn-ghost" onClick={() => {
+          void navigator.clipboard?.writeText(`Reçu Ayeba Mbongo — ${tx.reference} — ${tx.direction === "in" ? "+" : "−"}${tx.amount} ${tx.currency}`);
+          onClose();
+        }}>Copier la référence du reçu</button>
+        <p className="mn-hint mn-receipt-note">Ce reçu a aussi été envoyé sur ton Ayeba Mail.</p>
       </section>
     </div>
   );
@@ -885,8 +900,45 @@ function MovePanel({
   const [pin, setPin] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [scanning, setScanning] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const scanStop = useRef<() => void>(() => {});
   const idemKey = useRef(crypto.randomUUID());
   const noProvider = providers.length === 0 && kind !== "send";
+
+  async function scanQr() {
+    setError("");
+    const BD = (window as unknown as { BarcodeDetector?: new (o: { formats: string[] }) => { detect: (s: CanvasImageSource) => Promise<{ rawValue: string }[]> } }).BarcodeDetector;
+    if (!BD) { setError("Scanner non supporté par ce navigateur — colle le lien du QR à la place"); return; }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+      setScanning(true);
+      const v = videoRef.current!;
+      v.srcObject = stream;
+      await v.play();
+      const det = new BD({ formats: ["qr_code"] });
+      let alive = true;
+      scanStop.current = () => { alive = false; stream.getTracks().forEach((t) => t.stop()); setScanning(false); };
+      const tick = async () => {
+        while (alive) {
+          try {
+            const codes = await det.detect(v);
+            if (codes[0]) {
+              const m = /[?&]to=([^&]+)/.exec(codes[0].rawValue);
+              setTo(decodeURIComponent(m?.[1] || codes[0].rawValue));
+              scanStop.current();
+              return;
+            }
+          } catch { /* frame sans QR */ }
+          await new Promise((r) => setTimeout(r, 250));
+        }
+      };
+      void tick();
+    } catch {
+      setError("Caméra inaccessible — autorise l'accès ou colle le lien du QR");
+      setScanning(false);
+    }
+  }
 
   const title = kind === "send" ? "Envoyer de l'argent" : kind === "deposit" ? "Déposer de l'argent" : "Retirer de l'argent";
 
@@ -934,10 +986,22 @@ function MovePanel({
           <button type="button" className="mn-icon-btn" aria-label="Fermer" onClick={() => onClose(false)}>✕</button>
         </div>
         {kind === "send" && (
-          <label>
-            Destinataire — email, téléphone ou @pseudo
-            <input value={to} onChange={(e) => setTo(e.target.value)} placeholder="nom@ayeba.app ou +243 …" autoFocus />
-          </label>
+          <>
+            <label>
+              Destinataire — email, téléphone ou @pseudo
+              <input value={to} onChange={(e) => setTo(e.target.value)} placeholder="nom@ayeba.app ou +243 …" autoFocus />
+            </label>
+            {!scanning ? (
+              <button type="button" className="mn-btn-ghost mn-scan" onClick={() => void scanQr()}>
+                📷 Scanner un code QR
+              </button>
+            ) : (
+              <div className="mn-scan-box">
+                <video ref={videoRef} playsInline muted className="mn-scan-video" />
+                <button type="button" className="mn-btn-ghost" onClick={() => scanStop.current()}>Arrêter le scan</button>
+              </div>
+            )}
+          </>
         )}
         {kind !== "send" && (
           <label>

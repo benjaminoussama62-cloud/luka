@@ -171,6 +171,13 @@ CREATE TABLE IF NOT EXISTS money_otps (
   created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_money_otps_user ON money_otps(user_id, purpose);
+
+CREATE TABLE IF NOT EXISTS money_kyc_docs (
+  user_id TEXT PRIMARY KEY,
+  doc_number TEXT NOT NULL DEFAULT '',
+  doc_image TEXT NOT NULL DEFAULT '',
+  submitted_at TEXT NOT NULL
+);
 `;
 
 export function applyMoneySchema(db: AyebaDatabase) {

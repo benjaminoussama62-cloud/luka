@@ -148,6 +148,8 @@ export async function submitKyc(input: {
   fullName: string;
   birthdate: string;
   idType: string;
+  docNumber?: string;
+  docImage?: string;
 }) {
   const d = await moneyDb();
   await d.run(
@@ -157,6 +159,12 @@ export async function submitKyc(input: {
        birthdate=excluded.birthdate, id_type=excluded.id_type,
        status='pending', submitted_at=excluded.submitted_at`,
     [input.userId, input.fullName, input.birthdate, input.idType, now()],
+  );
+  await d.run(
+    `INSERT INTO money_kyc_docs (user_id, doc_number, doc_image, submitted_at) VALUES (?, ?, ?, ?)
+     ON CONFLICT(user_id) DO UPDATE SET doc_number=excluded.doc_number,
+       doc_image=excluded.doc_image, submitted_at=excluded.submitted_at`,
+    [input.userId, (input.docNumber || "").slice(0, 60), (input.docImage || "").slice(0, 3_000_000), now()],
   );
   return { status: "pending" };
 }

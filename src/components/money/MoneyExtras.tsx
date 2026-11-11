@@ -81,6 +81,8 @@ export function MoneyExtras({ panel, onClose, onDone }: {
   const [fullName, setFullName] = useState("");
   const [birthdate, setBirthdate] = useState("");
   const [idType, setIdType] = useState("carte_electeur");
+  const [docNumber, setDocNumber] = useState("");
+  const [docImage, setDocImage] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [rate, setRate] = useState<number | null>(null);
@@ -236,9 +238,17 @@ export function MoneyExtras({ panel, onClose, onDone }: {
                 <option value="permis">Permis de conduire</option>
               </select>
             </label>
+            <label className="mn-field"><span>Numéro de la pièce</span>
+              <input value={docNumber} onChange={(e) => setDocNumber(e.target.value)} placeholder="Ex : P0001234" />
+            </label>
+            <label className="mn-field"><span>Photo de la pièce (recto)</span>
+              <input type="file" accept="image/*" capture="environment"
+                onChange={(e) => { const f = e.target.files?.[0]; if (!f) return; if (f.size > 2_000_000) { setErr("Photo trop lourde (max 2 Mo)"); return; } const r = new FileReader(); r.onload = () => setDocImage(String(r.result)); r.readAsDataURL(f); }} />
+              {docImage && <small>Photo chargée ✓</small>}
+            </label>
             {err && <p className="mn-err">{err}</p>}
             <button type="button" className="mn-btn-primary" disabled={busy}
-              onClick={() => run(() => call("/api/mbongo/kyc", { method: "POST", body: JSON.stringify({ fullName, birthdate, idType }) }), "Dossier envoyé pour examen")}>
+              onClick={() => run(() => call("/api/mbongo/kyc", { method: "POST", body: JSON.stringify({ fullName, birthdate, idType, docNumber, docImage }) }), "Dossier envoyé pour examen")}>
               Envoyer
             </button>
           </>
