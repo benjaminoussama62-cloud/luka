@@ -190,3 +190,74 @@ export const IcShield = (p: P) => (
     <path d="m9 12 2 2 4-4" />
   </S>
 );
+
+export const IcMore = (p: P) => (
+  <S {...p}>
+    <circle cx="12" cy="5" r="1.4" fill="currentColor" stroke="none" />
+    <circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none" />
+    <circle cx="12" cy="19" r="1.4" fill="currentColor" stroke="none" />
+  </S>
+);
+
+export const IcClock = (p: P) => (
+  <S {...p}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 7v5l3 2" />
+  </S>
+);
+
+export const IcSpam = (p: P) => (
+  <S {...p}>
+    <path d="m12 9 0 4" />
+    <path d="m12 16.5 0 .5" />
+    <path d="M10.3 3.7 3.5 15a2 2 0 0 0 1.7 3h13.6a2 2 0 0 0 1.7-3L13.7 3.7a2 2 0 0 0-3.4 0z" />
+  </S>
+);
+
+export const IcCheck = (p: P) => (
+  <S {...p}>
+    <path d="m4 12.5 5 5L20 7" />
+  </S>
+);
+
+export const IcCheckAll = (p: P) => (
+  <S {...p}>
+    <path d="m2 12.5 5 5L18 7" />
+    <path d="m13 12.5 5 5L22 7" />
+  </S>
+);
+
+export const IcPrint = (p: P) => (
+  <S {...p}>
+    <path d="M6 9V3h12v6" />
+    <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+    <rect x="6" y="14" width="12" height="7" />
+  </S>
+);
+
+export const IcDownload = (p: P) => (
+  <S {...p}>
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+    <path d="m7 10 5 5 5-5" />
+    <path d="M12 15V3" />
+  </S>
+);
+
+export const IcBell = (p: P) => (
+  <S {...p}>
+    <path d="M18 8a6 6 0 0 0-12 0c0 7-3 8-3 8h18s-3-1-3-8" />
+    <path d="M13.7 20a2 2 0 0 1-3.4 0" />
+  </S>
+);
+
+export const IcFolder = (p: P) => (
+  <S {...p}>
+    <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
+  </S>
+);
+
+export const IcChevronDown = (p: P) => (
+  <S {...p}>
+    <path d="m6 9 6 6 6-6" />
+  </S>
+);

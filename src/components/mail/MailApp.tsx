@@ -8,15 +8,21 @@ import { SecurityPane, VaultCreate, VaultUnlock, type VaultInfo } from "@/compon
 import {
   IcArchive,
   IcBack,
+  IcCheck,
+  IcCheckAll,
   IcClip,
+  IcClock,
   IcClose,
   IcCompose,
+  IcDownload,
   IcDraft,
   IcForward,
   IcInbox,
   IcLock,
   IcMailOpen,
   IcMenu,
+  IcMore,
+  IcPrint,
   IcRefresh,
   IcReply,
   IcReplyAll,
@@ -24,6 +30,7 @@ import {
   IcSearch,
   IcSend,
   IcSettings,
+  IcSpam,
   IcStar,
   IcTrash,
 } from "@/components/mail/icons";
@@ -47,6 +54,7 @@ type Msg = {
   wrap?: { ek: string; iv: string; ct: string; kc?: string };
   attachmentCount?: number;
   attachments?: { id: string; byteSize: number; fileIv: string; nameIv: string; nameCt: string }[];
+  snoozeUntil?: string | null;
 };
 
 type OpenFile = { id: string; name: string; mime: string; iv: string; size: number; key?: CryptoKey };
@@ -74,10 +82,43 @@ type Account = {
 const FOLDERS: { id: string; label: string; icon: (p: { size?: number }) => React.ReactNode }[] = [
   { id: "inbox", label: "Boîte de réception", icon: (p) => <IcInbox {...p} /> },
   { id: "starred", label: "Suivis", icon: (p) => <IcStar {...p} /> },
+  { id: "snoozed", label: "En attente", icon: (p) => <IcClock {...p} /> },
   { id: "sent", label: "Envoyés", icon: (p) => <IcSend {...p} /> },
   { id: "drafts", label: "Brouillons", icon: (p) => <IcDraft {...p} /> },
   { id: "archive", label: "Archives", icon: (p) => <IcArchive {...p} /> },
+  { id: "spam", label: "Spam", icon: (p) => <IcSpam {...p} /> },
   { id: "trash", label: "Corbeille", icon: (p) => <IcTrash {...p} /> },
+];
+
+/** Préréglages de mise en attente — façon Gmail (ce soir / demain / semaine). */
+const SNOOZE_PRESETS: { label: string; at: () => Date }[] = [
+  {
+    label: "Ce soir",
+    at: () => {
+      const d = new Date();
+      d.setHours(18, 0, 0, 0);
+      if (d.getTime() <= Date.now()) d.setDate(d.getDate() + 1);
+      return d;
+    },
+  },
+  {
+    label: "Demain matin",
+    at: () => {
+      const d = new Date();
+      d.setDate(d.getDate() + 1);
+      d.setHours(8, 0, 0, 0);
+      return d;
+    },
+  },
+  {
+    label: "Semaine prochaine",
+    at: () => {
+      const d = new Date();
+      d.setDate(d.getDate() + ((8 - d.getDay()) % 7 || 7));
+      d.setHours(8, 0, 0, 0);
+      return d;
+    },
+  },
 ];
 
 const LANGS = [
@@ -137,8 +178,18 @@ export function MailApp() {
   const [subjects, setSubjects] = useState<Record<string, string>>({});
   const [contentKey, setContentKey] = useState<CryptoKey | null>(null);
   const [openFiles, setOpenFiles] = useState<OpenFile[]>([]);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [menuFor, setMenuFor] = useState<string | null>(null); // id du message dont le menu ⋯ est ouvert
+  const [contacts, setContacts] = useState<{ email: string; name: string }[]>([]);
+  const [previews, setPreviews] = useState<Record<string, string>>({}); // fileId → objectURL déchiffré
+  const [sendUndo, setSendUndo] = useState<{
+    payload: { to: string; subject: string; body: string; files: File[]; externalAck: boolean; draftId?: string };
+  } | null>(null);
   const profileRef = useRef<HTMLDivElement>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(null);
+  const sendTimer = useRef<ReturnType<typeof setTimeout>>(null);
+  const swipeRef = useRef<{ id: string; x0: number; y0: number; dx: number } | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   const showToast = useCallback((t: string) => {
     setToast(t);
@@ -187,7 +238,30 @@ export function MailApp() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (account) void loadMessages(folder, q);
+    setSelected(new Set());
+    setMenuFor(null);
   }, [account, folder, q, loadMessages]);
+
+  // Correspondants connus — autocomplete du champ « À ».
+  useEffect(() => {
+    if (!account) return;
+    void fetch("/api/mail/contacts")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { contacts?: { email: string; name: string }[] } | null) => {
+        if (d?.contacts) setContacts(d.contacts);
+      })
+      .catch(() => {});
+  }, [account]);
+
+  // Fermer le menu ⋯ et la liste des contacts au clic extérieur.
+  useEffect(() => {
+    if (!menuFor) return;
+    const onDown = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuFor(null);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [menuFor]);
 
   // Push FCM — dans le shell Android Capacitor, on enregistre le token
   // de l'appareil pour être notifié à chaque mail entrant.
@@ -427,12 +501,157 @@ export function MailApp() {
   };
 
   const emptyTrash = async () => {
-    const trashed = messages.filter((m) => m.folder === "trash");
+    const trashed = messages.filter((m) => m.folder === "trash" || m.folder === "spam");
     await Promise.all(trashed.map((m) => fetch(`/api/mail/messages/${m.id}`, { method: "DELETE" })));
     setOpen(null);
     setThread([]);
     void loadMessages(folder, q);
-    showToast("Corbeille vidée.");
+    showToast(folder === "spam" ? "Spam vidé." : "Corbeille vidée.");
+  };
+
+  // ── Actions groupées ──
+  const bulkPatch = async (ids: string[], body: Record<string, unknown>) => {
+    await fetch("/api/mail/messages", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids, ...body }),
+    });
+    setSelected(new Set());
+    setMenuFor(null);
+    void loadMessages(folder, q);
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelected((s) => {
+      const next = new Set(s);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  // ── Mise en attente (snooze) ──
+  const snooze = async (id: string, until: Date) => {
+    await fetch(`/api/mail/messages/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ snoozeUntil: until.toISOString() }),
+    });
+    setMenuFor(null);
+    if (open?.id === id) { setOpen(null); setThread([]); }
+    void loadMessages(folder, q);
+    showToast(`Reporté à ${until.toLocaleString("fr-FR", { weekday: "short", hour: "2-digit", minute: "2-digit" })}.`);
+  };
+
+  // ── Swipe mobile : gauche = archiver, droite = corbeille ──
+  const onTouchStart = (m: Msg, e: React.TouchEvent) => {
+    const t = e.touches[0];
+    swipeRef.current = { id: m.id, x0: t.clientX, y0: t.clientY, dx: 0 };
+  };
+  const onTouchMove = (m: Msg, e: React.TouchEvent) => {
+    const s = swipeRef.current;
+    if (!s || s.id !== m.id) return;
+    const t = e.touches[0];
+    if (Math.abs(t.clientY - s.y0) > Math.abs(t.clientX - s.x0)) { swipeRef.current = null; return; }
+    s.dx = t.clientX - s.x0;
+    (e.currentTarget as HTMLElement).style.transform = `translateX(${Math.max(-90, Math.min(90, s.dx))}px)`;
+  };
+  const onTouchEnd = (m: Msg, e: React.TouchEvent) => {
+    const s = swipeRef.current;
+    swipeRef.current = null;
+    const el = e.currentTarget as HTMLElement;
+    el.style.transform = "";
+    if (!s || Math.abs(s.dx) < 70) return;
+    if (s.dx < 0 && m.folder !== "archive" && m.folder !== "trash" && m.folder !== "drafts") {
+      void patch(m.id, { folder: "archive" });
+      showToast("Archivé.");
+    } else if (s.dx > 0 && m.folder !== "drafts") {
+      void removeMessage(m.id);
+    }
+  };
+
+  // ── Annuler l'envoi (fenêtre 5 s façon Gmail) ──
+  const scheduleSend = (payload: { to: string; subject: string; body: string; files: File[]; externalAck: boolean; draftId?: string }) => {
+    setCompose(null);
+    setSendUndo({ payload });
+    if (sendTimer.current) clearTimeout(sendTimer.current);
+    sendTimer.current = setTimeout(() => void fireSend(payload), 5000);
+    showToast("Envoi… touchez Annuler pour revenir.");
+  };
+
+  const fireSend = async (payload: { to: string; subject: string; body: string; files: File[]; externalAck: boolean; draftId?: string }) => {
+    setSendUndo(null);
+    try {
+      const text = account!.signature && payload.body ? `${payload.body}\n\n—\n${account!.signature}` : payload.body;
+      const data = await sendSealedMessage({
+        session: vault!, selfEmail: account!.email, toRaw: payload.to, subject: payload.subject,
+        body: text, files: payload.files, externalAck: payload.externalAck, draft: false,
+      });
+      if (data.error && !data.bounced?.length) {
+        setCompose({ to: payload.to, subject: payload.subject, body: payload.body, files: payload.files, draftId: payload.draftId });
+        showToast(data.error);
+        return;
+      }
+      if (payload.draftId) {
+        await fetch(`/api/mail/messages/${payload.draftId}`, { method: "DELETE" });
+        await fetch(`/api/mail/messages/${payload.draftId}`, { method: "DELETE" });
+      }
+      void loadMessages(folder, q);
+      showToast(data.bounced?.length ? `Remise partielle — ${data.bounced.length} échec(s).` : "Message envoyé.");
+    } catch {
+      // Échec réseau/crypto : on rouvre la rédaction — rien n'est perdu.
+      setCompose({ to: payload.to, subject: payload.subject, body: payload.body, files: payload.files, draftId: payload.draftId });
+      showToast("Échec de l'envoi — le message est rouvert.");
+    }
+  };
+
+  const cancelSend = () => {
+    if (sendTimer.current) clearTimeout(sendTimer.current);
+    if (sendUndo) setCompose({ to: sendUndo.payload.to, subject: sendUndo.payload.subject, body: sendUndo.payload.body, files: sendUndo.payload.files, draftId: sendUndo.payload.draftId });
+    setSendUndo(null);
+  };
+
+  // ── Aperçu image inline (déchiffrement à la demande) ──
+  const loadPreview = async (f: OpenFile) => {
+    if (previews[f.id]) {
+      setPreviews((p) => { const n = { ...p }; URL.revokeObjectURL(n[f.id]); delete n[f.id]; return n; });
+      return;
+    }
+    const key = f.key ?? contentKey;
+    if (!key) return;
+    const res = await fetch(`/api/mail/attachments/${f.id}`);
+    if (!res.ok) return;
+    const cipher = new Uint8Array(await res.arrayBuffer());
+    const plain = await decryptBytes(key, f.iv, cipher);
+    const copy = new ArrayBuffer(plain.byteLength);
+    new Uint8Array(copy).set(plain);
+    setPreviews((p) => ({ ...p, [f.id]: URL.createObjectURL(new Blob([copy], { type: f.mime })) }));
+  };
+
+  // ── Impression + export .eml ──
+  const emlOf = (t: ThreadMsg) =>
+    `From: ${t.msg.fromName ? `"${t.msg.fromName}" ` : ""}<${t.msg.from}>\r\nTo: ${t.msg.to.join(", ")}\r\nSubject: ${t.subject}\r\nDate: ${new Date(t.msg.at).toUTCString()}\r\n\r\n${t.body}`;
+
+  const downloadEml = (t: ThreadMsg) => {
+    const blob = new Blob([emlOf(t)], { type: "message/rfc822" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${(t.subject || "message").replace(/[^\wÀ-ÿ -]/g, "").slice(0, 60) || "message"}.eml`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setMenuFor(null);
+  };
+
+  const printMessage = (t: ThreadMsg) => {
+    const w = window.open("", "_blank", "width=720,height=900");
+    if (!w) return;
+    const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    w.document.write(`<html><head><title>${esc(t.subject)}</title><style>body{font-family:system-ui,sans-serif;padding:32px;color:#111}h1{font-size:20px}meta{color:#666;font-size:12px}pre{white-space:pre-wrap;font-family:inherit;font-size:14px;line-height:1.6}</style></head><body><h1>${esc(t.subject)}</h1><div class="meta" style="color:#666;font-size:12px;margin-bottom:20px">De ${esc(t.msg.fromName || t.msg.from)} &lt;${esc(t.msg.from)}&gt; — ${fmtFull(t.msg.at)}<br>À ${esc(t.msg.to.join(", "))}</div><pre>${esc(t.body)}</pre></body></html>`);
+    w.document.close();
+    w.focus();
+    setTimeout(() => w.print(), 300);
+    setMenuFor(null);
   };
 
   const translate = async () => {
@@ -535,6 +754,10 @@ export function MailApp() {
     const meta = `${m.from} ${m.fromName} ${m.to.join(" ")}`.toLowerCase();
     return sub.toLowerCase().includes(needle) || meta.includes(needle);
   });
+
+  const allVisibleSelected = visible.length > 0 && visible.every((m) => selected.has(m.id));
+  const toggleSelectAll = () =>
+    setSelected((s) => (allVisibleSelected ? new Set([...s].filter((id) => !visible.some((m) => m.id === id))) : new Set([...s, ...visible.map((m) => m.id)])));
 
   // ── Webmail ──
   return (
@@ -703,84 +926,195 @@ export function MailApp() {
 
         <section className="mail-list">
           <div className="mail-list-head">
-            <span className="mail-kicker">
-              {FOLDERS.find((f) => f.id === folder)?.label.toUpperCase()}
-            </span>
-            <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              {folder === "trash" && messages.length > 0 && (
-                <button className="mail-btn link" style={{ fontSize: 11 }} onClick={() => void emptyTrash()}>
-                  Vider
+            {selected.size === 0 ? (
+              <>
+                <span className="mail-kicker">
+                  {FOLDERS.find((f) => f.id === folder)?.label.toUpperCase()}
+                </span>
+                <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  {(folder === "trash" || folder === "spam") && messages.length > 0 && (
+                    <button className="mail-btn link" style={{ fontSize: 11 }} onClick={() => void emptyTrash()}>
+                      Vider
+                    </button>
+                  )}
+                  <button
+                    className="mail-icon-btn"
+                    title="Actualiser"
+                    onClick={() => { void loadMessages(folder, q); void loadAccount(); }}
+                  >
+                    <IcRefresh size={15} />
+                  </button>
+                  <span className="mail-kicker" style={{ color: "var(--faint)" }}>
+                    {visible.length}
+                  </span>
+                </span>
+              </>
+            ) : (
+              <>
+                <button className="mail-icon-btn" title="Tout désélectionner" onClick={() => setSelected(new Set())}>
+                  <IcClose size={15} />
                 </button>
-              )}
-              <button
-                className="mail-icon-btn"
-                title="Actualiser"
-                onClick={() => { void loadMessages(folder, q); void loadAccount(); }}
-              >
-                <IcRefresh size={15} />
-              </button>
-              <span className="mail-kicker" style={{ color: "var(--faint)" }}>
-                {visible.length}
-              </span>
-            </span>
-          </div>
-          {visible.map((m) => (
-            <button
-              key={m.id}
-              className={`mail-item ${!m.read ? "unread" : ""} ${open?.id === m.id ? "active" : ""}`}
-              onClick={() => void openMessage(m.id)}
-            >
-              <div
-                className="mail-item-avatar"
-                style={{
-                  background: `linear-gradient(135deg, hsl(${hueFrom(m.from)} 62% 42%), hsl(${(hueFrom(m.from) + 40) % 360} 70% 30%))`,
-                }}
-              >
-                {(m.fromName || m.from)[0].toUpperCase()}
-              </div>
-              <div className="mail-item-main">
-                <div className="mail-item-top">
-                  {!m.read && <i className="dot" />}
-                  <span className="mail-item-from">{m.fromName || m.from}</span>
-                  {(m.attachmentCount || 0) > 0 && <span className="badge system" style={{ display: "inline-flex", padding: "2px 4px" }}><IcClip size={11} /></span>}
-                  <span
-                    className={`star ${m.starred ? "on" : ""}`}
-                    role="button"
-                    aria-label="Suivre"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setMessages((ms) => ms.map((x) => (x.id === m.id ? { ...x, starred: !x.starred } : x)));
-                      void fetch(`/api/mail/messages/${m.id}`, {
-                        method: "PATCH",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ starred: !m.starred }),
-                      });
+                <span className="mail-sel-count">{selected.size}</span>
+                <span className="mail-sel-actions">
+                  <button className="mail-icon-btn" title={allVisibleSelected ? "Tout désélectionner" : "Tout sélectionner"} onClick={toggleSelectAll}>
+                    {allVisibleSelected ? <IcCheck size={15} /> : <IcCheckAll size={15} />}
+                  </button>
+                  <button className="mail-icon-btn" title="Marquer lu" onClick={() => void bulkPatch([...selected], { read: true })}>
+                    <IcMailOpen size={15} />
+                  </button>
+                  <button className="mail-icon-btn" title="Marquer non lu" onClick={() => void bulkPatch([...selected], { read: false })}>
+                    <IcInbox size={15} />
+                  </button>
+                  <button className="mail-icon-btn" title="Archiver" onClick={() => void bulkPatch([...selected], { folder: "archive" })}>
+                    <IcArchive size={15} />
+                  </button>
+                  <button className="mail-icon-btn" title="Signaler comme spam" onClick={() => void bulkPatch([...selected], { folder: "spam" })}>
+                    <IcSpam size={15} />
+                  </button>
+                  <button
+                    className="mail-icon-btn"
+                    title="Mettre en attente — ce soir"
+                    onClick={() => void bulkPatch([...selected], { snoozeUntil: SNOOZE_PRESETS[0].at().toISOString() })}
+                  >
+                    <IcClock size={15} />
+                  </button>
+                  <button
+                    className="mail-icon-btn danger"
+                    title="Supprimer"
+                    onClick={async () => {
+                      const ids = [...selected];
+                      const inTrash = folder === "trash" || folder === "spam";
+                      await Promise.all(ids.map((id) => fetch(`/api/mail/messages/${id}`, { method: "DELETE" })));
+                      setSelected(new Set());
+                      setOpen(null); setThread([]);
+                      void loadMessages(folder, q);
+                      showToast(inTrash ? "Supprimé définitivement." : "Déplacé vers la corbeille.");
                     }}
                   >
-                    <IcStar size={14} filled={m.starred} />
-                  </span>
-                  <span className="mail-item-time">{fmtTime(m.at)}</span>
+                    <IcTrash size={15} />
+                  </button>
+                </span>
+              </>
+            )}
+          </div>
+          {visible.map((m) => (
+            <div key={m.id} className="mail-item-wrap">
+              <button
+                className={`mail-item ${!m.read ? "unread" : ""} ${open?.id === m.id ? "active" : ""} ${selected.has(m.id) ? "selected" : ""}`}
+                onClick={() => (selected.size ? toggleSelect(m.id) : void openMessage(m.id))}
+                onTouchStart={(e) => onTouchStart(m, e)}
+                onTouchMove={(e) => onTouchMove(m, e)}
+                onTouchEnd={(e) => onTouchEnd(m, e)}
+              >
+                <span
+                  className={`mail-item-check ${selected.has(m.id) ? "on" : ""}`}
+                  role="checkbox"
+                  aria-checked={selected.has(m.id)}
+                  aria-label="Sélectionner"
+                  onClick={(e) => { e.stopPropagation(); toggleSelect(m.id); }}
+                >
+                  {selected.has(m.id) ? <IcCheck size={12} /> : null}
+                </span>
+                <div
+                  className="mail-item-avatar"
+                  style={{
+                    background: `linear-gradient(135deg, hsl(${hueFrom(m.from)} 62% 42%), hsl(${(hueFrom(m.from) + 40) % 360} 70% 30%))`,
+                  }}
+                >
+                  {(m.fromName || m.from)[0].toUpperCase()}
                 </div>
-                <div className="mail-item-subject">{m.enc === 1 ? (subjects[m.id] || "Message chiffré…") : m.subject}</div>
-                <div className="mail-item-snippet">
-                  {m.enc === 1
-                    ? (m.attachmentCount ? `${m.attachmentCount} pièce${m.attachmentCount > 1 ? "s" : ""} jointe${m.attachmentCount > 1 ? "s" : ""}` : "Chiffré de bout en bout")
-                    : m.body}
-                </div>
-                {(m.enc === 1 || m.kind !== "mail") && (
-                  <div className="mail-item-badges">
-                    {m.enc === 1 && <span className="badge system">COFFRE</span>}
-                    {m.kind === "bounce" && <span className="badge bounce">ÉCHEC</span>}
-                    {m.kind === "system" && <span className="badge system">AYEBA</span>}
-                    {m.folder === "drafts" && <span className="badge draft">BROUILLON</span>}
+                <div className="mail-item-main">
+                  <div className="mail-item-top">
+                    {!m.read && <i className="dot" />}
+                    <span className="mail-item-from">{m.fromName || m.from}</span>
+                    {(m.attachmentCount || 0) > 0 && <span className="badge system" style={{ display: "inline-flex", padding: "2px 4px" }}><IcClip size={11} /></span>}
+                    <span
+                      className={`star ${m.starred ? "on" : ""}`}
+                      role="button"
+                      aria-label="Suivre"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setMessages((ms) => ms.map((x) => (x.id === m.id ? { ...x, starred: !x.starred } : x)));
+                        void fetch(`/api/mail/messages/${m.id}`, {
+                          method: "PATCH",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ starred: !m.starred }),
+                        });
+                      }}
+                    >
+                      <IcStar size={14} filled={m.starred} />
+                    </span>
+                    <span className="mail-item-time">
+                      {m.snoozeUntil && folder === "snoozed"
+                        ? `⏸ ${new Date(m.snoozeUntil).toLocaleString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}`
+                        : fmtTime(m.at)}
+                    </span>
+                    <span
+                      className="mail-item-menu"
+                      role="button"
+                      aria-label="Options"
+                      onClick={(e) => { e.stopPropagation(); setMenuFor(menuFor === m.id ? null : m.id); }}
+                    >
+                      <IcMore size={15} />
+                    </span>
                   </div>
-                )}
-              </div>
-            </button>
+                  <div className="mail-item-subject">{m.enc === 1 ? (subjects[m.id] || "Message chiffré…") : m.subject}</div>
+                  <div className="mail-item-snippet">
+                    {m.enc === 1
+                      ? (m.attachmentCount ? `${m.attachmentCount} pièce${m.attachmentCount > 1 ? "s" : ""} jointe${m.attachmentCount > 1 ? "s" : ""}` : "Chiffré de bout en bout")
+                      : m.body}
+                  </div>
+                  {(m.enc === 1 || m.kind !== "mail") && (
+                    <div className="mail-item-badges">
+                      {m.enc === 1 && <span className="badge system">COFFRE</span>}
+                      {m.kind === "bounce" && <span className="badge bounce">ÉCHEC</span>}
+                      {m.kind === "system" && <span className="badge system">AYEBA</span>}
+                      {m.folder === "drafts" && <span className="badge draft">BROUILLON</span>}
+                    </div>
+                  )}
+                </div>
+              </button>
+              {menuFor === m.id && (
+                <div className="mail-menu" ref={menuRef}>
+                  <button onClick={() => { void patch(m.id, { read: !m.read }); if (!m.read) setUnread((u) => Math.max(0, u - 1)); else setUnread((u) => u + 1); setMenuFor(null); }}>
+                    <IcMailOpen size={14} /> {m.read ? "Marquer non lu" : "Marquer lu"}
+                  </button>
+                  <button onClick={() => { setMessages((ms) => ms.map((x) => (x.id === m.id ? { ...x, starred: !x.starred } : x))); void fetch(`/api/mail/messages/${m.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ starred: !m.starred }) }); setMenuFor(null); }}>
+                    <IcStar size={14} filled={m.starred} /> {m.starred ? "Retirer le suivi" : "Suivre"}
+                  </button>
+                  <div className="mail-menu-sep" />
+                  {SNOOZE_PRESETS.map((s) => (
+                    <button key={s.label} onClick={() => void snooze(m.id, s.at())}>
+                      <IcClock size={14} /> En attente — {s.label}
+                    </button>
+                  ))}
+                  <div className="mail-menu-sep" />
+                  {m.folder !== "inbox" && (
+                    <button onClick={() => void patch(m.id, { folder: "inbox" }).then(() => setMenuFor(null))}>
+                      <IcInbox size={14} /> Boîte de réception
+                    </button>
+                  )}
+                  {m.folder !== "archive" && (
+                    <button onClick={() => void patch(m.id, { folder: "archive" }).then(() => setMenuFor(null))}>
+                      <IcArchive size={14} /> Archiver
+                    </button>
+                  )}
+                  {m.folder !== "spam" && (
+                    <button onClick={() => void patch(m.id, { folder: "spam" }).then(() => { setMenuFor(null); showToast("Signalé comme spam."); })}>
+                      <IcSpam size={14} /> Signaler comme spam
+                    </button>
+                  )}
+                  <div className="mail-menu-sep" />
+                  <button className="danger" onClick={() => { setMenuFor(null); void removeMessage(m.id); }}>
+                    <IcTrash size={14} /> {m.folder === "trash" || m.folder === "spam" ? "Supprimer définitivement" : "Supprimer"}
+                  </button>
+                </div>
+              )}
+            </div>
           ))}
           {visible.length === 0 && (
             <div style={{ padding: "40px 18px", color: "var(--faint)", fontSize: 13 }}>
-              Aucun message ici.
+              {folder === "snoozed" ? "Aucun message en attente." : folder === "spam" ? "Aucun spam — belle boîte." : "Aucun message ici."}
             </div>
           )}
         </section>
@@ -832,9 +1166,40 @@ export function MailApp() {
                   >
                     <IcMailOpen size={15} />
                   </button>
-                  <button className="mail-icon-btn danger" title={open.folder === "trash" ? "Supprimer définitivement" : "Supprimer"} onClick={() => void removeMessage(open.id)}>
+                  <button className="mail-icon-btn danger" title={open.folder === "trash" || open.folder === "spam" ? "Supprimer définitivement" : "Supprimer"} onClick={() => void removeMessage(open.id)}>
                     <IcTrash size={15} />
                   </button>
+                  <div style={{ position: "relative" }}>
+                    <button className="mail-icon-btn" title="Plus" onClick={() => setMenuFor(menuFor === `r-${open.id}` ? null : `r-${open.id}`)}>
+                      <IcMore size={15} />
+                    </button>
+                    {menuFor === `r-${open.id}` && (
+                      <div className="mail-menu reader" ref={menuRef}>
+                        {SNOOZE_PRESETS.map((s) => (
+                          <button key={s.label} onClick={() => void snooze(open.id, s.at())}>
+                            <IcClock size={14} /> En attente — {s.label}
+                          </button>
+                        ))}
+                        {open.folder !== "spam" && (
+                          <button onClick={() => void patch(open.id, { folder: "spam" }).then(() => { setMenuFor(null); setOpen(null); setThread([]); showToast("Signalé comme spam."); })}>
+                            <IcSpam size={14} /> Signaler comme spam
+                          </button>
+                        )}
+                        {open.folder !== "inbox" && open.folder !== "snoozed" && (
+                          <button onClick={() => void patch(open.id, { folder: "inbox" }).then(() => { setMenuFor(null); setOpen(null); setThread([]); })}>
+                            <IcInbox size={14} /> Boîte de réception
+                          </button>
+                        )}
+                        <div className="mail-menu-sep" />
+                        <button onClick={() => downloadEml({ msg: open, subject: open.subject, body: open.body, files: openFiles })}>
+                          <IcDownload size={14} /> Télécharger (.eml)
+                        </button>
+                        <button onClick={() => printMessage({ msg: open, subject: open.subject, body: open.body, files: openFiles })}>
+                          <IcPrint size={14} /> Imprimer
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -875,10 +1240,26 @@ export function MailApp() {
                     {t.files.length > 0 && (
                       <div className="mail-files">
                         {t.files.map((f) => (
-                          <button key={f.id} className="mail-file" onClick={() => void downloadFile(f)}>
-                            <b>{f.name}</b>
-                            <span>{Math.max(1, Math.round(f.size / 1024))} Ko · déchiffrer</span>
-                          </button>
+                          <div key={f.id} className="mail-file-wrap">
+                            {f.mime.startsWith("image/") && previews[f.id] && (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img className="mail-file-preview" src={previews[f.id]} alt={f.name} onClick={() => void downloadFile(f)} />
+                            )}
+                            <div className="mail-file-row">
+                              <button className="mail-file" onClick={() => void downloadFile(f)}>
+                                <b>{f.name}</b>
+                                <span>{Math.max(1, Math.round(f.size / 1024))} Ko</span>
+                              </button>
+                              {f.mime.startsWith("image/") && (
+                                <button className="mail-icon-btn" title={previews[f.id] ? "Masquer l'aperçu" : "Aperçu"} onClick={() => void loadPreview(f)}>
+                                  {previews[f.id] ? <IcClose size={14} /> : <IcSearch size={14} />}
+                                </button>
+                              )}
+                              <button className="mail-icon-btn" title="Télécharger" onClick={() => void downloadFile(f)}>
+                                <IcDownload size={14} />
+                              </button>
+                            </div>
+                          </div>
                         ))}
                       </div>
                     )}
@@ -943,7 +1324,9 @@ export function MailApp() {
           signature={account.signature}
           session={vault}
           initial={compose}
+          contacts={contacts}
           onClose={() => setCompose(null)}
+          onScheduleSend={scheduleSend}
           onSent={(delivered, bounced, draft) => {
             const draftId = compose.draftId;
             setCompose(null);
@@ -978,6 +1361,12 @@ export function MailApp() {
           }}
           onToast={showToast}
         />
+      )}
+      {sendUndo && (
+        <div className="mail-undo">
+          <span>Envoi du message…</span>
+          <button className="mail-undo-btn" onClick={cancelSend}>Annuler</button>
+        </div>
       )}
       {toast && <div className="mail-toast">{toast}</div>}
     </div>
@@ -1168,15 +1557,19 @@ function ComposePanel({
   signature,
   session,
   initial,
+  contacts,
   onClose,
   onSent,
+  onScheduleSend,
 }: {
   self: string;
   signature: string;
   session: VaultSession;
   initial?: ComposeInit;
+  contacts: { email: string; name: string }[];
   onClose: () => void;
   onSent: (delivered: string[], bounced: { address: string }[], draft?: boolean) => void;
+  onScheduleSend: (p: { to: string; subject: string; body: string; files: File[]; externalAck: boolean; draftId?: string }) => void;
 }) {
   const [to, setTo] = useState(initial?.to ?? "");
   const [subject, setSubject] = useState(initial?.subject ?? "");
@@ -1185,7 +1578,20 @@ function ComposePanel({
   const [externalAck, setExternalAck] = useState(false);
   const [sending, setSending] = useState(false);
   const [err, setErr] = useState("");
+  const [toFocus, setToFocus] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Autocomplete « À » : on filtre sur le dernier jeton (avant la virgule).
+  const lastToken = to.split(/[,;]/).pop()!.trim().toLowerCase();
+  const already = new Set(to.split(/[,;]/).map((t) => t.trim().toLowerCase()).filter(Boolean));
+  const suggestions = lastToken.length >= 2
+    ? contacts.filter((c) => !already.has(c.email) && (c.email.includes(lastToken) || c.name.toLowerCase().includes(lastToken))).slice(0, 5)
+    : [];
+  const pickContact = (email: string) => {
+    const parts = to.split(/[,;]/);
+    parts[parts.length - 1] = ` ${email}`;
+    setTo(parts.join(",").replace(/^\s/, "") + ", ");
+  };
   const leavesVault = to.split(/[,;\s]+/).some((t) => {
     const e = t.trim().toLowerCase();
     return e.includes("@") && !e.endsWith("@ayeba.app");
@@ -1239,13 +1645,48 @@ function ComposePanel({
     }
   };
 
+  // Envoi réel : on remonte la charge utile — l'app garde une fenêtre
+  // « Annuler l'envoi » de 5 s avant de sceller et transmettre.
+  const requestSend = () => {
+    setErr("");
+    if (!to.trim()) return setErr("Ajoutez un destinataire.");
+    if (leavesVault && !externalAck) {
+      return setErr("Cochez la confirmation : ce message quitte le coffre.");
+    }
+    onScheduleSend({ to, subject, body, files, externalAck, draftId: initial?.draftId });
+  };
+
   return (
     <div className="mail-compose">
       <div className="mail-compose-head">
         <span className="mail-kicker">NOUVEAU MESSAGE — COFFRE — {self}</span>
         <button className="mail-icon-btn" onClick={onClose}><IcClose size={16} /></button>
       </div>
-      <input value={to} onChange={(e) => setTo(e.target.value)} placeholder="À — prenom@ayeba.app" />
+      <div className="mail-to-wrap">
+        <input
+          value={to}
+          onChange={(e) => setTo(e.target.value)}
+          onFocus={() => setToFocus(true)}
+          onBlur={() => setTimeout(() => setToFocus(false), 150)}
+          placeholder="À — prenom@ayeba.app"
+          autoComplete="off"
+        />
+        {toFocus && suggestions.length > 0 && (
+          <div className="mail-to-suggest">
+            {suggestions.map((c) => (
+              <button key={c.email} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => pickContact(c.email)}>
+                <span
+                  className="mail-to-avatar"
+                  style={{ background: `linear-gradient(135deg, hsl(${hueFrom(c.email)} 62% 42%), hsl(${(hueFrom(c.email) + 40) % 360} 70% 30%))` }}
+                >
+                  {(c.name || c.email)[0].toUpperCase()}
+                </span>
+                <span className="mail-to-name">{c.name || c.email}<em>{c.email}</em></span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
       <input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Objet" />
       <textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="Votre message…" />
       {files.length > 0 && (
@@ -1277,7 +1718,7 @@ function ComposePanel({
           }}
         />
         <button className="mail-btn" onClick={() => void send(true)} disabled={sending}>Brouillon</button>
-        <button className="mail-send-btn" onClick={() => void send(false)} disabled={sending}>
+        <button className="mail-send-btn" onClick={requestSend} disabled={sending}>
           {sending ? "Chiffrement…" : "Envoyer"}
         </button>
         {err && <span className="mail-compose-err">{err}</span>}
@@ -1375,7 +1816,7 @@ function Landing({ onSignup, onSignin }: { onSignup: () => void; onSignin: () =>
           <span className="mail-kicker">UNE INFRASTRUCTURE DÉDIÉE</span>
           <p>
             Ayeba Mail fonctionne sur ses propres serveurs. Vos données restent
-            au sein de l'écosystème Ayeba et ne sont jamais transmises à des
+            au sein de l’écosystème Ayeba et ne sont jamais transmises à des
             tiers.
           </p>
         </section>
@@ -1566,7 +2007,7 @@ function SignupFlow({ defaultName, onDone, onBack }: { defaultName: string; onDo
           {step === 1 && (
             <>
               <h2>Choisissez votre adresse</h2>
-              <p className="sub">Votre adresse @ayeba.app vous identifie sur l'ensemble des services Ayeba.</p>
+              <p className="sub">Votre adresse @ayeba.app vous identifie sur l’ensemble des services Ayeba.</p>
               {err && <div className="mail-err">{err}</div>}
               <div className="mail-field">
                 <label>Votre adresse</label>

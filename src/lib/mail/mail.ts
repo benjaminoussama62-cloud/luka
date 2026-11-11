@@ -114,6 +114,8 @@ export type MailMessage = {
   wrap?: KeyWrap;
   attachmentCount: number;
   attachments: MailAttachmentMeta[];
+  /** ISO — échéance de mise en attente (dossier « snoozed »), sinon null. */
+  snoozeUntil?: string | null;
 };
 
 type MsgRow = {
@@ -133,6 +135,7 @@ type MsgRow = {
   enc?: number;
   wraps?: string;
   att_count?: number;
+  snooze_until?: string | null;
 };
 
 const uid = () => crypto.randomBytes(12).toString("hex");
@@ -180,6 +183,7 @@ async function toMessage(r: MsgRow, full: boolean): Promise<MailMessage> {
     enc,
     attachmentCount: Number(r.att_count || 0),
     attachments: [] as MailAttachmentMeta[],
+    snoozeUntil: r.snooze_until || null,
   };
   if (enc === 1) {
     return {
@@ -780,7 +784,7 @@ export async function receiveExternalMail(opts: {
 
 // ── Lecture ────────────────────────────────────────────────────────────────
 
-const VALID_FOLDERS = new Set(["inbox", "sent", "drafts", "archive", "starred", "trash"]);
+const VALID_FOLDERS = new Set(["inbox", "sent", "drafts", "archive", "starred", "snoozed", "spam", "trash"]);
 
 const LIST_SQL = `SELECT m.*, (SELECT COUNT(*) FROM mail_attachments a WHERE a.message_id = m.id) AS att_count
 FROM mail_messages m`;
@@ -805,6 +809,13 @@ export async function listMessages(
   q = "",
 ): Promise<MailMessage[]> {
   const f = VALID_FOLDERS.has(folder) ? folder : "inbox";
+  // Rappels arrivés à échéance : le message repart dans la boîte de réception,
+  // marqué non lu pour ne pas passer inaperçu.
+  await db()
+    .prepare(
+      "UPDATE mail_messages SET folder = 'inbox', is_read = 0, snooze_until = NULL WHERE account_id = ? AND folder = 'snoozed' AND snooze_until IS NOT NULL AND snooze_until <= ?",
+    )
+    .run(accountId, new Date().toISOString());
   const rows = (
     f === "starred"
       ? (await db()
@@ -853,15 +864,46 @@ export async function setStarred(accountId: string, id: string, starred: boolean
 
 export async function moveToFolder(accountId: string, id: string, folder: string) {
   if (!VALID_FOLDERS.has(folder)) return;
+  // Tout déplacement manuel sort le message de la mise en attente.
   await db()
-    .prepare("UPDATE mail_messages SET folder = ? WHERE account_id = ? AND id = ?")
+    .prepare("UPDATE mail_messages SET folder = ?, snooze_until = NULL WHERE account_id = ? AND id = ?")
     .run(folder, accountId, id);
+}
+
+/** Met le message en attente jusqu'à `until` (ISO) — il réapparaîtra non lu en inbox. */
+export async function snoozeMessage(accountId: string, id: string, until: string) {
+  await db()
+    .prepare("UPDATE mail_messages SET folder = 'snoozed', snooze_until = ? WHERE account_id = ? AND id = ?")
+    .run(until, accountId, id);
+}
+
+/** Correspondants connus du compte — pour l'autocomplete du champ « À ». */
+export async function listContacts(accountId: string): Promise<{ email: string; name: string }[]> {
+  const rows = (await db()
+    .prepare("SELECT from_addr, from_name, to_addrs FROM mail_messages WHERE account_id = ? LIMIT 500")
+    .all(accountId)) as { from_addr: string; from_name: string; to_addrs: string }[];
+  const seen = new Map<string, string>();
+  for (const r of rows) {
+    const put = (addr: string, name = "") => {
+      const e = addr.trim().toLowerCase();
+      if (!e.includes("@") || e.length > 254) return;
+      if (!seen.has(e) || (name && !seen.get(e))) seen.set(e, name);
+    };
+    put(r.from_addr, r.from_name || "");
+    try {
+      for (const t of JSON.parse(r.to_addrs || "[]") as string[]) put(t);
+    } catch { /* destinataires illisibles — ignorés */ }
+  }
+  return [...seen.entries()]
+    .map(([email, name]) => ({ email, name }))
+    .sort((a, b) => a.email.localeCompare(b.email))
+    .slice(0, 100);
 }
 
 export async function deleteMessage(accountId: string, id: string) {
   const m = await getMessage(accountId, id);
   if (!m) return;
-  if (m.folder === "trash") {
+  if (m.folder === "trash" || m.folder === "spam") {
     await db().prepare("DELETE FROM mail_attachments WHERE account_id = ? AND message_id = ?").run(accountId, id);
     await db().prepare("DELETE FROM mail_messages WHERE account_id = ? AND id = ?").run(accountId, id);
   } else {

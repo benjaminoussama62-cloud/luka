@@ -2,7 +2,17 @@ import { NextResponse } from "next/server";
 import { getSessionFromCookies } from "@/lib/auth-server";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { MAX_ATTACHMENTS, MAX_CIPHER_BYTES, type CipherPack, type KeyWrap } from "@/lib/mail/e2ee";
-import { deliverSealedMail, getAccountByUser, getThread, listMessages } from "@/lib/mail/mail";
+import {
+  deliverSealedMail,
+  getAccountByUser,
+  getMessage,
+  getThread,
+  listMessages,
+  markRead,
+  moveToFolder,
+  setStarred,
+  snoozeMessage,
+} from "@/lib/mail/mail";
 
 export async function GET(req: Request) {
   const user = await getSessionFromCookies();
@@ -126,4 +136,39 @@ export async function POST(req: Request) {
   });
   if (result.error) return NextResponse.json({ error: result.error }, { status: 400 });
   return NextResponse.json(result, { status: result.ok || result.bounced.length ? 200 : 502 });
+}
+
+/** PATCH /api/mail/messages — actions groupées : { ids: string[], read?, starred?, folder?, snoozeUntil? } */
+export async function PATCH(req: Request) {
+  const user = await getSessionFromCookies();
+  if (!user) return NextResponse.json({ error: "auth required" }, { status: 401 });
+  const account = await getAccountByUser(user.id);
+  if (!account) return NextResponse.json({ error: "no mail account" }, { status: 404 });
+
+  const body = (await req.json().catch(() => null)) as {
+    ids?: string[];
+    read?: boolean;
+    starred?: boolean;
+    folder?: string;
+    snoozeUntil?: string;
+  } | null;
+  const ids = (Array.isArray(body?.ids) ? body.ids : []).map((i) => String(i)).slice(0, 200);
+  if (!ids.length) return NextResponse.json({ error: "ids requis" }, { status: 400 });
+
+  let untilIso = "";
+  if (typeof body?.snoozeUntil === "string") {
+    const until = new Date(body.snoozeUntil);
+    if (!isNaN(until.getTime()) && until.getTime() > Date.now() && until.getTime() < Date.now() + 366 * 86400e3) {
+      untilIso = until.toISOString();
+    }
+  }
+
+  for (const id of ids) {
+    if (!await getMessage(account.id, id)) continue;
+    if (typeof body?.read === "boolean") await markRead(account.id, id, body.read);
+    if (typeof body?.starred === "boolean") await setStarred(account.id, id, body.starred);
+    if (typeof body?.folder === "string") await moveToFolder(account.id, id, body.folder);
+    if (untilIso) await snoozeMessage(account.id, id, untilIso);
+  }
+  return NextResponse.json({ ok: true, count: ids.length });
 }

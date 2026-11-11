@@ -7,6 +7,7 @@ import {
   markRead,
   moveToFolder,
   setStarred,
+  snoozeMessage,
 } from "@/lib/mail/mail";
 
 async function ownAccount() {
@@ -32,11 +33,17 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   if (!await getMessage(account.id, id)) return NextResponse.json({ error: "not found" }, { status: 404 });
 
   const body = (await req.json().catch(() => null)) as
-    | { read?: boolean; starred?: boolean; folder?: string }
+    | { read?: boolean; starred?: boolean; folder?: string; snoozeUntil?: string }
     | null;
   if (typeof body?.read === "boolean") await markRead(account.id, id, body.read);
   if (typeof body?.starred === "boolean") await setStarred(account.id, id, body.starred);
   if (typeof body?.folder === "string") await moveToFolder(account.id, id, body.folder);
+  if (typeof body?.snoozeUntil === "string") {
+    const until = new Date(body.snoozeUntil);
+    if (!isNaN(until.getTime()) && until.getTime() > Date.now() && until.getTime() < Date.now() + 366 * 86400e3) {
+      await snoozeMessage(account.id, id, until.toISOString());
+    }
+  }
   return NextResponse.json({ ok: true });
 }
 

@@ -128,6 +128,7 @@ export const MAIL_MIGRATIONS = [
   "ALTER TABLE mail_accounts ADD COLUMN vault_mlkem_pub TEXT NOT NULL DEFAULT ''",
   "ALTER TABLE mail_messages ADD COLUMN enc INTEGER NOT NULL DEFAULT 0",
   "ALTER TABLE mail_messages ADD COLUMN wraps TEXT NOT NULL DEFAULT ''",
+  "ALTER TABLE mail_messages ADD COLUMN snooze_until TEXT",
 ];
 
 export function applyMailSchema(db: AyebaDatabase) {

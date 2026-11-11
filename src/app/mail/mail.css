@@ -1164,3 +1164,165 @@
 @media (max-width: 420px) {
   .mail-brand .mail-kicker { display: none; }
 }
+
+/* ── Sélection multiple ──────────────────────────────────────────── */
+.mail-sel-count {
+  font-family: var(--font-mono), monospace;
+  font-size: 12px;
+  color: var(--orange);
+  min-width: 18px;
+}
+.mail-sel-actions { display: flex; align-items: center; gap: 2px; margin-left: auto; }
+.mail-item-wrap { position: relative; }
+.mail-item-check {
+  position: absolute;
+  left: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 18px; height: 18px;
+  border: 1.5px solid var(--faint);
+  border-radius: 4px;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s, background 0.12s, border-color 0.12s;
+  z-index: 2;
+}
+.mail-item-wrap:hover .mail-item-check,
+.mail-item-check.on { opacity: 1; }
+.mail-item-check.on { background: var(--orange); border-color: var(--orange); }
+.mail-item.selected { background: var(--orange-soft); border-left-color: var(--orange); }
+.mail-item-wrap:hover .mail-item-avatar,
+.mail-item.selected .mail-item-avatar { opacity: 0.25; }
+.mail-item { transition: transform 0.15s, background 0.12s; touch-action: pan-y; }
+
+/* ── Menu ⋯ contextuel ───────────────────────────────────────────── */
+.mail-item-menu {
+  color: var(--faint);
+  flex-shrink: 0;
+  align-self: center;
+  opacity: 0;
+  transition: opacity 0.12s;
+  padding: 2px;
+}
+.mail-item-wrap:hover .mail-item-menu { opacity: 1; }
+.mail-menu {
+  position: absolute;
+  right: 10px;
+  top: 34px;
+  z-index: 60;
+  min-width: 210px;
+  background: rgba(16, 16, 20, 0.98);
+  border: 1px solid var(--line-bright);
+  border-radius: 8px;
+  padding: 5px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  animation: mail-menu-in 0.16s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.mail-menu.reader { position: absolute; right: 0; top: 30px; }
+.mail-menu button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 5px;
+}
+.mail-menu button:hover { background: rgba(255, 255, 255, 0.06); }
+.mail-menu button.danger { color: var(--bad); }
+.mail-menu-sep { height: 1px; background: var(--line); margin: 5px 4px; }
+
+/* ── Annuler l'envoi ─────────────────────────────────────────────── */
+.mail-undo {
+  position: fixed;
+  bottom: 66px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(14, 14, 16, 0.97);
+  border: 1px solid var(--line-bright);
+  border-radius: 6px;
+  padding: 9px 10px 9px 16px;
+  font-size: 13px;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  animation: mail-toast-in 0.25s var(--ease-out);
+}
+.mail-undo-btn {
+  background: var(--orange);
+  color: #fff;
+  border: 0;
+  border-radius: 4px;
+  padding: 6px 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.mail-undo-btn:hover { filter: brightness(1.12); }
+
+/* ── Aperçu pièce jointe ─────────────────────────────────────────── */
+.mail-file-wrap { display: flex; flex-direction: column; gap: 6px; }
+.mail-file-row { display: flex; align-items: center; gap: 6px; }
+.mail-file-row .mail-file { flex: 1; }
+.mail-file-preview {
+  max-width: 320px;
+  max-height: 220px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  cursor: pointer;
+  object-fit: cover;
+}
+
+/* ── Autocomplete « À » ──────────────────────────────────────────── */
+.mail-to-wrap { position: relative; }
+.mail-to-suggest {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 70;
+  background: rgba(16, 16, 20, 0.98);
+  border: 1px solid var(--line-bright);
+  border-radius: 8px;
+  padding: 4px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  animation: mail-menu-in 0.16s var(--ease-out);
+}
+.mail-to-suggest button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  border-radius: 5px;
+  text-align: left;
+}
+.mail-to-suggest button:hover { background: rgba(255, 255, 255, 0.06); }
+.mail-to-avatar {
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+  flex-shrink: 0;
+}
+.mail-to-name { font-size: 12.5px; color: var(--ink); display: flex; flex-direction: column; }
+.mail-to-name em { font-style: normal; font-size: 11px; color: var(--faint); }
+
+/* Mobile : la case à cocher reste visible au toucher (pas de survol) */
+@media (hover: none) {
+  .mail-item-check { opacity: 0.55; }
+  .mail-item-check.on { opacity: 1; }
+}
