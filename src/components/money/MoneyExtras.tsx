@@ -41,13 +41,33 @@ function PinField({ value, onChange, label = "Code PIN" }: { value: string; onCh
   );
 }
 
+const SERVICE_ICONS: Record<string, string> = {
+  card: "M2 8h20M2 5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2zM6 15h4",
+  convert: "M7 16V4m0 0L3 8m4-4 4 4M17 8v12m0 0 4-4m-4 4-4-4",
+  requests: "M17 9V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2m2 4h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2H9a2 2 0 0 0-2 2v2",
+  qr: "M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h3v3h-3zM21 14h0M14 21h0M18 18h3v3h-3z",
+  limits: "M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z",
+  kyc: "M9 12l2 2 4-4m5.6 2A9 9 0 1 1 12 3a9 9 0 0 1 8.6 9z",
+  pinreset: "M15 7a3 3 0 1 1-3-3m3 3a3 3 0 1 0-3-3m3 3h6v4h-2v2h-2v-2h-2zM8 15a4 4 0 1 0 0 8 4 4 0 0 0 0-8z",
+};
+
+const SERVICE_DESC: Record<string, string> = {
+  card: "Payer chez les partenaires",
+  convert: "USD ↔ CDF instantané",
+  requests: "Demander un paiement",
+  qr: "Recevoir par code",
+  limits: "Vos plafonds",
+  kyc: "Vérifier l'identité",
+  pinreset: "Récupérer le PIN",
+};
+
 export function ExtrasNav({ onOpen }: { onOpen: (p: NonNullable<MoneyExtrasPanel>) => void }) {
   const items: { id: NonNullable<MoneyExtrasPanel>; label: string }[] = [
+    { id: "card", label: "Carte virtuelle" },
     { id: "convert", label: "Convertir" },
     { id: "requests", label: "Demandes" },
     { id: "qr", label: "Ma carte QR" },
     { id: "limits", label: "Plafonds" },
-    { id: "card", label: "Carte virtuelle" },
     { id: "kyc", label: "Vérification" },
     { id: "pinreset", label: "PIN oublié" },
   ];
@@ -57,7 +77,11 @@ export function ExtrasNav({ onOpen }: { onOpen: (p: NonNullable<MoneyExtrasPanel
       <div className="mn-services-grid">
         {items.map((i) => (
           <button key={i.id} type="button" className="mn-service" onClick={() => onOpen(i.id)}>
-            {i.label}
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+              <path d={SERVICE_ICONS[i.id]} />
+            </svg>
+            <b>{i.label}</b>
+            <small>{SERVICE_DESC[i.id]}</small>
           </button>
         ))}
       </div>
@@ -297,12 +321,23 @@ export function MoneyExtras({ panel, onClose, onDone }: {
     }
     return (
       <Sheet title="Carte virtuelle" onClose={onClose}>
-        <div className="mn-vcard">
-          <div className="mn-vcard-top"><span className="mn-vcard-chip" /><span className="mn-vcard-brand">AYEBA</span></div>
+        <div className={`mn-vcard${card.status !== "active" ? " frozen" : ""}`}>
+          <div className="mn-vcard-sheen" />
+          <div className="mn-vcard-top">
+            <span className="mn-vcard-chip"><i /></span>
+            <svg className="mn-vcard-wave" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+              <path d="M6 8.5a5 5 0 0 1 0 7M9.5 6a9 9 0 0 1 0 12M13 3.5a13 13 0 0 1 0 17" />
+            </svg>
+            <span className="mn-vcard-brand">AYEBA<em>MBONGO</em></span>
+          </div>
           <div className="mn-vcard-num">{card.number}</div>
-          <div className="mn-vcard-row"><span>EXP {card.expiry}</span><span>CVV {card.cvv}</span><span>••• {card.last4}</span></div>
-          <div className="mn-vcard-name">{card.name || "Carte partenaire Ayeba Mbongo"}</div>
-          {card.status !== "active" && <div className="mn-vcard-frozen">Gelée</div>}
+          <div className="mn-vcard-row">
+            <span className="mn-vcard-lab">TITULAIRE<em>{card.name || "—"}</em></span>
+            <span className="mn-vcard-lab">EXP<em>{card.expiry}</em></span>
+            <span className="mn-vcard-lab">CVV<em>{card.cvv}</em></span>
+          </div>
+          <div className="mn-vcard-partners">Partenaires : Sombateka · Omega · Tala · Jemsa · Ayeba</div>
+          {card.status !== "active" && <div className="mn-vcard-frozen">GELÉE</div>}
         </div>
         {!revealed ? (
           <>

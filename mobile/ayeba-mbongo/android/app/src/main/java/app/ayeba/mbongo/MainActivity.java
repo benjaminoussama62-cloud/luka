@@ -72,11 +72,18 @@ public class MainActivity extends BridgeActivity {
     handleIntentUrl(intent);
   }
 
-  /** Si l'app est ouverte via un lien ayeba.app (lien magique), le WebView suit l'URL. */
+  /** Deep-link : https ayeba.app ou schéma custom ayebambongo://magic?t=TOKEN. */
   private void handleIntentUrl(android.content.Intent intent) {
-    if (intent != null && intent.getData() != null
-        && "ayeba.app".equals(intent.getData().getHost())) {
-      getBridge().getWebView().loadUrl(intent.getData().toString());
+    if (intent == null || intent.getData() == null) return;
+    android.net.Uri uri = intent.getData();
+    if ("ayebambongo".equals(uri.getScheme()) && "magic".equals(uri.getHost())) {
+      // Schéma custom depuis le mail → consomme le lien dans le WebView de l'app.
+      String t = uri.getQueryParameter("t");
+      if (t != null) {
+        getBridge().getWebView().loadUrl("https://ayeba.app/api/auth/magic?t=" + t);
+      }
+    } else if ("ayeba.app".equals(uri.getHost())) {
+      getBridge().getWebView().loadUrl(uri.toString());
     }
   }
 

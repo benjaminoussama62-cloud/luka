@@ -29,6 +29,14 @@
                 <data android:scheme="https" android:host="ayeba.app" android:pathPrefix="/api/auth/magic" />
             </intent-filter>
 
+            <!-- Schéma custom ayebambongo:// — utilisé par les liens dans les mails -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="ayebambongo" android:host="magic" />
+            </intent-filter>
+
         </activity>
 
         <service

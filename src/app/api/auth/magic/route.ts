@@ -31,6 +31,7 @@ export async function POST(req: Request) {
   );
   const origin = new URL(req.url).origin;
   const link = `${origin}/api/auth/magic?t=${token}`;
+  const appLink = `ayebambongo://magic?t=${token}`;
   await sendExternalMail({
     from: "noreply@ayeba.app",
     fromName: "Ayeba",
@@ -55,13 +56,15 @@ export async function POST(req: Request) {
             Voici votre lien de connexion pour <b style="color:#eafcff">Ayeba Mbongo</b> — valable <b>15 minutes</b>, utilisable <b>une seule fois</b> :
           </p>
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:8px 0 20px">
-            <a href="${link}" style="display:inline-block;background:linear-gradient(90deg,#1a7f96,#e85d04);color:#ffffff;text-decoration:none;font-weight:700;font-size:15px;letter-spacing:1px;padding:14px 34px;border-radius:12px">
-              SE CONNECTER
+            <a href="${appLink}" style="display:inline-block;background:linear-gradient(90deg,#1a7f96,#e85d04);color:#ffffff;text-decoration:none;font-weight:700;font-size:15px;letter-spacing:1px;padding:14px 34px;border-radius:12px">
+              OUVRIR L'APP MBONGO
             </a>
           </td></tr></table>
-          <p style="margin:0 0 16px;font-size:11px;line-height:1.5;color:#5a6674">
-            Le bouton ne fonctionne pas ? Copiez ce lien dans votre navigateur :<br>
-            <a href="${link}" style="color:#7df0ff;word-break:break-all">${link}</a>
+          <p style="margin:0 0 8px;font-size:11px;line-height:1.5;color:#5a6674;text-align:center">
+            L'app n'est pas installée ? <a href="${link}" style="color:#7df0ff">Continuer dans le navigateur</a>
+          </p>
+          <p style="margin:0 0 16px;font-size:10px;line-height:1.5;color:#46505e;text-align:center">
+            ou copiez : <a href="${link}" style="color:#7df0ff;word-break:break-all">${link}</a>
           </p>
           <p style="margin:0;font-size:11px;line-height:1.5;color:#5a6674;border-top:1px solid #1e2430;padding-top:14px">
             Si vous n'êtes pas à l'origine de cette demande, ignorez ce mail — votre compte reste protégé.
