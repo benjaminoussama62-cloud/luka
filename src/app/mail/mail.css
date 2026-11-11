@@ -1336,5 +1336,9 @@
 
 /* Tactile : pas de case au repos — le long-press entre en mode sélection */
 @media (hover: none) {
-  .mail-item { user-select: none; -webkit-user-select: none; }
+  .mail-item {
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+  }
 }

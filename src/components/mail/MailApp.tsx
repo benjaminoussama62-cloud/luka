@@ -185,9 +185,11 @@ export function MailApp() {
   const [sendUndo, setSendUndo] = useState<{
     payload: { to: string; subject: string; body: string; files: File[]; externalAck: boolean; draftId?: string };
   } | null>(null);
+  const [undoBar, setUndoBar] = useState<{ msg: string; run: () => Promise<void> | void } | null>(null);
   const profileRef = useRef<HTMLDivElement>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(null);
   const sendTimer = useRef<ReturnType<typeof setTimeout>>(null);
+  const undoTimer = useRef<ReturnType<typeof setTimeout>>(null);
   const swipeRef = useRef<{ id: string; x0: number; y0: number; dx: number } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -196,6 +198,21 @@ export function MailApp() {
     if (toastTimer.current) clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(""), 3800);
   }, []);
+
+  // Snackbar « action + Annuler » — le pattern Gmail : action immédiate,
+  // réversible pendant ~5 s.
+  const showUndoBar = useCallback((msg: string, run: () => Promise<void> | void) => {
+    setUndoBar({ msg, run });
+    if (undoTimer.current) clearTimeout(undoTimer.current);
+    undoTimer.current = setTimeout(() => setUndoBar(null), 5000);
+  }, []);
+
+  const runUndo = async () => {
+    const u = undoBar;
+    setUndoBar(null);
+    if (undoTimer.current) clearTimeout(undoTimer.current);
+    await u?.run();
+  };
 
   const loadAccount = useCallback(async () => {
     try {
@@ -491,15 +508,6 @@ export function MailApp() {
     void loadMessages(folder, q);
   };
 
-  const removeMessage = async (id: string) => {
-    const inTrash = folder === "trash" || open?.folder === "trash";
-    await fetch(`/api/mail/messages/${id}`, { method: "DELETE" });
-    setOpen(null);
-    setThread([]);
-    void loadMessages(folder, q);
-    showToast(inTrash ? "Message supprimé définitivement." : "Message déplacé vers la corbeille.");
-  };
-
   const emptyTrash = async () => {
     const trashed = messages.filter((m) => m.folder === "trash" || m.folder === "spam");
     await Promise.all(trashed.map((m) => fetch(`/api/mail/messages/${m.id}`, { method: "DELETE" })));
@@ -521,17 +529,31 @@ export function MailApp() {
     void loadMessages(folder, q);
   };
 
-  const toggleSelect = (id: string) => {
-    setSelected((s) => {
-      const next = new Set(s);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
+  // Déplacement avec « Annuler » — mémorise le dossier d'origine de chaque
+  // message pour un retour exact (le pattern Gmail : action, puis snackbar).
+  const moveMsgs = async (ids: string[], target: string, label: string) => {
+    const prev = new Map(messages.filter((m) => ids.includes(m.id)).map((m) => [m.id, m.folder]));
+    if (open && ids.includes(open.id)) { setOpen(null); setThread([]); }
+    setMenuFor(null);
+    await fetch("/api/mail/messages", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids, folder: target }),
+    });
+    setSelected(new Set());
+    void loadMessages(folder, q);
+    showUndoBar(label, async () => {
+      await Promise.all(ids.map((id) => fetch(`/api/mail/messages/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ folder: prev.get(id) || "inbox" }),
+      })));
+      void loadMessages(folder, q);
     });
   };
 
-  // ── Mise en attente (snooze) ──
   const snooze = async (id: string, until: Date) => {
+    const prev = messages.find((x) => x.id === id)?.folder || "inbox";
     await fetch(`/api/mail/messages/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -540,7 +562,46 @@ export function MailApp() {
     setMenuFor(null);
     if (open?.id === id) { setOpen(null); setThread([]); }
     void loadMessages(folder, q);
-    showToast(`Reporté à ${until.toLocaleString("fr-FR", { weekday: "short", hour: "2-digit", minute: "2-digit" })}.`);
+    showUndoBar(`Reporté à ${until.toLocaleString("fr-FR", { weekday: "short", hour: "2-digit", minute: "2-digit" })}`, async () => {
+      await fetch(`/api/mail/messages/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ folder: prev }),
+      });
+      void loadMessages(folder, q);
+    });
+  };
+
+  // Corbeille avec « Annuler » — définitif seulement depuis trash/spam.
+  const trashMsg = async (m: Msg) => {
+    const permanent = m.folder === "trash" || m.folder === "spam";
+    if (open?.id === m.id) { setOpen(null); setThread([]); }
+    setMenuFor(null);
+    await fetch(`/api/mail/messages/${m.id}`, { method: "DELETE" });
+    setSelected((s) => { const n = new Set(s); n.delete(m.id); return n; });
+    void loadMessages(folder, q);
+    if (permanent) {
+      showToast("Supprimé définitivement.");
+    } else {
+      const prev = m.folder;
+      showUndoBar("Déplacé vers la corbeille", async () => {
+        await fetch(`/api/mail/messages/${m.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ folder: prev }),
+        });
+        void loadMessages(folder, q);
+      });
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelected((s) => {
+      const next = new Set(s);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   };
 
   // ── Tactile : long-press = sélection (façon Gmail), swipe = actions ──
@@ -579,10 +640,9 @@ export function MailApp() {
     el.style.transform = "";
     if (!s || Math.abs(s.dx) < 70) return;
     if (s.dx < 0 && m.folder !== "archive" && m.folder !== "trash" && m.folder !== "drafts") {
-      void patch(m.id, { folder: "archive" });
-      showToast("Archivé.");
+      void moveMsgs([m.id], "archive", "Archivé");
     } else if (s.dx > 0 && m.folder !== "drafts") {
-      void removeMessage(m.id);
+      void trashMsg(m);
     }
   };
 
@@ -981,10 +1041,10 @@ export function MailApp() {
                   <button className="mail-icon-btn" title="Marquer non lu" onClick={() => void bulkPatch([...selected], { read: false })}>
                     <IcInbox size={15} />
                   </button>
-                  <button className="mail-icon-btn" title="Archiver" onClick={() => void bulkPatch([...selected], { folder: "archive" })}>
+                  <button className="mail-icon-btn" title="Archiver" onClick={() => void moveMsgs([...selected], "archive", `${selected.size} archivé(s)`)}>
                     <IcArchive size={15} />
                   </button>
-                  <button className="mail-icon-btn" title="Signaler comme spam" onClick={() => void bulkPatch([...selected], { folder: "spam" })}>
+                  <button className="mail-icon-btn" title="Signaler comme spam" onClick={() => void moveMsgs([...selected], "spam", `${selected.size} signalé(s) comme spam`)}>
                     <IcSpam size={15} />
                   </button>
                   <button
@@ -998,13 +1058,25 @@ export function MailApp() {
                     className="mail-icon-btn danger"
                     title="Supprimer"
                     onClick={async () => {
-                      const ids = [...selected];
-                      const inTrash = folder === "trash" || folder === "spam";
-                      await Promise.all(ids.map((id) => fetch(`/api/mail/messages/${id}`, { method: "DELETE" })));
+                      const sel = messages.filter((m) => selected.has(m.id));
+                      const permanent = folder === "trash" || folder === "spam";
+                      const prev = new Map(sel.map((m) => [m.id, m.folder]));
+                      await Promise.all(sel.map((m) => fetch(`/api/mail/messages/${m.id}`, { method: "DELETE" })));
                       setSelected(new Set());
                       setOpen(null); setThread([]);
                       void loadMessages(folder, q);
-                      showToast(inTrash ? "Supprimé définitivement." : "Déplacé vers la corbeille.");
+                      if (permanent) {
+                        showToast("Supprimé définitivement.");
+                      } else {
+                        showUndoBar(`${sel.length} déplacé(s) vers la corbeille`, async () => {
+                          await Promise.all(sel.map((m) => fetch(`/api/mail/messages/${m.id}`, {
+                            method: "PATCH",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ folder: prev.get(m.id) || "inbox" }),
+                          })));
+                          void loadMessages(folder, q);
+                        });
+                      }
                     }}
                   >
                     <IcTrash size={15} />
@@ -1022,10 +1094,20 @@ export function MailApp() {
                   if (selected.size) toggleSelect(m.id);
                   else void openMessage(m.id);
                 }}
-                onContextMenu={(e) => { e.preventDefault(); toggleSelect(m.id); }}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  // Le timer long-press a déjà basculé la sélection — le
+                  // contextmenu Android qui suit ne doit pas la rebasculer.
+                  if (longPress.current.fired) return;
+                  toggleSelect(m.id);
+                }}
                 onTouchStart={(e) => onTouchStart(m, e)}
                 onTouchMove={(e) => onTouchMove(m, e)}
                 onTouchEnd={(e) => onTouchEnd(m, e)}
+                onTouchCancel={() => {
+                  if (longPress.current.timer) { clearTimeout(longPress.current.timer); longPress.current.timer = null; }
+                  swipeRef.current = null;
+                }}
               >
                 <span
                   className={`mail-item-check ${selected.has(m.id) ? "on" : ""}`}
@@ -1111,22 +1193,22 @@ export function MailApp() {
                   ))}
                   <div className="mail-menu-sep" />
                   {m.folder !== "inbox" && (
-                    <button onClick={() => void patch(m.id, { folder: "inbox" }).then(() => setMenuFor(null))}>
+                    <button onClick={() => void moveMsgs([m.id], "inbox", "Restauré en boîte de réception")}>
                       <IcInbox size={14} /> Boîte de réception
                     </button>
                   )}
                   {m.folder !== "archive" && (
-                    <button onClick={() => void patch(m.id, { folder: "archive" }).then(() => setMenuFor(null))}>
+                    <button onClick={() => void moveMsgs([m.id], "archive", "Archivé")}>
                       <IcArchive size={14} /> Archiver
                     </button>
                   )}
                   {m.folder !== "spam" && (
-                    <button onClick={() => void patch(m.id, { folder: "spam" }).then(() => { setMenuFor(null); showToast("Signalé comme spam."); })}>
+                    <button onClick={() => void moveMsgs([m.id], "spam", "Signalé comme spam")}>
                       <IcSpam size={14} /> Signaler comme spam
                     </button>
                   )}
                   <div className="mail-menu-sep" />
-                  <button className="danger" onClick={() => { setMenuFor(null); void removeMessage(m.id); }}>
+                  <button className="danger" onClick={() => void trashMsg(m)}>
                     <IcTrash size={14} /> {m.folder === "trash" || m.folder === "spam" ? "Supprimer définitivement" : "Supprimer"}
                   </button>
                 </div>
@@ -1156,15 +1238,15 @@ export function MailApp() {
                   <button
                     className="mail-icon-btn"
                     title={open.folder === "archive" ? "Restaurer dans la boîte" : "Archiver"}
-                    onClick={() => void patch(open.id, { folder: open.folder === "archive" ? "inbox" : "archive" }).then(() => { setOpen(null); setThread([]); })}
+                    onClick={() => void moveMsgs([open.id], open.folder === "archive" ? "inbox" : "archive", open.folder === "archive" ? "Restauré en boîte de réception" : "Archivé")}
                   >
                     {open.folder === "archive" ? <IcRestore size={15} /> : <IcArchive size={15} />}
                   </button>
-                  {open.folder === "trash" && (
+                  {(open.folder === "trash" || open.folder === "spam") && (
                     <button
                       className="mail-icon-btn"
                       title="Restaurer"
-                      onClick={() => void patch(open.id, { folder: "inbox" }).then(() => { setOpen(null); setThread([]); })}
+                      onClick={() => void moveMsgs([open.id], "inbox", "Restauré en boîte de réception")}
                     >
                       <IcRestore size={15} />
                     </button>
@@ -1187,7 +1269,7 @@ export function MailApp() {
                   >
                     <IcMailOpen size={15} />
                   </button>
-                  <button className="mail-icon-btn danger" title={open.folder === "trash" || open.folder === "spam" ? "Supprimer définitivement" : "Supprimer"} onClick={() => void removeMessage(open.id)}>
+                  <button className="mail-icon-btn danger" title={open.folder === "trash" || open.folder === "spam" ? "Supprimer définitivement" : "Supprimer"} onClick={() => void trashMsg(open)}>
                     <IcTrash size={15} />
                   </button>
                   <div style={{ position: "relative" }}>
@@ -1202,12 +1284,12 @@ export function MailApp() {
                           </button>
                         ))}
                         {open.folder !== "spam" && (
-                          <button onClick={() => void patch(open.id, { folder: "spam" }).then(() => { setMenuFor(null); setOpen(null); setThread([]); showToast("Signalé comme spam."); })}>
+                          <button onClick={() => void moveMsgs([open.id], "spam", "Signalé comme spam")}>
                             <IcSpam size={14} /> Signaler comme spam
                           </button>
                         )}
                         {open.folder !== "inbox" && open.folder !== "snoozed" && (
-                          <button onClick={() => void patch(open.id, { folder: "inbox" }).then(() => { setMenuFor(null); setOpen(null); setThread([]); })}>
+                          <button onClick={() => void moveMsgs([open.id], "inbox", "Restauré en boîte de réception")}>
                             <IcInbox size={14} /> Boîte de réception
                           </button>
                         )}
@@ -1387,6 +1469,12 @@ export function MailApp() {
         <div className="mail-undo">
           <span>Envoi du message…</span>
           <button className="mail-undo-btn" onClick={cancelSend}>Annuler</button>
+        </div>
+      )}
+      {undoBar && (
+        <div className="mail-undo">
+          <span>{undoBar.msg}</span>
+          <button className="mail-undo-btn" onClick={() => void runUndo()}>Annuler</button>
         </div>
       )}
       {toast && <div className="mail-toast">{toast}</div>}
