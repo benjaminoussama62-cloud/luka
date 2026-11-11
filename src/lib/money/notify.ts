@@ -52,6 +52,11 @@ export async function notifyUser(
     subject: `Ayeba Mbongo — ${subject}`,
     text,
   });
+  // Push instantané (FCM) — le mail reste la garantie si le push échoue.
+  try {
+    const { pushUser } = await import("./push");
+    void pushUser(userId, `Ayeba Mbongo — ${subject}`, lines.filter(Boolean)[0] || subject);
+  } catch { /* push best-effort */ }
   await audit(userId, walletId, "notify_email", { subject, to: to.replace(/(.{2}).*(@.*)/, "$1***$2"), sent: res.ok, error: res.ok ? undefined : res.error });
 }
 

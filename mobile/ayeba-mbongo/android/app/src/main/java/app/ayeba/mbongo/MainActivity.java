@@ -2,6 +2,7 @@ package app.ayeba.mbongo;
 
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.os.Build;
 import android.os.Bundle;
 import android.util.TypedValue;
 import android.view.Gravity;
@@ -59,6 +60,21 @@ public class MainActivity extends BridgeActivity {
         .setDuration(450)
         .withEndAction(() -> root.removeView(overlay))
         .start(), 2400);
+  }
+
+  @Override
+  public void onResume() {
+    super.onResume();
+    // Permission notifications (Android 13+) + enregistrement du token FCM
+    // — la session WebView est déjà chargée, les cookies sont disponibles.
+    MbongoMessagingService.ensureChannel(this);
+    if (Build.VERSION.SDK_INT >= 33
+        && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
+            != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+      requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS}, 9001);
+    }
+    com.google.firebase.messaging.FirebaseMessaging.getInstance().getToken()
+        .addOnSuccessListener(MbongoMessagingService::registerToken);
   }
 
   private int dp(float v) {

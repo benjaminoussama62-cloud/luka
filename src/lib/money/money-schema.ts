@@ -172,6 +172,13 @@ CREATE TABLE IF NOT EXISTS money_otps (
 );
 CREATE INDEX IF NOT EXISTS idx_money_otps_user ON money_otps(user_id, purpose);
 
+CREATE TABLE IF NOT EXISTS money_push_tokens (
+  user_id TEXT NOT NULL,
+  token TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (user_id, token)
+);
+
 CREATE TABLE IF NOT EXISTS money_kyc_docs (
   user_id TEXT PRIMARY KEY,
   doc_number TEXT NOT NULL DEFAULT '',

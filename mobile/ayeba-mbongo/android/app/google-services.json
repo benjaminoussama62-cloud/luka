@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "467751376756",
+    "project_id": "ayeba-mbongo",
+    "storage_bucket": "ayeba-mbongo.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:467751376756:android:a35d72aa805201864cfe21",
+        "android_client_info": {
+          "package_name": "app.ayeba.mbongo"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC1ozP21x-RtyWm1T7QRln9T0mBq8kG2CY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
