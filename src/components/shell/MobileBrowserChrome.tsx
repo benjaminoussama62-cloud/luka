@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { useBrowserShell } from "@/lib/browser-shell";
 import { useBrowserFavs } from "@/lib/browser-favs";
+import { useReadingList } from "@/lib/browser-reading";
 import { normalizeOmniInput } from "@/lib/search-engine-prefs";
 import {
   addNativeListener,
@@ -29,6 +30,7 @@ import {
   IconTextSize,
 } from "./icons";
 import { MobileTabsOverview } from "./MobileTabsOverview";
+import { ShareSheet } from "./ShareSheet";
 
 type Props = {
   onSearch: (query: string) => void;
@@ -54,6 +56,7 @@ export function MobileBrowserChrome({ onSearch }: Props) {
     webGoTo,
   } = useBrowserShell();
   const { favs, isFav, toggleFav, removeFav } = useBrowserFavs();
+  const { items: reading, inList: inReading, toggleItem: toggleReading, removeItem: removeReading } = useReadingList();
 
   const [omniOpen, setOmniOpen] = useState(false);
   const [omni, setOmni] = useState("");
@@ -61,6 +64,7 @@ export function MobileBrowserChrome({ onSearch }: Props) {
   const [tabsOpen, setTabsOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState<"back" | "forward" | null>(null);
   const [favsOpen, setFavsOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [pageMenuOpen, setPageMenuOpen] = useState(false);
   const [findOpen, setFindOpen] = useState(false);
@@ -80,7 +84,7 @@ export function MobileBrowserChrome({ onSearch }: Props) {
 
   // WebView native masquee quand un overlay HTML couvre la page
   // (sheet omnibox, grille d'onglets, favoris, menus).
-  const overlayOpen = omniOpen || tabsOpen || favsOpen || pageMenuOpen || historyOpen !== null;
+  const overlayOpen = omniOpen || tabsOpen || favsOpen || pageMenuOpen || historyOpen !== null || shareOpen;
   useEffect(() => {
     if (!native) return;
     void nativeBrowser()?.setHidden({ hidden: overlayOpen });
@@ -185,23 +189,9 @@ export function MobileBrowserChrome({ onSearch }: Props) {
     else openWebTab(target);
   }
 
-  async function onShare() {
+  function onShare() {
     if (!url) return;
-    try {
-      if (navigator.share) {
-        await navigator.share({ title, url });
-        return;
-      }
-    } catch {
-      /* cancelled */
-    }
-    try {
-      await navigator.clipboard.writeText(url);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1600);
-    } catch {
-      /* ignore */
-    }
+    setShareOpen(true);
   }
 
   async function onCopy() {
@@ -299,6 +289,18 @@ export function MobileBrowserChrome({ onSearch }: Props) {
       ) : null}
 
       {tabsOpen ? <MobileTabsOverview onClose={() => setTabsOpen(false)} /> : null}
+
+      {shareOpen && isWeb ? (
+        <ShareSheet
+          url={url}
+          title={title}
+          starred={starred}
+          inReadingList={inReading(url)}
+          onToggleFav={() => toggleFav(url, title)}
+          onToggleReading={() => toggleReading(url, title)}
+          onClose={() => setShareOpen(false)}
+        />
+      ) : null}
 
       {historyOpen && historyEntries.length ? (
         <div className="ayeba-mobile-history-pop" role="menu">
@@ -412,6 +414,37 @@ export function MobileBrowserChrome({ onSearch }: Props) {
                 Fermer
               </button>
             </div>
+            {reading.length ? (
+              <>
+                <div className="ayeba-mobile-favs-subhead">Liste de lecture</div>
+                <ul className="ayeba-mobile-favs-list">
+                  {reading.map((f) => (
+                    <li key={f.url}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFavsOpen(false);
+                          if (isWeb) navigateWebTab(f.url);
+                          else openWebTab(f.url);
+                        }}
+                      >
+                        <span className="ayeba-mobile-favs-title">{f.title}</span>
+                        <span className="ayeba-mobile-favs-host">{hostOf(f.url)}</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="ayeba-mobile-favs-del"
+                        aria-label={`Retirer ${f.title}`}
+                        onClick={() => removeReading(f.url)}
+                      >
+                        ×
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                <div className="ayeba-mobile-favs-subhead">Favoris</div>
+              </>
+            ) : null}
             {favs.length === 0 ? (
               <p className="ayeba-mobile-favs-empty">Aucun favori — ouvre une page puis touche ★.</p>
             ) : (

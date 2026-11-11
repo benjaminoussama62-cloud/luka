@@ -514,6 +514,16 @@ public class AyebaBrowserPlugin extends Plugin {
             Bundle state = tabStates.get(id);
             if (state != null) {
                 webView.restoreState(state);
+                webView.invalidate();
+                // restoreState ne repeint pas toujours la page — si le WebView
+                // reste sur du vide, on recharge l'URL courante de l'onglet.
+                String fallback = url;
+                webView.postDelayed(() -> {
+                    String cur = webView.getUrl();
+                    if ((cur == null || cur.isEmpty() || "about:blank".equals(cur)) && !fallback.isEmpty()) {
+                        webView.loadUrl(fallback);
+                    }
+                }, 350);
             } else if (!url.isEmpty() && !url.equals(webView.getUrl())) {
                 webView.loadUrl(url);
             }
