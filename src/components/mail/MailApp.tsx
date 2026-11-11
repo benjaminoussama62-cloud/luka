@@ -543,20 +543,36 @@ export function MailApp() {
     showToast(`Reporté à ${until.toLocaleString("fr-FR", { weekday: "short", hour: "2-digit", minute: "2-digit" })}.`);
   };
 
-  // ── Swipe mobile : gauche = archiver, droite = corbeille ──
+  // ── Tactile : long-press = sélection (façon Gmail), swipe = actions ──
+  const longPress = useRef<{ timer: ReturnType<typeof setTimeout> | null; fired: boolean }>({ timer: null, fired: false });
+
   const onTouchStart = (m: Msg, e: React.TouchEvent) => {
     const t = e.touches[0];
     swipeRef.current = { id: m.id, x0: t.clientX, y0: t.clientY, dx: 0 };
+    if (longPress.current.timer) clearTimeout(longPress.current.timer);
+    longPress.current.fired = false;
+    longPress.current.timer = setTimeout(() => {
+      longPress.current.fired = true;
+      swipeRef.current = null;
+      toggleSelect(m.id);
+      navigator.vibrate?.(15);
+    }, 450);
   };
   const onTouchMove = (m: Msg, e: React.TouchEvent) => {
     const s = swipeRef.current;
     if (!s || s.id !== m.id) return;
     const t = e.touches[0];
-    if (Math.abs(t.clientY - s.y0) > Math.abs(t.clientX - s.x0)) { swipeRef.current = null; return; }
-    s.dx = t.clientX - s.x0;
-    (e.currentTarget as HTMLElement).style.transform = `translateX(${Math.max(-90, Math.min(90, s.dx))}px)`;
+    const dx = t.clientX - s.x0;
+    const dy = t.clientY - s.y0;
+    if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
+      if (longPress.current.timer) { clearTimeout(longPress.current.timer); longPress.current.timer = null; }
+    }
+    if (Math.abs(dy) > Math.abs(dx)) { swipeRef.current = null; return; }
+    s.dx = dx;
+    (e.currentTarget as HTMLElement).style.transform = `translateX(${Math.max(-90, Math.min(90, dx))}px)`;
   };
   const onTouchEnd = (m: Msg, e: React.TouchEvent) => {
+    if (longPress.current.timer) { clearTimeout(longPress.current.timer); longPress.current.timer = null; }
     const s = swipeRef.current;
     swipeRef.current = null;
     const el = e.currentTarget as HTMLElement;
@@ -924,7 +940,7 @@ export function MailApp() {
           </div>
         )}
 
-        <section className="mail-list">
+        <section className={`mail-list ${selected.size ? "selecting" : ""}`}>
           <div className="mail-list-head">
             {selected.size === 0 ? (
               <>
@@ -1001,7 +1017,12 @@ export function MailApp() {
             <div key={m.id} className="mail-item-wrap">
               <button
                 className={`mail-item ${!m.read ? "unread" : ""} ${open?.id === m.id ? "active" : ""} ${selected.has(m.id) ? "selected" : ""}`}
-                onClick={() => (selected.size ? toggleSelect(m.id) : void openMessage(m.id))}
+                onClick={() => {
+                  if (longPress.current.fired) { longPress.current.fired = false; return; }
+                  if (selected.size) toggleSelect(m.id);
+                  else void openMessage(m.id);
+                }}
+                onContextMenu={(e) => { e.preventDefault(); toggleSelect(m.id); }}
                 onTouchStart={(e) => onTouchStart(m, e)}
                 onTouchMove={(e) => onTouchMove(m, e)}
                 onTouchEnd={(e) => onTouchEnd(m, e)}

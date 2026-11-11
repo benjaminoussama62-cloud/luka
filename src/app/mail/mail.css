@@ -1189,12 +1189,19 @@
   transition: opacity 0.12s, background 0.12s, border-color 0.12s;
   z-index: 2;
 }
-.mail-item-wrap:hover .mail-item-check,
+/* La case n'apparaît qu'en mode sélection (long-press) ou au survol desktop */
+.mail-list.selecting .mail-item-check,
 .mail-item-check.on { opacity: 1; }
+@media (hover: hover) {
+  .mail-item-wrap:hover .mail-item-check { opacity: 1; }
+}
 .mail-item-check.on { background: var(--orange); border-color: var(--orange); }
 .mail-item.selected { background: var(--orange-soft); border-left-color: var(--orange); }
-.mail-item-wrap:hover .mail-item-avatar,
+.mail-list.selecting .mail-item-avatar,
 .mail-item.selected .mail-item-avatar { opacity: 0.25; }
+@media (hover: hover) {
+  .mail-item-wrap:hover .mail-item-avatar { opacity: 0.25; }
+}
 .mail-item { transition: transform 0.15s, background 0.12s; touch-action: pan-y; }
 
 /* ── Menu ⋯ contextuel ───────────────────────────────────────────── */
@@ -1206,7 +1213,13 @@
   transition: opacity 0.12s;
   padding: 2px;
 }
-.mail-item-wrap:hover .mail-item-menu { opacity: 1; }
+/* Survol desktop uniquement — au tactile, le long-press donne les actions */
+@media (hover: hover) {
+  .mail-item-wrap:hover .mail-item-menu { opacity: 1; }
+}
+@media (hover: none) {
+  .mail-item-menu { display: none; }
+}
 .mail-menu {
   position: absolute;
   right: 10px;
@@ -1321,8 +1334,7 @@
 .mail-to-name { font-size: 12.5px; color: var(--ink); display: flex; flex-direction: column; }
 .mail-to-name em { font-style: normal; font-size: 11px; color: var(--faint); }
 
-/* Mobile : la case à cocher reste visible au toucher (pas de survol) */
+/* Tactile : pas de case au repos — le long-press entre en mode sélection */
 @media (hover: none) {
-  .mail-item-check { opacity: 0.55; }
-  .mail-item-check.on { opacity: 1; }
+  .mail-item { user-select: none; -webkit-user-select: none; }
 }
