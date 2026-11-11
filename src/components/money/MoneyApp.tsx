@@ -560,7 +560,7 @@ function PinSetup({ onDone }: { onDone: () => void }) {
 function ReceiveSheet({ info, onClose, onCopy }: { info: WalletInfo; onClose: () => void; onCopy: () => void }) {
   const [qr, setQr] = useState<string | null>(null);
   const identifier = info.wallet.handle ?? info.user.email;
-  const payUrl = `${typeof window !== "undefined" ? window.location.origin : "https://ayeba.app"}/money?to=${encodeURIComponent(identifier)}`;
+  const payUrl = `${typeof window !== "undefined" ? window.location.origin : "https://ayeba.app"}/mbongo?to=${encodeURIComponent(identifier)}`;
 
   useEffect(() => {
     let alive = true;
