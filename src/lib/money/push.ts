@@ -11,7 +11,7 @@ const PROJECT_ID = process.env.FCM_PROJECT_ID || "ayeba-mbongo";
 let cachedToken: { token: string; exp: number } | null = null;
 
 function serviceAccount(): { client_email: string; private_key: string } | null {
-  const raw = process.env.FCM_SERVICE_ACCOUNT;
+  const raw = process.env.FCM_SERVICE_ACCOUNT || process.env.FCM_SERV_ACCOUNT;
   if (raw) {
     try {
       const j = JSON.parse(raw);
