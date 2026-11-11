@@ -117,10 +117,11 @@ export function MoneyApp() {
       setTxs(t.transactions);
       setNextCursor(t.nextCursor);
     } catch (e) {
-      if ((e as Error).message === "Connexion requise") {
+      const err = e as Error & { code?: string };
+      if (err.message === "Connexion requise" || err.code === "session_expired") {
         setAuth("anon");
       } else {
-        notify((e as Error).message);
+        notify(err.message);
         setAuth("ok");
       }
     }
