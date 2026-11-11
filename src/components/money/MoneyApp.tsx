@@ -247,7 +247,7 @@ export function MoneyApp() {
                 <span className="mn-kicker">Vos soldes</span>
                 <button type="button" className="mn-eye" aria-label={hideBal ? "Afficher le solde" : "Masquer le solde"}
                   onClick={() => { const n = !hideBal; setHideBal(n); localStorage.setItem("mn_hide", n ? "1" : "0"); }}>
-                  {hideBal ? "◡ Afficher" : "👁 Masquer"}
+                  <IconEye off={hideBal} />
                 </button>
               </div>
               <div className="mn-balances">
@@ -273,8 +273,8 @@ export function MoneyApp() {
                     (c) =>
                       (info.month[c].in > 0 || info.month[c].out > 0) && (
                         <small key={c}>
-                          <i className="in">+{info.month[c].inDisplay}</i> reçus ·{" "}
-                          <i className="out">−{info.month[c].outDisplay}</i> envoyés{" "}
+                          <i className="in">+{hideBal ? "••••" : info.month[c].inDisplay}</i> reçus ·{" "}
+                          <i className="out">−{hideBal ? "••••" : info.month[c].outDisplay}</i> envoyés{" "}
                           {c === "USD" ? "$" : "FC"}
                         </small>
                       ),
@@ -475,6 +475,23 @@ function IconFile() {
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" />
       <path d="M14 2v6h6M12 11v6m0 0-3-3m3 3 3-3" />
+    </svg>
+  );
+}
+function IconEye({ off }: { off?: boolean }) {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
+      <circle cx="12" cy="12" r="3" />
+      {off && <path d="M3 3l18 18" />}
+    </svg>
+  );
+}
+function IconScan() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 7V4a1 1 0 0 1 1-1h3M17 3h3a1 1 0 0 1 1 1v3M21 17v3a1 1 0 0 1-1 1h-3M7 21H4a1 1 0 0 1-1-1v-3" />
+      <rect x="7" y="7" width="10" height="10" rx="1.5" />
     </svg>
   );
 }
@@ -993,7 +1010,7 @@ function MovePanel({
             </label>
             {!scanning ? (
               <button type="button" className="mn-btn-ghost mn-scan" onClick={() => void scanQr()}>
-                📷 Scanner un code QR
+                <IconScan /> Scanner un code QR
               </button>
             ) : (
               <div className="mn-scan-box">

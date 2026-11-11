@@ -619,3 +619,22 @@ a.mn-btn-primary { text-decoration: none; display: inline-block; }
 .mn-scan-box{margin-top:8px}
 .mn-scan-video{width:100%;border-radius:12px;border:1px solid rgba(125,240,255,.35);background:#000;aspect-ratio:4/3;object-fit:cover}
 .mn-receipt-note{text-align:center;margin-top:8px;font-size:11px}
+
+.mn-hero-top{display:flex;justify-content:space-between;align-items:center;padding-right:2px}
+.mn-eye{display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:9px;background:rgba(125,240,255,.08);border:1px solid rgba(125,240,255,.22);color:#7df0ff;transition:all .18s}
+.mn-eye:hover{background:rgba(125,240,255,.16);border-color:rgba(125,240,255,.45)}
+.mn-eye:active{transform:scale(.92)}
+.mn-search{background:rgba(255,255,255,.05);border:1px solid rgba(125,240,255,.18);border-radius:9px;color:#eafcff;padding:6px 11px;font-size:12px;width:118px;outline:none;transition:border-color .18s}
+.mn-search:focus{border-color:rgba(125,240,255,.5)}
+.mn-search::placeholder{color:rgba(234,252,255,.35)}
+.mn-scan{display:flex;align-items:center;justify-content:center;gap:7px;margin-top:10px;padding:11px;font-size:13px}
+.mn-scan-box{margin-top:10px;position:relative}
+.mn-scan-video{width:100%;border-radius:14px;border:1px solid rgba(125,240,255,.4);background:#000;aspect-ratio:4/3;object-fit:cover;box-shadow:0 0 0 4px rgba(125,240,255,.06)}
+.mn-upload{display:flex;flex-direction:column;align-items:center;gap:6px;border:1.5px dashed rgba(125,240,255,.3);border-radius:14px;padding:18px 14px;cursor:pointer;text-align:center;transition:all .18s;position:relative}
+.mn-upload:hover{border-color:rgba(125,240,255,.55);background:rgba(125,240,255,.04)}
+.mn-upload.on{border-style:solid;border-color:rgba(60,220,140,.5);background:rgba(60,220,140,.05)}
+.mn-upload input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.mn-upload-ic{display:flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:12px;background:rgba(125,240,255,.1);color:#7df0ff}
+.mn-upload.on .mn-upload-ic{background:rgba(60,220,140,.15);color:#3cdc8c}
+.mn-upload b{font-size:13px}
+.mn-upload small{font-size:11px;opacity:.55}

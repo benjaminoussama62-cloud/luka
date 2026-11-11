@@ -242,9 +242,15 @@ export function MoneyExtras({ panel, onClose, onDone }: {
               <input value={docNumber} onChange={(e) => setDocNumber(e.target.value)} placeholder="Ex : P0001234" />
             </label>
             <label className="mn-field"><span>Photo de la pièce (recto)</span>
-              <input type="file" accept="image/*" capture="environment"
-                onChange={(e) => { const f = e.target.files?.[0]; if (!f) return; if (f.size > 2_000_000) { setErr("Photo trop lourde (max 2 Mo)"); return; } const r = new FileReader(); r.onload = () => setDocImage(String(r.result)); r.readAsDataURL(f); }} />
-              {docImage && <small>Photo chargée ✓</small>}
+              <span className={`mn-upload${docImage ? " on" : ""}`}>
+                <input type="file" accept="image/*" capture="environment"
+                  onChange={(e) => { const f = e.target.files?.[0]; if (!f) return; if (f.size > 2_000_000) { setErr("Photo trop lourde (max 2 Mo)"); return; } const r = new FileReader(); r.onload = () => setDocImage(String(r.result)); r.readAsDataURL(f); }} />
+                <i className="mn-upload-ic">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2Z"/><circle cx="12" cy="13" r="4"/></svg>
+                </i>
+                <b>{docImage ? "Photo chargée" : "Photographier ou choisir"}</b>
+                <small>{docImage ? "Touchez pour remplacer" : "Carte d'électeur, passeport ou permis — recto net"}</small>
+              </span>
             </label>
             {err && <p className="mn-err">{err}</p>}
             <button type="button" className="mn-btn-primary" disabled={busy}
