@@ -12,12 +12,18 @@ let cachedToken: { token: string; exp: number } | null = null;
 
 function serviceAccount(): { client_email: string; private_key: string } | null {
   const raw = process.env.FCM_SERVICE_ACCOUNT;
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return null;
+  if (raw) {
+    try {
+      const j = JSON.parse(raw);
+      if (j.client_email && j.private_key) return j;
+    } catch { /* pas du JSON — on tente les champs séparés */ }
   }
+  const client_email = process.env.FCM_CLIENT_EMAIL;
+  const private_key = process.env.FCM_PRIVATE_KEY;
+  if (client_email && private_key) {
+    return { client_email, private_key: private_key.replace(/\\n/g, "\n") };
+  }
+  return null;
 }
 
 function base64url(buf: Buffer | string): string {
