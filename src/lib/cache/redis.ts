@@ -30,6 +30,32 @@ export function getRedis(): import("@upstash/redis").Redis | null {
   }
 }
 
+// ── Disjoncteur + timeout ───────────────────────────────────────────────────
+// Un appel Upstash normal coûte ~100-300 ms. Si l'instance est morte ou
+// injoignable, le SDK peut attendre ~5 s avant d'échouer — payé à CHAQUE
+// requête puisque le rate-limit précède tout. On borne l'appel à 800 ms et,
+// en cas d'échec, on court-circuite Redis pendant 30 s (fallback local).
+const REDIS_TIMEOUT_MS = 800;
+const REDIS_BREAK_MS = 30_000;
+let redisDownUntil = 0;
+
+export function redisAvailable() {
+  return Date.now() >= redisDownUntil;
+}
+
+export function markRedisDown() {
+  redisDownUntil = Date.now() + REDIS_BREAK_MS;
+}
+
+export function withRedisTimeout<T>(p: Promise<T>): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`redis timeout ${REDIS_TIMEOUT_MS}ms`)), REDIS_TIMEOUT_MS),
+    ),
+  ]);
+}
+
 // ── 2. Map mémoire (fallback) ───────────────────────────────────────────────
 
 const memory = new Map<string, { value: string; expires: number }>();
@@ -49,13 +75,14 @@ function pruneMemory() {
 export async function cacheGet<T>(key: string): Promise<T | null> {
   // 1. Upstash Redis
   const redis = getRedis();
-  if (redis) {
+  if (redis && redisAvailable()) {
     try {
       // Le SDK gère la sérialisation JSON nativement.
-      const val = await redis.get<T>(key);
+      const val = await withRedisTimeout(redis.get<T>(key));
       return val ?? null;
     } catch {
       // Redis indisponible → on descend au niveau suivant sans planter.
+      markRedisDown();
     }
   }
 
@@ -83,12 +110,13 @@ export async function cacheGet<T>(key: string): Promise<T | null> {
 export async function cacheSet(key: string, value: unknown, ttlSec = 3600) {
   // 1. Upstash Redis
   const redis = getRedis();
-  if (redis) {
+  if (redis && redisAvailable()) {
     try {
-      await redis.set(key, value, { ex: ttlSec });
+      await withRedisTimeout(redis.set(key, value, { ex: ttlSec }));
       return;
     } catch {
       // Redis indisponible → fallback mémoire + SQLite.
+      markRedisDown();
     }
   }
 
@@ -108,8 +136,8 @@ export async function cacheSet(key: string, value: unknown, ttlSec = 3600) {
 
 export async function cacheDel(key: string) {
   const redis = getRedis();
-  if (redis) {
-    try { await redis.del(key); } catch { /* ignore */ }
+  if (redis && redisAvailable()) {
+    try { await withRedisTimeout(redis.del(key)); } catch { markRedisDown(); }
     return;
   }
   memory.delete(key);

@@ -1,4 +1,4 @@
-import { getRedis } from "./cache/redis";
+import { getRedis, markRedisDown, redisAvailable, withRedisTimeout } from "./cache/redis";
 
 /**
  * Rate limiting à deux étages :
@@ -45,15 +45,18 @@ export async function rateLimit(
   windowMs = 60_000,
 ): Promise<boolean> {
   const redis = getRedis();
-  if (redis) {
+  if (redis && redisAvailable()) {
     try {
       const count = Number(
-        await redis.eval(WINDOW_LUA, [`rl:${key}`], [windowMs]),
+        await withRedisTimeout(redis.eval(WINDOW_LUA, [`rl:${key}`], [windowMs])),
       );
       return count <= limit;
     } catch (e) {
-      // Redis injoignable → repli sur le limiteur local (jamais fail-open).
+      // Redis injoignable/lent → repli sur le limiteur local (jamais
+      // fail-open) + disjoncteur 30 s : sans lui, chaque requête paierait
+      // le timeout SDK (~5 s) avant de tomber sur le local.
       console.warn("[rate-limit] redis fallback:", (e as Error).message);
+      markRedisDown();
     }
   }
   return localRateLimit(key, limit, windowMs);
