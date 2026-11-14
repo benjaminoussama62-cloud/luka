@@ -31,7 +31,7 @@
     },
     {
       "path": "/api/cron/tx-drain",
-      "schedule": "*/15 * * * *"
+      "schedule": "0 6 * * *"
     }
   ]
 }
