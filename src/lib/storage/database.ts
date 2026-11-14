@@ -171,6 +171,23 @@ export function ensureTursoMigrate(): Promise<void> {
     const url = tursoUrl().replace(/^libsql:/, "https:");
     const authToken = process.env.TURSO_AUTH_TOKEN?.trim().replace(/^['"]|['"]$/g, "");
     const client = createClient({ url, authToken: authToken || undefined });
+    // Sonde : si les artefacts les plus récents du schéma existent déjà,
+    // on saute le replay entier — sinon chaque cold start saturait la
+    // connexion partagée avec des centaines de requêtes (lenteur globale).
+    // À étendre si une migration ajoute un nouvel artefact critique.
+    try {
+      const tables = await client.execute(
+        "SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'table' AND name IN ('mail_api_keys', 'mail_outbound_queue', 'mail_suppressions')",
+      );
+      const haveTables = Number((tables.rows[0] as unknown as { n: number }).n) >= 3;
+      const haveCol = await client
+        .execute("SELECT list_unsub FROM mail_messages LIMIT 0")
+        .then(() => true)
+        .catch(() => false);
+      if (haveTables && haveCol) return;
+    } catch {
+      /* sonde impossible → on tente le replay */
+    }
     // Modest parallelism — statements are independent CREATE/ALTER/INSERT-OR-IGNORE.
     for (let i = 0; i < ops.length; i += 8) {
       await Promise.allSettled(

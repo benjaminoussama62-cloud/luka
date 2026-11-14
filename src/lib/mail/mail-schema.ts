@@ -206,18 +206,29 @@ let _txReady = false;
  */
 export async function ensureMailTxReadyAsync(d: {
   exec(sql: string): Promise<void> | void;
+  prepare?(sql: string): { get(...p: unknown[]): Promise<unknown> | unknown };
 }) {
   if (_txReady) return;
-  _txReady = true;
-  for (const raw of [...MAIL_TX_SCHEMA.split(";"), ...MAIL_COLUMN_ENSURES]) {
-    const sql = raw.trim();
-    if (!sql) continue;
+  // Sonde : le schéma est presque toujours déjà appliqué — une seule
+  // requête (~300 ms) évite 11 execs séquentiels (~5 s) à chaque lambda froide.
+  if (d.prepare) {
     try {
-      await d.exec(sql);
+      await d.prepare("SELECT 1 FROM mail_api_keys LIMIT 1").get();
+      _txReady = true;
+      return;
     } catch {
-      /* déjà présent */
+      /* schéma absent — on applique */
     }
   }
+  _txReady = true;
+  const all = [...MAIL_TX_SCHEMA.split(";"), ...MAIL_COLUMN_ENSURES]
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const tables = all.filter((s) => /^create table/i.test(s));
+  const rest = all.filter((s) => !/^create table/i.test(s));
+  // 2 vagues parallèles : tables d'abord (les index/ALTER en dépendent).
+  await Promise.allSettled(tables.map((sql) => d.exec(sql)));
+  await Promise.allSettled(rest.map((sql) => d.exec(sql)));
 }
 
 export function applyMailSchema(db: AyebaDatabase) {
