@@ -179,7 +179,14 @@ async function attemptSend(id: string): Promise<void> {
     return;
   }
 
-  const from = process.env.TX_SMTP_FROM || process.env.SMTP_FROM || `notifications@ayeba.app`;
+  // Expéditeur : TX_FROM_<APP> permet un domaine propre par app dès que le
+  // domaine est vérifié chez le relais (ex : noreply@to-tala.com). Sinon
+  // fallback global — signé ayeba.app, déjà authentifié SPF/DKIM/DMARC.
+  const from =
+    process.env[`TX_FROM_${row.app.toUpperCase()}`] ||
+    process.env.TX_SMTP_FROM ||
+    process.env.SMTP_FROM ||
+    `notifications@ayeba.app`;
   const res = await sendExternalMail({
     from,
     fromName: appName(row.app as TxApp),
