@@ -8,7 +8,8 @@
  * jamais au-delà des quotas (anti-bombing).
  */
 import crypto from "crypto";
-import { getDb } from "@/lib/storage/database";
+import { adb } from "@/lib/storage/adb";
+import { ensureMailTxReadyAsync } from "./mail-schema";
 import { rateLimit } from "@/lib/rate-limit";
 import { sendExternalMail } from "./smtp";
 import { renderTx, type TxApp, type TxLocale, type TxMessage, type TxType } from "./tx-templates";
@@ -42,24 +43,27 @@ const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
 /** Crée une clé d'app — retourne la clé EN CLAIR une seule fois (à stocker côté app). */
 export async function createApiKey(app: TxApp, label = ""): Promise<{ id: string; key: string } | { error: string }> {
+  await ensureMailTxReadyAsync(adb());
   if (!APPS.has(app)) return { error: `app inconnue — attendu : ${[...APPS].join(", ")}` };
   const key = `txk_${crypto.randomBytes(24).toString("hex")}`;
   const id = uid();
-  await getDb()
+  await adb()
     .prepare("INSERT INTO mail_api_keys (id, app, key_hash, key_prefix, label, status, created_at) VALUES (?,?,?,?,?,?,?)")
     .run(id, app, hashKey(key), key.slice(0, 14), label, "active", now());
   return { id, key };
 }
 
 export async function revokeApiKey(keyId: string) {
-  await getDb().prepare("UPDATE mail_api_keys SET status = 'revoked', revoked_at = ? WHERE id = ?").run(now(), keyId);
+  await ensureMailTxReadyAsync(adb());
+  await adb().prepare("UPDATE mail_api_keys SET status = 'revoked', revoked_at = ? WHERE id = ?").run(now(), keyId);
 }
 
 /** Vérifie un Bearer token → l'app autorisée, ou null. */
 export async function appFromKey(authHeader: string | null): Promise<{ id: string; app: TxApp } | null> {
+  await ensureMailTxReadyAsync(adb());
   const m = /^Bearer\s+(\S+)$/i.exec(authHeader || "");
   if (!m) return null;
-  const row = await getDb()
+  const row = await adb()
     .prepare("SELECT id, app, status FROM mail_api_keys WHERE key_hash = ?")
     .get(hashKey(m[1])) as KeyRow | undefined;
   if (!row || row.status !== "active" || !APPS.has(row.app as TxApp)) return null;
@@ -69,12 +73,14 @@ export async function appFromKey(authHeader: string | null): Promise<{ id: strin
 // ── Suppression (bounces / plaintes / opt-out) ──────────────────────────────
 
 export async function isSuppressed(address: string): Promise<boolean> {
-  const row = await getDb().prepare("SELECT 1 FROM mail_suppressions WHERE address = ?").get(address.toLowerCase());
+  await ensureMailTxReadyAsync(adb());
+  const row = await adb().prepare("SELECT 1 FROM mail_suppressions WHERE address = ?").get(address.toLowerCase());
   return !!row;
 }
 
 export async function suppressAddress(address: string, reason: string, source = "webhook") {
-  await getDb()
+  await ensureMailTxReadyAsync(adb());
+  await adb()
     .prepare("INSERT OR IGNORE INTO mail_suppressions (address, reason, source, created_at) VALUES (?,?,?,?)")
     .run(address.toLowerCase(), reason.slice(0, 200), source, now());
 }
@@ -101,6 +107,7 @@ export type TxResult =
  * (`drainTxQueue`) reprend les échecs et le reste.
  */
 export async function queueTx(app: TxApp, req: TxRequest): Promise<TxResult> {
+  await ensureMailTxReadyAsync(adb());
   const type = String(req.type || "") as TxType;
   if (!TYPES.has(type)) return { error: `type inconnu — attendu : ${[...TYPES].join(", ")}`, status: 400 };
 
@@ -117,7 +124,7 @@ export async function queueTx(app: TxApp, req: TxRequest): Promise<TxResult> {
   }
 
   // Idempotence : la même clé métier = le même envoi, quoi qu'il arrive.
-  const existing = await getDb()
+  const existing = await adb()
     .prepare("SELECT id, status FROM mail_outbound_queue WHERE app = ? AND idem_key = ?")
     .get(app, idem) as { id: string; status: string } | undefined;
   if (existing) return { queued: true, id: existing.id, duplicate: true };
@@ -135,7 +142,7 @@ export async function queueTx(app: TxApp, req: TxRequest): Promise<TxResult> {
 
   const id = uid();
   try {
-    await getDb()
+    await adb()
       .prepare(
         `INSERT INTO mail_outbound_queue (id, app, type, to_addr, locale, data, idem_key, status, attempts, next_retry, created_at)
          VALUES (?,?,?,?,?,?,?,'pending',0,?,?)`,
@@ -144,7 +151,7 @@ export async function queueTx(app: TxApp, req: TxRequest): Promise<TxResult> {
   } catch (e) {
     // Course : un autre process a inséré la même clé → c'est un doublon.
     if ((e as Error).message.includes("UNIQUE")) {
-      const dup = await getDb()
+      const dup = await adb()
         .prepare("SELECT id FROM mail_outbound_queue WHERE app = ? AND idem_key = ?")
         .get(app, idem) as { id: string } | undefined;
       if (dup) return { queued: true, id: dup.id, duplicate: true };
@@ -158,7 +165,7 @@ export async function queueTx(app: TxApp, req: TxRequest): Promise<TxResult> {
 }
 
 async function attemptSend(id: string): Promise<void> {
-  const row = await getDb()
+  const row = await adb()
     .prepare("SELECT * FROM mail_outbound_queue WHERE id = ? AND status = 'pending'")
     .get(id) as QueueRow | undefined;
   if (!row) return;
@@ -189,20 +196,20 @@ async function attemptSend(id: string): Promise<void> {
     await fail(id, attempts, res.error, permanent);
     return;
   }
-  await getDb()
+  await adb()
     .prepare("UPDATE mail_outbound_queue SET status = 'sent', attempts = ?, sent_at = ?, last_error = '' WHERE id = ?")
     .run(attempts, now(), id);
 }
 
 async function fail(id: string, attempts: number, error: string, permanent = false) {
   if (permanent || attempts >= MAX_ATTEMPTS) {
-    await getDb()
+    await adb()
       .prepare("UPDATE mail_outbound_queue SET status = 'dead', attempts = ?, last_error = ? WHERE id = ?")
       .run(attempts, error.slice(0, 300), id);
     return;
   }
   const next = new Date(Date.now() + RETRY_DELAYS[Math.min(attempts - 1, RETRY_DELAYS.length - 1)]).toISOString();
-  await getDb()
+  await adb()
     .prepare("UPDATE mail_outbound_queue SET attempts = ?, last_error = ?, next_retry = ? WHERE id = ?")
     .run(attempts, error.slice(0, 300), next, id);
 }
@@ -212,7 +219,8 @@ async function fail(id: string, attempts: number, error: string, permanent = fal
  * (`/api/cron/*`) ou un worker. Sécurisé : idempotent, limite stricte.
  */
 export async function drainTxQueue(limit = 50): Promise<number> {
-  const rows = await getDb()
+  await ensureMailTxReadyAsync(adb());
+  const rows = await adb()
     .prepare("SELECT id FROM mail_outbound_queue WHERE status = 'pending' AND next_retry <= ? ORDER BY next_retry ASC LIMIT ?")
     .all(now(), limit) as { id: string }[];
   for (const r of rows) await attemptSend(r.id);

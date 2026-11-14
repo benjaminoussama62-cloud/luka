@@ -6,7 +6,7 @@
  */
 import crypto from "crypto";
 import { adb, type Adb } from "@/lib/storage/adb";
-import { MAIL_MIGRATIONS, MAIL_SCHEMA } from "@/lib/mail/mail-schema";
+import { MAIL_COLUMN_ENSURES, MAIL_MIGRATIONS, MAIL_SCHEMA, MAIL_TX_SCHEMA } from "@/lib/mail/mail-schema";
 import { decryptText, encryptText, hashCode } from "@/lib/mail/mail-crypto";
 import {
   MAX_ATTACHMENTS,
@@ -31,7 +31,6 @@ const RESERVED = new Set([
   "aether", "radar", "yield", "trace", "velocity", "developers", "root", "system",
 ]);
 
-let schemaApplied = false;
 /**
  * Adaptateur async — sur Turso, jamais le driver sync (round trip HTTP
  * bloquant par statement). Le schéma mail est déjà appliqué par la migration
@@ -39,15 +38,27 @@ let schemaApplied = false;
  * filet idempotent, lancé en fond, sans ordre garanti — les statements sont
  * tolérés individuellement.
  */
-function db(): Adb {
-  const d = adb();
-  if (!schemaApplied) {
-    schemaApplied = true;
-    void d.exec(`${MAIL_SCHEMA};${MAIL_MIGRATIONS.join(";")}`).catch((e) =>
-      console.warn("[mail] schema ensure failed:", (e as Error).message),
-    );
+let schemaEnsure: Promise<unknown> | null = null;
+
+/**
+ * Schéma appliqué une fois par lambda — les chemins critiques (inbound)
+ * peuvent `await ensureMailSchema()` pour garantir colonnes/tables avant
+ * d'écrire ; les autres restent fire-and-forget.
+ */
+export function ensureMailSchema(): Promise<unknown> {
+  if (!schemaEnsure) {
+    schemaEnsure = adb()
+      .exec(
+        `${MAIL_SCHEMA};${MAIL_TX_SCHEMA};${MAIL_MIGRATIONS.join(";")};${MAIL_COLUMN_ENSURES.join(";")}`,
+      )
+      .catch((e) => console.warn("[mail] schema ensure failed:", (e as Error).message));
   }
-  return d;
+  return schemaEnsure;
+}
+
+function db(): Adb {
+  void ensureMailSchema();
+  return adb();
 }
 
 export type MailAccount = {
@@ -710,6 +721,9 @@ export async function receiveExternalMail(opts: {
   listUnsub?: string;
   attachments?: { name: string; mime: string; bytes: Uint8Array }[];
 }): Promise<{ delivered: string[]; dropped: string[] }> {
+  // L'inbound écrit list_unsub — la colonne doit exister AVANT l'insert
+  // (le ensure est sinon fire-and-forget et la lambda froide écrirait trop tôt).
+  await ensureMailSchema();
   const delivered: string[] = [];
   const dropped: string[] = [];
   const from = String(opts.from || "").slice(0, 200);

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireSection } from "@/lib/admin/auth";
-import { getDb } from "@/lib/storage/database";
+import { adb } from "@/lib/storage/adb";
+import { ensureMailTxReadyAsync } from "@/lib/mail/mail-schema";
 import { createApiKey, revokeApiKey } from "@/lib/mail/transactional";
 
 export const runtime = "nodejs";
@@ -13,7 +14,8 @@ export const runtime = "nodejs";
 export async function GET() {
   const auth = await requireSection("mail");
   if (auth instanceof NextResponse) return auth;
-  const rows = await getDb()
+  await ensureMailTxReadyAsync(adb());
+  const rows = await adb()
     .prepare(
       `SELECT id, app, key_prefix, label, status, created_at, revoked_at
        FROM mail_api_keys ORDER BY created_at DESC LIMIT 200`,

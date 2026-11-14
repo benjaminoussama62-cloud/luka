@@ -186,6 +186,40 @@ export function applyMailTxSchema(db: AyebaDatabase) {
   }
 }
 
+// Colonnes ajoutées après le schéma initial — ALTER idempotents.
+export const MAIL_COLUMN_ENSURES = [
+  "ALTER TABLE mail_messages ADD COLUMN enc INTEGER NOT NULL DEFAULT 0",
+  "ALTER TABLE mail_messages ADD COLUMN wraps TEXT NOT NULL DEFAULT ''",
+  "ALTER TABLE mail_messages ADD COLUMN snooze_until TEXT",
+  "ALTER TABLE mail_messages ADD COLUMN list_unsub TEXT NOT NULL DEFAULT ''",
+  "ALTER TABLE mail_api_keys ADD COLUMN key_prefix TEXT NOT NULL DEFAULT ''",
+];
+
+let _txReady = false;
+
+/**
+ * Garantit les tables/colonnes transactionnelles dans CETTE lambda.
+ * Le migrate Turso (`ensureTursoMigrate`) est asynchrone — une lambda
+ * fraîche peut écrire avant sa fin → « no such table ». Ici on applique
+ * le minimum (3 CREATE + 5 ALTER idempotents, ~100 ms une fois).
+ * Compatible Adb (async) et AyebaDatabase (sync) — exec est await.
+ */
+export async function ensureMailTxReadyAsync(d: {
+  exec(sql: string): Promise<void> | void;
+}) {
+  if (_txReady) return;
+  _txReady = true;
+  for (const raw of [...MAIL_TX_SCHEMA.split(";"), ...MAIL_COLUMN_ENSURES]) {
+    const sql = raw.trim();
+    if (!sql) continue;
+    try {
+      await d.exec(sql);
+    } catch {
+      /* déjà présent */
+    }
+  }
+}
+
 export function applyMailSchema(db: AyebaDatabase) {
   for (const raw of MAIL_SCHEMA.split(";")) {
     const stmt = raw.trim();

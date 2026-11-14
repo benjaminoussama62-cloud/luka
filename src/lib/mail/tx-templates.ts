@@ -237,7 +237,10 @@ export function renderTx(app: TxApp, type: TxType, locale: TxLocale, data: Recor
     case "notification":
     default: {
       const subject = data.subject || `${b.name} — notification`;
-      const inner = `${hi}${p(esc(data.detail || data.subject || ""))}${data.url ? btn(data.url, data.cta || (locale === "en" ? "View" : "Voir"), b.color) : ""}`;
+      const unsub = data.unsub
+        ? `<p style="font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#9ca3af;text-align:center;margin:28px 0 0"><a href="${safeHref(data.unsub)}" style="color:#9ca3af;text-decoration:underline">${esc(locale === "en" ? "Unsubscribe from these emails" : "Se désinscrire de ces e-mails")}</a></p>`
+        : "";
+      const inner = `${hi}${p(esc(data.detail || data.subject || ""))}${data.url ? btn(data.url, data.cta || (locale === "en" ? "View" : "Voir"), b.color) : ""}${unsub}`;
       const text = `${s.hi(name)}\n\n${data.detail || data.subject || ""}\n\n— ${b.name}`;
       return { subject, text, html: layout(app, locale, inner) };
     }
