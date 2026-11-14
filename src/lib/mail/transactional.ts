@@ -106,7 +106,7 @@ export type TxResult =
  * file est vide (latence < 1 s) et différée sinon — le worker externe
  * (`drainTxQueue`) reprend les échecs et le reste.
  */
-export async function queueTx(app: TxApp, req: TxRequest): Promise<TxResult> {
+export async function queueTx(app: TxApp, req: TxRequest, defer = false): Promise<TxResult> {
   await ensureMailTxReadyAsync(adb());
   const type = String(req.type || "") as TxType;
   if (!TYPES.has(type)) return { error: `type inconnu — attendu : ${[...TYPES].join(", ")}`, status: 400 };
@@ -159,9 +159,16 @@ export async function queueTx(app: TxApp, req: TxRequest): Promise<TxResult> {
     throw e;
   }
 
-  // Tentative immédiate — les mails transactionnels doivent partir vite.
-  await attemptSend(id);
+  // Tentative immédiate — sauf si l'appelant demande à différer (after() :
+  // la réponse part tout de suite, l'envoi suit dans le même lambda).
+  if (!defer) await attemptSend(id);
   return { queued: true, id };
+}
+
+/** Tente un envoi en file — utilisable depuis after() / le drain. */
+export async function sendQueued(id: string): Promise<void> {
+  await ensureMailTxReadyAsync(adb());
+  await attemptSend(id);
 }
 
 async function attemptSend(id: string): Promise<void> {

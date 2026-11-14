@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { appFromKey, queueTx, drainTxQueue } from "@/lib/mail/transactional";
+import { after, NextResponse } from "next/server";
+import { appFromKey, queueTx, sendQueued, drainTxQueue } from "@/lib/mail/transactional";
 import { oauthRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
@@ -34,20 +34,27 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "la clé ne correspond pas à l'application déclarée" }, { status: 403 });
   }
 
+  // defer : la réponse part tout de suite (latence ~100-300 ms au lieu
+  // du round-trip SMTP ~1-3 s). L'envoi suit dans after() — et même si la
+  // lambda est tuée avant, la ligne 'pending' est reprise par le drain.
   const result = await queueTx(key.app, {
     type: String(body.type || ""),
     to: String(body.to || ""),
     locale: String(body.locale || "fr"),
     data: (body.data as Record<string, string>) || {},
     idempotencyKey: String(body.idempotencyKey || ""),
-  });
+  }, true);
 
   if ("error" in result) {
     return NextResponse.json({ error: result.error }, { status: result.status });
   }
 
-  // Purge opportuniste : rattrape les jobs en attente échus (coût ~0 si vide).
-  drainTxQueue(10).catch(() => {});
+  if (!("duplicate" in result && result.duplicate)) {
+    after(async () => {
+      await sendQueued(result.id);
+      await drainTxQueue(10); // purge opportuniste des jobs échus
+    });
+  }
 
   return NextResponse.json(
     { queued: true, id: result.id, ...(("duplicate" in result && result.duplicate) ? { duplicate: true } : {}) },
