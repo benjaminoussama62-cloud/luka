@@ -559,6 +559,26 @@ export type SendResult = {
 
 const INTERNAL_RE = new RegExp(`@(${MAIL_DOMAIN.replace(".", "\\.")})$`, "i");
 
+/**
+ * Alias de réception inter-domaines. Les domaines sœurs (to-tala.com,
+ * omega-web.org, sombatekaonline.com…) partagent le même MX catch-all →
+ * worker → webhook, mais l'inbound ne livre que du @ayeba.app.
+ *
+ * Env `MAIL_ALIASES` — paires `alias=boîte` séparées par `;` :
+ *   support@to-tala.com=support@ayeba.app;support@omega-web.org=equipe@ayeba.app
+ *
+ * Une adresse non listée garde son comportement : drop si externe.
+ */
+function inboundAlias(addr: string): string {
+  const raw = (process.env.MAIL_ALIASES || "").trim();
+  if (!raw) return addr;
+  for (const pair of raw.split(";")) {
+    const [alias, target] = pair.split("=").map((s) => s.trim().toLowerCase());
+    if (alias === addr && target) return target;
+  }
+  return addr;
+}
+
 /** Relais SMTP sortant configuré ? (check env uniquement — pas d'import nodemailer ici) */
 export function smtpConfigured(): boolean {
   return Boolean(
@@ -743,11 +763,12 @@ export async function receiveExternalMail(opts: {
     }));
 
   for (const raw of opts.to || []) {
-    const addr = String(raw).trim().toLowerCase();
+    const origAddr = String(raw).trim().toLowerCase();
+    const addr = inboundAlias(origAddr);
     if (!INTERNAL_RE.test(addr)) continue;
     const acc = await getAccountByEmail(addr);
     if (!acc || acc.status !== "active") {
-      dropped.push(addr);
+      dropped.push(origAddr);
       continue;
     }
     const pub = await vaultPublicKey(acc.id);
@@ -759,7 +780,7 @@ export async function receiveExternalMail(opts: {
         folder: "inbox",
         from,
         fromName: String(opts.fromName || "").slice(0, 120),
-        to: [addr],
+        to: [origAddr],
         subjectCipher: sealed.subjectCipher,
         bodyCipher: sealed.bodyCipher,
         wrap: sealed.wrap,
@@ -793,7 +814,7 @@ export async function receiveExternalMail(opts: {
         folder: "inbox",
         from,
         fromName: String(opts.fromName || "").slice(0, 120),
-        to: [addr],
+        to: [origAddr],
         subject: subj,
         body,
         kind: "mail",

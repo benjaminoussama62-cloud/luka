@@ -186,11 +186,25 @@ async function attemptSend(id: string): Promise<void> {
     return;
   }
 
-  // Expéditeur : TX_FROM_<APP> permet un domaine propre par app dès que le
-  // domaine est vérifié chez le relais (ex : noreply@to-tala.com). Sinon
-  // fallback global — signé ayeba.app, déjà authentifié SPF/DKIM/DMARC.
+  // Expéditeur : data.sender (rôle : receipts|billing|support|hello…) a la
+  // priorité, puis TX_FROM_<APP>_<TYPE>, puis TX_FROM_<APP>. Sinon fallback
+  // global — signé ayeba.app, déjà authentifié SPF/DKIM/DMARC.
+  const appKey = row.app.toUpperCase();
+  let senderTag = "";
+  let dataReplyTo = "";
+  try {
+    const d = JSON.parse(row.data || "{}") as { sender?: unknown; replyTo?: unknown };
+    if (typeof d?.sender === "string" && /^[a-z]{2,20}$/i.test(d.sender)) {
+      senderTag = `_${d.sender.toUpperCase()}`;
+    }
+    if (typeof d?.replyTo === "string" && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(d.replyTo)) {
+      dataReplyTo = d.replyTo;
+    }
+  } catch { /* data déjà validée plus haut */ }
   const from =
-    process.env[`TX_FROM_${row.app.toUpperCase()}`] ||
+    process.env[`TX_FROM_${appKey}${senderTag}`] ||
+    process.env[`TX_FROM_${appKey}_${row.type.toUpperCase()}`] ||
+    process.env[`TX_FROM_${appKey}`] ||
     process.env.TX_SMTP_FROM ||
     process.env.SMTP_FROM ||
     `notifications@ayeba.app`;
@@ -201,7 +215,12 @@ async function attemptSend(id: string): Promise<void> {
     subject: msg.subject,
     text: msg.text,
     html: msg.html,
-    replyTo: process.env.TX_REPLY_TO || `support@ayeba.app`,
+    replyTo:
+      dataReplyTo ||
+      process.env[`TX_REPLY_TO_${appKey}${senderTag}`] ||
+      process.env[`TX_REPLY_TO_${appKey}`] ||
+      process.env.TX_REPLY_TO ||
+      `support@ayeba.app`,
     unsubscribeUrl: `https://ayeba.app/api/mail/unsubscribe?a=${encodeURIComponent(row.to_addr)}&app=${row.app}`,
   });
   if (!res.ok) {
