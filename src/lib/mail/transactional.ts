@@ -192,13 +192,25 @@ async function attemptSend(id: string): Promise<void> {
   const appKey = row.app.toUpperCase();
   let senderTag = "";
   let dataReplyTo = "";
+  let dataFromName = "";
+  let dataInReplyTo = "";
   try {
-    const d = JSON.parse(row.data || "{}") as { sender?: unknown; replyTo?: unknown };
+    const d = JSON.parse(row.data || "{}") as {
+      sender?: unknown; replyTo?: unknown; fromName?: unknown; inReplyTo?: unknown;
+    };
     if (typeof d?.sender === "string" && /^[a-z]{2,20}$/i.test(d.sender)) {
       senderTag = `_${d.sender.toUpperCase()}`;
     }
     if (typeof d?.replyTo === "string" && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(d.replyTo)) {
       dataReplyTo = d.replyTo;
+    }
+    // Nom d'agent dans le From — « Mabaya — Support OMEGA ».
+    if (typeof d?.fromName === "string" && d.fromName.trim().length >= 2 && d.fromName.length <= 80) {
+      dataFromName = d.fromName.replace(/[\r\n"<>]/g, "").trim();
+    }
+    // Threading RFC — la réponse du lecteur se range dans le fil.
+    if (typeof d?.inReplyTo === "string" && d.inReplyTo.length <= 300 && !/[\r\n]/.test(d.inReplyTo)) {
+      dataInReplyTo = d.inReplyTo;
     }
   } catch { /* data déjà validée plus haut */ }
   const from =
@@ -210,7 +222,7 @@ async function attemptSend(id: string): Promise<void> {
     `notifications@ayeba.app`;
   const res = await sendExternalMail({
     from,
-    fromName: appName(row.app as TxApp),
+    fromName: dataFromName || appName(row.app as TxApp),
     to: row.to_addr,
     subject: msg.subject,
     text: msg.text,
@@ -222,6 +234,9 @@ async function attemptSend(id: string): Promise<void> {
       process.env.TX_REPLY_TO ||
       `support@ayeba.app`,
     unsubscribeUrl: `https://ayeba.app/api/mail/unsubscribe?a=${encodeURIComponent(row.to_addr)}&app=${row.app}`,
+    headers: dataInReplyTo
+      ? { "In-Reply-To": dataInReplyTo, References: dataInReplyTo }
+      : undefined,
   });
   if (!res.ok) {
     const permanent = /5\d\d|boîte|inexistante|does not exist|rejected|blocked/i.test(res.error);
