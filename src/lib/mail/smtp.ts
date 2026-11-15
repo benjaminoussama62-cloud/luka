@@ -62,7 +62,16 @@ export async function sendExternalMail(opts: {
   const t = getTransporter();
   if (!t) return { ok: false, error: "Relais SMTP non configuré" };
   try {
-    const from = process.env.SMTP_FROM || opts.from;
+    // Le From demandé n'est honoré que pour un domaine authentifié côté
+    // relais (Brevo) — un expéditeur non vérifié serait rejeté ou ruiné en
+    // spam. SMTP_VERIFIED_DOMAINS=ayeba.app,omega-web.org bascule le send-as
+    // sans déployer ; SMTP_FROM reste le repli sûr sinon.
+    const verified = (process.env.SMTP_VERIFIED_DOMAINS || "")
+      .split(",")
+      .map((d) => d.trim().toLowerCase())
+      .filter(Boolean);
+    const domain = opts.from.split("@")[1]?.toLowerCase() || "";
+    const from = verified.includes(domain) ? opts.from : process.env.SMTP_FROM || opts.from;
     await t.sendMail({
       from: opts.fromName ? `"${opts.fromName.replace(/"/g, "")}" <${from}>` : from,
       to: opts.to,
