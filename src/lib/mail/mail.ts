@@ -579,6 +579,29 @@ function inboundAlias(addr: string): string {
   return addr;
 }
 
+/**
+ * Alias d'envoi (« send-as »). Un compte peut envoyer vers l'extérieur
+ * sous une adresse de marque — ex. le compte support@ayeba.app part
+ * « From: Support OMEGA <support@omega-web.org> ».
+ *
+ * Env `MAIL_SENDAS` — paires `compte=adresse_publique` séparées par `;` :
+ *   support@ayeba.app=support@omega-web.org;equipe@ayeba.app=hello@omega-web.org
+ *
+ * Ne s'applique qu'aux envois externes via le relais SMTP — le domaine
+ * public doit y être authentifié (DKIM). Les mails internes gardent
+ * l'adresse réelle du compte.
+ */
+export function sendAsOf(email: string): string {
+  const raw = (process.env.MAIL_SENDAS || "").trim();
+  if (!raw) return email;
+  const me = email.trim().toLowerCase();
+  for (const pair of raw.split(";")) {
+    const [acct, pub] = pair.split("=").map((s) => s.trim().toLowerCase());
+    if (acct === me && pub) return pub;
+  }
+  return email;
+}
+
 /** Relais SMTP sortant configuré ? (check env uniquement — pas d'import nodemailer ici) */
 export function smtpConfigured(): boolean {
   return Boolean(
@@ -693,14 +716,15 @@ export async function sendExternalBatch(
   const senderName = sender.displayName || sender.address;
   const subj = subject.trim() || "(sans objet)";
 
+  const publicFrom = sendAsOf(sender.email);
   for (const addr of externals) {
     const res = await sendExternalMail({
-      from: sender.email,
+      from: publicFrom,
       fromName: senderName,
       to: addr,
       subject: subj,
       text: body,
-      replyTo: sender.email,
+      replyTo: publicFrom,
     });
     if (res.ok) {
       delivered.push(addr);
@@ -1631,12 +1655,12 @@ export async function deliverSealedMail(
         continue;
       }
       const res = await sendExternalMail({
-        from: sender.email,
+        from: sendAsOf(sender.email),
         fromName: senderName,
         to: addr,
         subject,
         text,
-        replyTo: sender.email,
+        replyTo: sendAsOf(sender.email),
         attachments,
       });
       if (res.ok) delivered.push(addr);
