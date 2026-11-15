@@ -154,6 +154,55 @@ function hueFrom(text: string) {
   return h;
 }
 
+// Webmail grand public : on garde la pastille lettre (sinon tout le monde
+// porterait le logo Gmail). Pour les autres domaines on tente l'icône du
+// site — les marques de l'écosystème (Omega, TALA, SombaTeka…) et les
+// expéditeurs pros affichent ainsi leur vraie identité visuelle.
+const FREE_MAIL_DOMAINS = new Set([
+  "gmail.com", "googlemail.com", "yahoo.com", "yahoo.fr", "ymail.com",
+  "outlook.com", "hotmail.com", "hotmail.fr", "live.com", "msn.com",
+  "icloud.com", "me.com", "mac.com", "aol.com", "proton.me", "protonmail.com",
+  "pm.me", "mail.ru", "bk.ru", "list.ru", "inbox.ru", "yandex.ru", "yandex.com",
+  "gmx.com", "gmx.fr", "zoho.com", "free.fr", "orange.fr", "sfr.fr",
+  "laposte.net", "bbox.fr", "wanadoo.fr", "mail.com", "tutanota.com", "tuta.io",
+]);
+
+const SENDER_ICONS: Record<string, string> = {
+  "omega-web.org": "https://omega-web.org/icons/Icon-512.png",
+};
+
+function senderIconUrls(from: string): string[] {
+  const domain = from.split("@")[1]?.trim().toLowerCase();
+  if (!domain || FREE_MAIL_DOMAINS.has(domain)) return [];
+  const known = SENDER_ICONS[domain];
+  return [known ?? `https://${domain}/favicon.png`, `https://${domain}/favicon.ico`];
+}
+
+function SenderAvatar({ from, fromName, className }: { from: string; fromName: string; className: string }) {
+  const [bad, setBad] = useState<Set<string>>(new Set());
+  const url = senderIconUrls(from).find((u) => !bad.has(u));
+  return (
+    <div
+      className={className}
+      style={{
+        background: `linear-gradient(135deg, hsl(${hueFrom(from)} 62% 42%), hsl(${(hueFrom(from) + 40) % 360} 70% 30%))`,
+        position: "relative",
+        overflow: "hidden",
+      }}
+    >
+      {(fromName || from)[0].toUpperCase()}
+      {url && (
+        <img
+          src={url}
+          alt=""
+          onError={() => setBad((s) => new Set(s).add(url))}
+          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", background: "#fff" }}
+        />
+      )}
+    </div>
+  );
+}
+
 export function MailApp() {
   const { user, ready, refreshSession, logout } = useAuth();
   const [account, setAccount] = useState<Account | null>(null);
@@ -1145,14 +1194,7 @@ export function MailApp() {
                 >
                   {selected.has(m.id) ? <IcCheck size={12} /> : null}
                 </span>
-                <div
-                  className="mail-item-avatar"
-                  style={{
-                    background: `linear-gradient(135deg, hsl(${hueFrom(m.from)} 62% 42%), hsl(${(hueFrom(m.from) + 40) % 360} 70% 30%))`,
-                  }}
-                >
-                  {(m.fromName || m.from)[0].toUpperCase()}
-                </div>
+                <SenderAvatar from={m.from} fromName={m.fromName} className="mail-item-avatar" />
                 <div className="mail-item-main">
                   <div className="mail-item-top">
                     {!m.read && <i className="dot" />}
@@ -1361,14 +1403,7 @@ export function MailApp() {
                 {(thread.length ? thread : [{ msg: open, subject: open.subject, body: open.body, files: openFiles }]).map((t) => (
                   <article key={t.msg.id} className={`mail-msg ${t.msg.id === open.id ? "focus" : ""}`}>
                     <div className="mail-msg-head">
-                      <div
-                        className="mail-msg-avatar"
-                        style={{
-                          background: `linear-gradient(135deg, hsl(${hueFrom(t.msg.from)} 62% 42%), hsl(${(hueFrom(t.msg.from) + 40) % 360} 70% 30%))`,
-                        }}
-                      >
-                        {(t.msg.fromName || t.msg.from)[0].toUpperCase()}
-                      </div>
+                      <SenderAvatar from={t.msg.from} fromName={t.msg.fromName} className="mail-msg-avatar" />
                       <div className="mail-msg-id">
                         <div className="from">{t.msg.fromName || t.msg.from}<span>{t.msg.from}</span></div>
                         <div className="to">à {t.msg.to.join(", ")}</div>

@@ -15,12 +15,12 @@ export type TxType =
 
 export type TxMessage = { subject: string; text: string; html: string };
 
-const BRAND: Record<TxApp, { name: string; color: string; domain: string; tagline: Record<TxLocale, string> }> = {
+const BRAND: Record<TxApp, { name: string; color: string; domain: string; icon?: string; tagline: Record<TxLocale, string> }> = {
   ayeba:     { name: "Ayeba",     color: "#0A66FF", domain: "ayeba.app",     tagline: { fr: "L'écosystème numérique africain", en: "The African digital ecosystem", ln: "Ecosysteme ya Afrique", sw: "Mfumo wa kidijitali wa Afrika" } },
   mail:      { name: "Ayeba Mail", color: "#0A66FF", domain: "ayeba.app",     tagline: { fr: "Votre coffre de bout en bout", en: "Your end-to-end vault", ln: "Coffre nayo", sw: "Kisanduku chako" } },
   tala:      { name: "TALA",      color: "#7C3AED", domain: "to-tala.com",   tagline: { fr: "Regardez. Créez. Vivez.", en: "Watch. Create. Live.", ln: "TALA", sw: "TALA" } },
   sombateka: { name: "SombaTeka", color: "#2563EB", domain: "sombateka.com", tagline: { fr: "Le marché qui vous ressemble", en: "The marketplace made for you", ln: "SombaTeka", sw: "SombaTeka" } },
-  omega:     { name: "OMEGA",     color: "#111827", domain: "omega-web.org", tagline: { fr: "Lisez ce qui vous ressemble", en: "Read what feels like you", ln: "OMEGA", sw: "OMEGA" } },
+  omega:     { name: "OMEGA",     color: "#111827", domain: "omega-web.org", icon: "https://omega-web.org/icons/Icon-512.png", tagline: { fr: "Lisez ce qui vous ressemble", en: "Read what feels like you", ln: "OMEGA", sw: "OMEGA" } },
   mbongo:    { name: "Mbongo",    color: "#047857", domain: "ayeba.app",     tagline: { fr: "Votre argent, maîtrisé", en: "Your money, mastered", ln: "Mbongo", sw: "Mbongo" } },
 };
 
@@ -150,7 +150,7 @@ function layout(app: TxApp, locale: TxLocale, inner: string): string {
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#f3f4f6">
 <tr><td align="center" style="padding:32px 16px">
 <table role="presentation" width="560" cellspacing="0" cellpadding="0" border="0" style="max-width:560px;width:100%">
-${row(cell(`<span style="font-family:Arial,Helvetica,sans-serif;font-size:22px;font-weight:800;color:${b.color};letter-spacing:.04em">${esc(b.name.toUpperCase())}</span>`, "padding:0 8px 20px"))}
+${row(cell(`<table role="presentation" cellspacing="0" cellpadding="0" border="0"><tr>${b.icon ? `<td style="padding-right:10px"><img src="${safeHref(b.icon)}" width="34" height="34" alt="${esc(b.name)}" style="display:block;border-radius:8px"></td>` : ""}<td style="vertical-align:middle"><span style="font-family:Arial,Helvetica,sans-serif;font-size:22px;font-weight:800;color:${b.color};letter-spacing:.04em">${esc(b.name.toUpperCase())}</span></td></tr></table>`, "padding:0 8px 20px"))}
 ${row(cell(`<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#ffffff" style="border-radius:14px;border:1px solid #e5e7eb"><tr><td style="padding:36px 32px">${inner}</td></tr></table>`))}
 ${row(cell(`<p style="font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#9ca3af;margin:20px 8px 0;line-height:1.6">${esc(s.auto)}<br>${esc(s.footer(b.domain))}</p>`))}
 </table>
@@ -162,6 +162,14 @@ ${row(cell(`<p style="font-family:Arial,Helvetica,sans-serif;font-size:11px;colo
 
 const p = (html: string, style = "") =>
   `<p style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.65;color:#1f2937;margin:0 0 16px;${style}">${html}</p>`;
+
+// Visuel de couverture/annonce (affiche portrait, centrée, taille bornée).
+const img = (src: string) =>
+  `<img src="${safeHref(src)}" alt="" width="180" style="display:block;width:100%;max-width:180px;height:auto;border-radius:10px;margin:0 auto 18px">`;
+
+// Pixel d'ouverture 1×1 (marketing uniquement, `data.pixel`).
+const pxl = (data: Record<string, string>) =>
+  data.pixel ? `<img src="${safeHref(data.pixel)}" width="1" height="1" alt="" style="display:block;border:0;width:1px;height:1px;opacity:0">` : "";
 
 const codeBlock = (code: string, color: string) =>
   `<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:8px 0 20px"><tr><td bgcolor="#f9fafb" style="border:2px dashed ${color};border-radius:10px;padding:16px 34px"><span style="font-family:'Courier New',Courier,monospace;font-size:32px;font-weight:700;letter-spacing:6px;color:${color}">${esc(code)}</span></td></tr></table>`;
@@ -230,7 +238,7 @@ export function renderTx(app: TxApp, type: TxType, locale: TxLocale, data: Recor
     }
     case "welcome": {
       const subject = s.welcomeTitle(name).replace(" !", ` — ${b.name}!`);
-      const inner = `${p(`<span style="font-size:20px;font-weight:700;color:${b.color}">${esc(s.welcomeTitle(name))}</span>`)}${p(esc(data.intro || b.tagline[locale]))}${data.url ? btn(data.url, locale === "en" ? "Get started" : "Commencer", b.color) : ""}`;
+      const inner = `${p(`<span style="font-size:20px;font-weight:700;color:${b.color}">${esc(s.welcomeTitle(name))}</span>`)}${data.image ? img(data.image) : ""}${p(esc(data.intro || b.tagline[locale]))}${data.url ? btn(data.url, locale === "en" ? "Get started" : "Commencer", b.color) : ""}${pxl(data)}`;
       const text = `${s.welcomeTitle(name)}\n\n${data.intro || b.tagline[locale]}\n\n— ${b.name}`;
       return { subject, text, html: layout(app, locale, inner) };
     }
@@ -240,7 +248,7 @@ export function renderTx(app: TxApp, type: TxType, locale: TxLocale, data: Recor
       const unsub = data.unsub
         ? `<p style="font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#9ca3af;text-align:center;margin:28px 0 0"><a href="${safeHref(data.unsub)}" style="color:#9ca3af;text-decoration:underline">${esc(locale === "en" ? "Unsubscribe from these emails" : "Se désinscrire de ces e-mails")}</a></p>`
         : "";
-      const inner = `${hi}${p(esc(data.detail || data.subject || ""))}${data.url ? btn(data.url, data.cta || (locale === "en" ? "View" : "Voir"), b.color) : ""}${unsub}`;
+      const inner = `${data.image ? img(data.image) : ""}${hi}${p(esc(data.detail || data.subject || ""))}${data.url ? btn(data.url, data.cta || (locale === "en" ? "View" : "Voir"), b.color) : ""}${unsub}${pxl(data)}`;
       const text = `${s.hi(name)}\n\n${data.detail || data.subject || ""}\n\n— ${b.name}`;
       return { subject, text, html: layout(app, locale, inner) };
     }
