@@ -171,16 +171,31 @@ const SENDER_ICONS: Record<string, string> = {
   "omega-web.org": "https://omega-web.org/icons/Icon-512.png",
 };
 
-function senderIconUrls(from: string): string[] {
+// Les mails transactionnels de l'écosystème partent tous de
+// notifications@ayeba.app : le domaine afficherait le logo Ayeba pour
+// tout le monde — le nom affiché (fromName) identifie la vraie app.
+// Pas de repli sur le favicon ayeba.app ici : la lettre vaut mieux
+// qu'un logo trompeur si l'icône de l'app ne charge pas.
+const APP_SENDER_ICONS: Record<string, string[]> = {
+  tala: ["https://to-tala.com/favicon.ico", "https://to-tala.com/favicon.png"],
+  sombateka: ["https://sombatekaonline.com/favicon.png", "https://sombatekaonline.com/favicon.ico"],
+  omega: ["https://omega-web.org/icons/Icon-512.png"],
+};
+
+function senderIconUrls(from: string, fromName = ""): string[] {
   const domain = from.split("@")[1]?.trim().toLowerCase();
   if (!domain || FREE_MAIL_DOMAINS.has(domain)) return [];
+  if (domain === "ayeba.app") {
+    const appIcons = APP_SENDER_ICONS[fromName.trim().toLowerCase()];
+    if (appIcons) return [...appIcons];
+  }
   const known = SENDER_ICONS[domain];
   return [known ?? `https://${domain}/favicon.png`, `https://${domain}/favicon.ico`];
 }
 
 function SenderAvatar({ from, fromName, className }: { from: string; fromName: string; className: string }) {
   const [bad, setBad] = useState<Set<string>>(new Set());
-  const url = senderIconUrls(from).find((u) => !bad.has(u));
+  const url = senderIconUrls(from, fromName).find((u) => !bad.has(u));
   return (
     <div
       className={className}
