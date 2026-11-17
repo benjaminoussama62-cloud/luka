@@ -216,7 +216,7 @@ public class AyebaBrowserPlugin: CAPPlugin, WKNavigationDelegate, WKUIDelegate {
     @objc func sslProceed(_ call: CAPPluginCall) {
         let proceed = call.getBool("proceed") ?? false
         let credential = proceed ? pendingSslTrust.map { URLCredential(trust: $0) } : nil
-        pendingSslChallenge?(proceed && credential != nil ? .useCredential : .cancel, credential)
+        pendingSslChallenge?(proceed && credential != nil ? .useCredential : .cancelAuthenticationChallenge, credential)
         pendingSslChallenge = nil
         pendingSslTrust = nil
         call.resolve()
