@@ -14,6 +14,7 @@ public class AyebaBrowserPlugin: CAPPlugin, WKNavigationDelegate, WKUIDelegate {
     private var tabSnapshots: [String: URL] = [:]
     private var currentTabId: String?
     private var pendingSslChallenge: ((URLSession.AuthChallengeDisposition, URLCredential?) -> Void)?
+    private var pendingSslTrust: SecTrust?
 
     // MARK: - Cycle de vie
 
@@ -213,9 +214,10 @@ public class AyebaBrowserPlugin: CAPPlugin, WKNavigationDelegate, WKUIDelegate {
 
     @objc func sslProceed(_ call: CAPPluginCall) {
         let proceed = call.getBool("proceed") ?? false
-        pendingSslChallenge?(proceed ? .useCredential : .cancel,
-                             proceed ? URLCredential(trust: SecTrust()) : nil)
+        let credential = proceed ? pendingSslTrust.map { URLCredential(trust: $0) } : nil
+        pendingSslChallenge?(proceed && credential != nil ? .useCredential : .cancel, credential)
         pendingSslChallenge = nil
+        pendingSslTrust = nil
         call.resolve()
     }
 
@@ -303,15 +305,16 @@ public class AyebaBrowserPlugin: CAPPlugin, WKNavigationDelegate, WKUIDelegate {
     public func webView(_ webView: WKWebView,
                         didReceive challenge: URLAuthenticationChallenge,
                         completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
-        if challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust {
+        if challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
+           let trust = challenge.protectionSpace.serverTrust {
             pendingSslChallenge = completionHandler
+            pendingSslTrust = trust
             notifyListeners("sslError", data: [
                 "url": webView.url?.absoluteString ?? "",
                 "primaryError": -1,
                 "certificate": challenge.protectionSpace.host,
             ])
-            // Par defaut on refuse en attendant la decision JS.
-            completionHandler(.cancel, nil)
+            // Le handler reste en attente : sslProceed() le resoudra.
             return
         }
         completionHandler(.performDefaultHandling, nil)

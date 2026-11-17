@@ -59,6 +59,7 @@ jobs:
 
       - name: Archive (signée si secrets, sinon compile-check)
         run: |
+          set -o pipefail
           cd ios/App
           if [ "${{ steps.signing.outputs.signed }}" = "true" ]; then
             xcodebuild archive \
