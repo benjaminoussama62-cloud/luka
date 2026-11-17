@@ -59,24 +59,30 @@ jobs:
 
       - name: Archive (signée si secrets, sinon compile-check)
         run: |
-          set -o pipefail
           cd ios/App
+          XCB_ARGS="-workspace App.xcworkspace -scheme App -configuration Release -archivePath ../AYEBA.xcarchive"
           if [ "${{ steps.signing.outputs.signed }}" = "true" ]; then
-            xcodebuild archive \
-              -workspace App.xcworkspace -scheme App \
-              -configuration Release \
-              -archivePath ../AYEBA.xcarchive \
-              -allowProvisioningUpdates \
-              DEVELOPMENT_TEAM="${{ secrets.IOS_TEAM_ID }}" \
-              | tail -20
+            xcodebuild archive $XCB_ARGS -allowProvisioningUpdates \
+              DEVELOPMENT_TEAM="${{ secrets.IOS_TEAM_ID }}" > ../xcodebuild.log 2>&1 || XCB_FAILED=1
           else
-            xcodebuild archive \
-              -workspace App.xcworkspace -scheme App \
-              -configuration Release \
-              -archivePath ../AYEBA.xcarchive \
-              CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
-              | tail -20
+            xcodebuild archive $XCB_ARGS \
+              CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO > ../xcodebuild.log 2>&1 || XCB_FAILED=1
           fi
+          tail -30 ../xcodebuild.log
+          if [ "$XCB_FAILED" = "1" ]; then
+            grep -E "error:|fatal error" ../xcodebuild.log | head -20 | while IFS= read -r line; do
+              echo "::error::$line"
+            done
+            exit 1
+          fi
+
+      - name: Upload log xcodebuild (si echec)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ayeba-xcodebuild-log
+          path: mobile/ayeba-app/ios/xcodebuild.log
+          retention-days: 7
 
       - name: Export IPA (si signé)
         if: steps.signing.outputs.signed == 'true'

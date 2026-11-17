@@ -1,6 +1,7 @@
 import Capacitor
 import WebKit
 import UIKit
+import Security
 
 /// Navigateur natif AYEBA pour iOS — WKWebView flottant au-dessus du bridge
 /// Capacitor, comme le plugin Android (open/frame/hidden/tabs/capture).
