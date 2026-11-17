@@ -64,7 +64,7 @@ Secondaire : Utilitaires
 === URLS ===
 Site web marketing : https://ayeba.app/mail
 Politique de confidentialité : https://ayeba.app/privacy
-URL d'assistance : https://ayeba.app/support  (page existante, pro)
+URL d'assistance : https://ayeba.app/mail/support  (page dédiée Ayeba Mail)
 
 === CAPTURES D'ÉCRAN (obligatoires) ===
 • iPhone 6.9" (1320×2868 ou 1290×2796) — 3 minimum, 10 max
