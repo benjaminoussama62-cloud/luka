@@ -9,7 +9,7 @@ import Security
 public class AyebaBrowserPlugin: CAPPlugin, WKNavigationDelegate, WKUIDelegate {
 
     private var container: UIView?
-    private var webView: WKWebView?
+    private var browserWebView: WKWebView?
     private var findBar: UIView?
     private var desktopMode = false
     private var tabSnapshots: [String: URL] = [:]
@@ -31,7 +31,7 @@ public class AyebaBrowserPlugin: CAPPlugin, WKNavigationDelegate, WKUIDelegate {
     }
 
     private func ensureWebView() -> WKWebView? {
-        if let webView = webView { return webView }
+        if let webView = browserWebView { return webView }
         guard let c = ensureContainer() else { return nil }
         let config = WKWebViewConfiguration()
         config.allowsInlineMediaPlayback = true
@@ -43,13 +43,13 @@ public class AyebaBrowserPlugin: CAPPlugin, WKNavigationDelegate, WKUIDelegate {
         wv.backgroundColor = UIColor(red: 5/255, green: 5/255, blue: 7/255, alpha: 1)
         wv.addObserver(self, forKeyPath: #keyPath(WKWebView.estimatedProgress), options: .new, context: nil)
         c.addSubview(wv)
-        webView = wv
+        browserWebView = wv
         return wv
     }
 
     public override func observeValue(forKeyPath keyPath: String?, of object: Any?,
                                       change: [NSKeyValueChangeKey: Any]?, context: UnsafeMutableRawPointer?) {
-        if keyPath == #keyPath(WKWebView.estimatedProgress), let wv = webView {
+        if keyPath == #keyPath(WKWebView.estimatedProgress), let wv = browserWebView {
             notifyListeners("progress", data: ["value": wv.estimatedProgress])
         }
     }
@@ -93,7 +93,7 @@ public class AyebaBrowserPlugin: CAPPlugin, WKNavigationDelegate, WKUIDelegate {
             let w = CGFloat(call.getFloat("width") ?? Float(UIScreen.main.bounds.width))
             let h = CGFloat(call.getFloat("height") ?? Float(UIScreen.main.bounds.height))
             c.frame = CGRect(x: x, y: y, width: w, height: h)
-            self.webView?.frame = c.bounds
+            self.browserWebView?.frame = c.bounds
             call.resolve()
         }
     }
@@ -107,7 +107,7 @@ public class AyebaBrowserPlugin: CAPPlugin, WKNavigationDelegate, WKUIDelegate {
 
     @objc func loadUrl(_ call: CAPPluginCall) {
         DispatchQueue.main.async {
-            guard let wv = self.webView, let s = call.getString("url"),
+            guard let wv = self.browserWebView, let s = call.getString("url"),
                   !s.isEmpty, let u = URL(string: s) else {
                 call.resolve()
                 return
@@ -119,21 +119,21 @@ public class AyebaBrowserPlugin: CAPPlugin, WKNavigationDelegate, WKUIDelegate {
 
     @objc func goBack(_ call: CAPPluginCall) {
         DispatchQueue.main.async {
-            self.webView?.goBack()
+            self.browserWebView?.goBack()
             call.resolve()
         }
     }
 
     @objc func goForward(_ call: CAPPluginCall) {
         DispatchQueue.main.async {
-            self.webView?.goForward()
+            self.browserWebView?.goForward()
             call.resolve()
         }
     }
 
     @objc func goToIndex(_ call: CAPPluginCall) {
         DispatchQueue.main.async {
-            guard let wv = self.webView, let idx = call.getInt("index") else {
+            guard let wv = self.browserWebView, let idx = call.getInt("index") else {
                 call.resolve()
                 return
             }
@@ -148,21 +148,21 @@ public class AyebaBrowserPlugin: CAPPlugin, WKNavigationDelegate, WKUIDelegate {
 
     @objc func reload(_ call: CAPPluginCall) {
         DispatchQueue.main.async {
-            self.webView?.reload()
+            self.browserWebView?.reload()
             call.resolve()
         }
     }
 
     @objc func stop(_ call: CAPPluginCall) {
         DispatchQueue.main.async {
-            self.webView?.stopLoading()
+            self.browserWebView?.stopLoading()
             call.resolve()
         }
     }
 
     @objc func evaluate(_ call: CAPPluginCall) {
         DispatchQueue.main.async {
-            guard let wv = self.webView, let script = call.getString("script") else {
+            guard let wv = self.browserWebView, let script = call.getString("script") else {
                 call.resolve()
                 return
             }
@@ -189,7 +189,7 @@ public class AyebaBrowserPlugin: CAPPlugin, WKNavigationDelegate, WKUIDelegate {
               return count;
             })()
             """
-            self.webView?.evaluateJavaScript(js) { result, _ in
+            self.browserWebView?.evaluateJavaScript(js) { result, _ in
                 let matches = (result as? Int) ?? 0
                 self.notifyListeners("findResult", data: ["active": matches > 0 ? 1 : 0, "matches": matches])
             }
@@ -205,7 +205,7 @@ public class AyebaBrowserPlugin: CAPPlugin, WKNavigationDelegate, WKUIDelegate {
         DispatchQueue.main.async {
             self.desktopMode = call.getBool("enabled") ?? false
             if #available(iOS 13.0, *) {
-                self.webView?.customUserAgent = self.desktopMode
+                self.browserWebView?.customUserAgent = self.desktopMode
                     ? "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
                     : nil
             }
@@ -225,7 +225,7 @@ public class AyebaBrowserPlugin: CAPPlugin, WKNavigationDelegate, WKUIDelegate {
     /// Capture JPEG de la page — equivalent du draw() Android, via takeSnapshot.
     @objc func capture(_ call: CAPPluginCall) {
         DispatchQueue.main.async {
-            guard let wv = self.webView, !wv.isHidden else {
+            guard let wv = self.browserWebView, !wv.isHidden else {
                 call.resolve([:])
                 return
             }
@@ -246,7 +246,7 @@ public class AyebaBrowserPlugin: CAPPlugin, WKNavigationDelegate, WKUIDelegate {
 
     @objc func saveTab(_ call: CAPPluginCall) {
         DispatchQueue.main.async {
-            if let id = call.getString("id"), let url = self.webView?.url {
+            if let id = call.getString("id"), let url = self.browserWebView?.url {
                 self.tabSnapshots[id] = url
                 self.currentTabId = id
             }
@@ -256,7 +256,7 @@ public class AyebaBrowserPlugin: CAPPlugin, WKNavigationDelegate, WKUIDelegate {
 
     @objc func restoreTab(_ call: CAPPluginCall) {
         DispatchQueue.main.async {
-            guard let wv = self.webView, let id = call.getString("id") else {
+            guard let wv = self.browserWebView, let id = call.getString("id") else {
                 call.resolve()
                 return
             }
@@ -333,7 +333,7 @@ public class AyebaBrowserPlugin: CAPPlugin, WKNavigationDelegate, WKUIDelegate {
     }
 
     private func notifyNav(loading: Bool) {
-        guard let wv = webView else { return }
+        guard let wv = browserWebView else { return }
         notifyListeners("nav", data: [
             "url": wv.url?.absoluteString ?? "",
             "title": wv.title ?? "",
