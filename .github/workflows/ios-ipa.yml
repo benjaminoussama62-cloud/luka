@@ -46,18 +46,22 @@ jobs:
         run: |
           if [ -z "$P12_B64" ]; then echo "signed=false" >> "$GITHUB_OUTPUT"; exit 0; fi
           echo "signed=true" >> "$GITHUB_OUTPUT"
-          echo "$P12_B64" | base64 -d > signing.p12
-          echo "$PROFILE_B64" | base64 -d > profile.mobileprovision
+          echo "$P12_B64" | base64 -d > signing.p12 || { echo "::error::decode IOS_P12_B64"; exit 1; }
+          echo "$PROFILE_B64" | base64 -d > profile.mobileprovision || { echo "::error::decode IOS_PROFILE_B64"; exit 1; }
+          wc -c signing.p12 profile.mobileprovision
           echo "== diag: validite du p12 + mot de passe =="
           openssl pkcs12 -in signing.p12 -passin "pass:$P12_PASS" -clcerts -nokeys 2>/dev/null \
             | openssl x509 -noout -subject -dates \
             || { echo "::error::P12 illisible ou mot de passe incorrect (IOS_P12_PASSWORD)"; exit 1; }
           echo "== diag: contenu du profil =="
-          security cms -D -i profile.mobileprovision -o /tmp/prof.plist
-          /usr/libexec/PlistBuddy -c "Print :Name" -c "Print :Entitlements:application-identifier" /tmp/prof.plist
-          security create-keychain -p ci build.keychain
-          security default-keychain -s build.keychain
-          security unlock-keychain -p ci build.keychain
+          security cms -D -i profile.mobileprovision -o /tmp/prof.plist \
+            || { echo "::error::profil .mobileprovision illisible (IOS_PROFILE_B64)"; exit 1; }
+          /usr/libexec/PlistBuddy -c "Print :Name" -c "Print :Entitlements:application-identifier" /tmp/prof.plist \
+            || { echo "::error::profil decodable mais champs absents"; exit 1; }
+          security create-keychain -p ci build.keychain \
+            || { echo "::error::create-keychain"; exit 1; }
+          security default-keychain -s build.keychain || { echo "::error::default-keychain"; exit 1; }
+          security unlock-keychain -p ci build.keychain || { echo "::error::unlock-keychain"; exit 1; }
           if ! security import signing.p12 -k build.keychain -P "$P12_PASS" \
             -T /usr/bin/codesign -T /usr/bin/security; then
             echo "import direct ko — normalisation du p12 en format Apple (PBE-SHA1-3DES)"
@@ -70,11 +74,14 @@ jobs:
                 -keypbe PBE-SHA1-3DES -certpbe PBE-SHA1-3DES -macalg sha1 \
                 -passout "pass:$P12_PASS"
             security import signing_compat.p12 -k build.keychain -P "$P12_PASS" \
-              -T /usr/bin/codesign -T /usr/bin/security
+              -T /usr/bin/codesign -T /usr/bin/security \
+              || { echo "::error::import p12 (direct + compat) — mot de passe/cle invalide"; exit 1; }
           fi
-          security set-key-partition-list -S apple-tool:,apple: -s -k ci build.keychain
+          security set-key-partition-list -S apple-tool:,apple: -s -k ci build.keychain \
+            || { echo "::error::set-key-partition-list"; exit 1; }
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          cp profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/
+          cp profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/ \
+            || { echo "::error::copie profil"; exit 1; }
 
       - name: Archive (signée si secrets, sinon compile-check)
         run: |
