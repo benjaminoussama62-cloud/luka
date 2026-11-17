@@ -62,8 +62,12 @@ jobs:
           cd ios/App
           XCB_ARGS="-workspace App.xcworkspace -scheme App -configuration Release -archivePath ../AYEBA.xcarchive"
           if [ "${{ steps.signing.outputs.signed }}" = "true" ]; then
-            xcodebuild archive $XCB_ARGS -allowProvisioningUpdates \
-              DEVELOPMENT_TEAM="${{ secrets.IOS_TEAM_ID }}" > ../xcodebuild.log 2>&1 || XCB_FAILED=1
+            xcodebuild archive $XCB_ARGS \
+              CODE_SIGN_STYLE=Manual \
+              DEVELOPMENT_TEAM="${{ secrets.IOS_TEAM_ID }}" \
+              CODE_SIGN_IDENTITY="Apple Distribution" \
+              PROVISIONING_PROFILE_SPECIFIER="AYEBA App Store" \
+              > ../xcodebuild.log 2>&1 || XCB_FAILED=1
           else
             xcodebuild archive $XCB_ARGS \
               CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO > ../xcodebuild.log 2>&1 || XCB_FAILED=1
@@ -93,6 +97,10 @@ jobs:
           <plist version="1.0"><dict>
             <key>method</key><string>app-store</string>
             <key>teamID</key><string>${{ secrets.IOS_TEAM_ID }}</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>provisioningProfiles</key><dict>
+              <key>app.ayeba.mobile</key><string>AYEBA App Store</string>
+            </dict>
             <key>uploadBitcode</key><false/>
             <key>uploadSymbols</key><true/>
           </dict></plist>
