@@ -1,0 +1,61 @@
+name: Build AYEBA iOS IPA
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "mobile/ayeba-app/ios/**"
+      - "mobile/ayeba-app/www/**"
+      - "mobile/ayeba-app/capacitor.config.json"
+      - ".github/workflows/ios-ipa.yml"
+
+jobs:
+  build-ipa:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: mobile/ayeba-app
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: mobile/ayeba-app/package-lock.json
+
+      - name: Install deps & Capacitor sync
+        run: |
+          npm install
+          npx cap sync ios
+
+      - name: CocoaPods install
+        run: |
+          cd ios/App
+          pod install --repo-update
+
+      - name: Build unsigned archive
+        working-directory: mobile/ayeba-app/ios/App
+        run: |
+          xcodebuild archive \
+            -workspace App.xcworkspace \
+            -scheme App \
+            -configuration Release \
+            -archivePath "$RUNNER_TEMP/AYEBA.xcarchive" \
+            -destination 'generic/platform=iOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            -quiet
+
+      - name: Package IPA (unsigned)
+        run: |
+          mkdir -p Payload
+          cp -r "$RUNNER_TEMP/AYEBA.xcarchive/Products/Applications/App.app" Payload/
+          zip -qr AYEBA-1.0.19.ipa Payload
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ayeba-ios-ipa
+          path: mobile/ayeba-app/AYEBA-*.ipa
+          retention-days: 14
