@@ -13,43 +13,43 @@ Votre boîte @ayeba.app chiffrée sur l'appareil — fonctionne hors ligne,
 zéro collecte, zéro publicité. Nouveau : réception des mails externes.
 
 === DESCRIPTION (max 4000) ===
-Ayeba Mail — votre messagerie, vraiment à vous.
+Ayeba Mail est la messagerie officielle de l'écosystème Ayeba. Créez
+votre adresse @ayeba.app, écrivez à n'importe quel destinataire et
+recevez le monde entier — dans une application pensée pour la
+confidentialité et conçue pour les réseaux réels.
 
-Une boîte @ayeba.app complète, embarquée dans l'application : elle
-s'ouvre sans connexion, chiffre vos messages sur l'appareil et garde le
-design Ayeba.
-
-CHIFFRÉ SUR VOTRE APPAREIL
-• Sujet, texte et pièces jointes chiffrés en AES-256 dans votre coffre
+CHIFFREMENT DE BOUT EN BOUT
+• Sujet, corps et pièces jointes chiffrés sur votre appareil en
+  AES-256 — Ayeba ne peut pas lire vos messages
 • Enveloppe hybride post-quantique : ECDH P-256 + ML-KEM-768 (FIPS 203)
-• Phrase secrète protégée par PBKDF2 (600 000 itérations) : elle ne
+• Phrase secrète protégée par PBKDF2 (600 000 itérations) — elle ne
   quitte jamais votre téléphone
 • Clé de récupération unique pour restaurer l'accès à votre coffre
 
-ENVOYER ET RECEVOIR PARTOUT
-• Écrivez à n'importe quelle adresse email, recevez le monde entier
-• Pièces jointes chiffrées, jusqu'à 3 fichiers par message
-• Réponses, transferts, fils de discussion, recherche instantanée
-• Notifications push à l'arrivée d'un nouveau message
+UNE VRAIE MESSAGERIE, PARTOUT
+• Envoyez et recevez des e-mails vers toutes les boîtes du monde
+• Pièces jointes chiffrées, fils de discussion, réponses et transferts
+• Recherche instantanée, archives, brouillons et messages suivis
+• Traduction intégrée et notifications push à chaque nouveau message
 
-FONCTIONNE SANS RÉSEAU
-• Interface 100 % embarquée : l'app démarre en mode avion, en zone
-  blanche ou sans data
-• Aucun chargement web au lancement — quasi-0 consommation de données
-• Rédigez, classez, recherchez : tout reste disponible hors ligne
+CONÇUE POUR LES RÉSEAUX RÉELS
+• Interface embarquée : l'app démarre en mode avion ou en zone blanche
+• Aucun chargement web au lancement — consommation de données minimale
+• Vos brouillons et votre boîte restent disponibles hors ligne
 
 VOTRE ADRESSE @AYEBA.APP
-• Une adresse unique, à vous pour la vie, vérifiée par téléphone
-• Boîte de réception, envoyés, brouillons, archives, corbeille et suivis
-• Traduction et partage intégrés
+• Une adresse personnelle, à vous pour la vie, vérifiée par téléphone
+• Une boîte propre : tri rapide, gestuelles, sélection multiple
+• Notifications par app : codes de vérification et reçus au premier
+  plan, avec copie en un geste
 
-CONFIDENTIALITÉ RÉELLE
-• Aucune donnée collectée à des fins publicitaires, aucun tracker
-• Pas d'analyse de contenu : vos messages restent chiffrés
+CONFIDENTIALITÉ SANS COMPROMIS
+• Aucune publicité, aucun tracker, aucune revente de données
+• Aucune analyse de contenu : vos messages restent chiffrés
 • Remise honnête : sans réseau, vos messages attendent dans Envoyés
   au lieu de prétendre être remis
 
-Ayeba Mail — la messagerie pensée pour les réseaux réels.
+Ayeba Mail — votre messagerie, vraiment à vous.
 
 === MOTS-CLÉS / KEYWORDS (max 100, séparés par virgules) ===
 mail,email,messagerie,chiffré,ayeba,sécurisé,boîte,privé,crypté,e2e
@@ -63,8 +63,8 @@ Secondaire : Utilitaires
 
 === URLS ===
 Site web marketing : https://ayeba.app/mail
-Politique de confidentialité : https://ayeba.app/confidentialite
-URL d'assistance : https://ayeba.app/aide  (ou mailto:support@ayeba.app)
+Politique de confidentialité : https://ayeba.app/privacy
+URL d'assistance : https://ayeba.app/support  (page existante, pro)
 
 === CAPTURES D'ÉCRAN (obligatoires) ===
 • iPhone 6.9" (1320×2868 ou 1290×2796) — 3 minimum, 10 max
