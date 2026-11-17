@@ -1,0 +1,107 @@
+═══════════════════════════════════════════════════════════════════
+AYEBA MAIL — MÉTADONNÉES APP STORE CONNECT (iOS 1.0)
+═══════════════════════════════════════════════════════════════════
+
+=== NOM (max 30) ===
+Ayeba Mail
+
+=== SOUS-TITRE / SUBTITLE (max 30) ===
+Messagerie chiffrée
+
+=== TEXTE PROMOTIONNEL / PROMOTIONAL TEXT (max 170, modifiable sans review) ===
+Votre boîte @ayeba.app chiffrée sur l'appareil — fonctionne hors ligne,
+zéro collecte, zéro publicité. Nouveau : réception des mails externes.
+
+=== DESCRIPTION (max 4000) ===
+Ayeba Mail — votre messagerie, vraiment à vous.
+
+Une boîte @ayeba.app complète, embarquée dans l'application : elle
+s'ouvre sans connexion, chiffre vos messages sur l'appareil et garde le
+design Ayeba.
+
+CHIFFRÉ SUR VOTRE APPAREIL
+• Sujet, texte et pièces jointes chiffrés en AES-256 dans votre coffre
+• Enveloppe hybride post-quantique : ECDH P-256 + ML-KEM-768 (FIPS 203)
+• Phrase secrète protégée par PBKDF2 (600 000 itérations) : elle ne
+  quitte jamais votre téléphone
+• Clé de récupération unique pour restaurer l'accès à votre coffre
+
+ENVOYER ET RECEVOIR PARTOUT
+• Écrivez à n'importe quelle adresse email, recevez le monde entier
+• Pièces jointes chiffrées, jusqu'à 3 fichiers par message
+• Réponses, transferts, fils de discussion, recherche instantanée
+• Notifications push à l'arrivée d'un nouveau message
+
+FONCTIONNE SANS RÉSEAU
+• Interface 100 % embarquée : l'app démarre en mode avion, en zone
+  blanche ou sans data
+• Aucun chargement web au lancement — quasi-0 consommation de données
+• Rédigez, classez, recherchez : tout reste disponible hors ligne
+
+VOTRE ADRESSE @AYEBA.APP
+• Une adresse unique, à vous pour la vie, vérifiée par téléphone
+• Boîte de réception, envoyés, brouillons, archives, corbeille et suivis
+• Traduction et partage intégrés
+
+CONFIDENTIALITÉ RÉELLE
+• Aucune donnée collectée à des fins publicitaires, aucun tracker
+• Pas d'analyse de contenu : vos messages restent chiffrés
+• Remise honnête : sans réseau, vos messages attendent dans Envoyés
+  au lieu de prétendre être remis
+
+Ayeba Mail — la messagerie pensée pour les réseaux réels.
+
+=== MOTS-CLÉS / KEYWORDS (max 100, séparés par virgules) ===
+mail,email,messagerie,chiffré,ayeba,sécurisé,boîte,privé,crypté,e2e
+
+=== CATÉGORIES ===
+Principale : Productivité
+Secondaire : Utilitaires
+
+=== CLASSIFICATION D'ÂGE ===
+4+ (aucun contenu sensible)
+
+=== URLS ===
+Site web marketing : https://ayeba.app/mail
+Politique de confidentialité : https://ayeba.app/confidentialite
+URL d'assistance : https://ayeba.app/aide  (ou mailto:support@ayeba.app)
+
+=== CAPTURES D'ÉCRAN (obligatoires) ===
+• iPhone 6.9" (1320×2868 ou 1290×2796) — 3 minimum, 10 max
+• iPhone 6.5" (1284×2778 ou 1242×2688) — si 6.9" absent
+• iPad 13" (2064×2752) — seulement si l'app supporte iPad
+  (TARGETED_DEVICE_FAMILY inclut déjà l'iPad → captures iPad requises
+   OU restreindre à iPhone : General → Destinations → décocher iPad)
+
+Captures suggérées : boîte de réception / lecteur avec COFFRE /
+composition / coffre E2EE / notifications.
+
+=== INFORMATIONS POUR LA REVIEW (App Review Information) ===
+⚠️ OBLIGATOIRE : l'app exige un compte. Créer un compte de démo :
+
+  Email        : apple-review@ayeba.app  (à créer côté admin)
+  Mot de passe : <mot de passe du compte démo>
+  Phrase coffre: <phrase secrète du coffre de démo>
+
+  Dans « Notes » : "Demo mailbox pre-seeded with encrypted messages.
+  Sign in with the provided account, open the vault with the passphrase
+  to decrypt messages. Attachments require sign-in."
+
+=== RÉPONSES AUX QUESTIONS DE CONFORMITÉ ===
+• Chiffrement (Export Compliance) : déjà déclaré dans Info.plist —
+  ITSAppUsesNonExemptEncryption = NO → sélectionner « l'app n'utilise
+  que du chiffrement exempté » → aucune question supplémentaire.
+• Droits sur le contenu : app first-party — « I have the rights ».
+• Déclaration AIGC (Chine continentale) : Ayeba Mail ne génère pas de
+  contenu IA → non applicable ; si distribution en Chine prévue,
+  soumettre la déclaration « pas de services AIGC ».
+• Sign in with… : l'app n'utilise PAS de SSO tiers obligatoire → pas
+  besoin de « Sign in with Apple » (compte propre @ayeba.app seulement,
+  permis car service maison). ATTENTION : si connexion Google/Apple
+  ajoutée un jour, Sign in with Apple deviendra exigé.
+
+=== APRÈS LA SOUMISSION ===
+• Activer les notifications push : App ID app.ayeba.mail → capability
+  Push Notifications (Developer Portal) — l'entitlement est déjà câblé.
+• TestFlight d'abord : même build, onglet TestFlight → testeurs internes
+  (jusqu'à 100) sans review, externes après beta-review (~24h).

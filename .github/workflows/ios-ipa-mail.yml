@@ -1,0 +1,117 @@
+name: Build Ayeba Mail iOS IPA
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "mobile/ayeba-mail/**"
+      - ".github/workflows/ios-ipa-mail.yml"
+
+jobs:
+  build-ipa:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: mobile/ayeba-mail
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: mobile/ayeba-mail/package-lock.json
+
+      - name: Install deps, bundle offline app & Capacitor sync
+        run: |
+          npm install
+          npm run build:offline
+          npx cap sync ios
+
+      - name: Install CocoaPods dependencies
+        run: |
+          cd ios/App
+          pod install --repo-update
+
+      # ── Signature — secrets GitHub requis pour l'IPA App Store ──
+      #   IOS_P12_B64          certificat distribution (.p12 en base64)
+      #   IOS_P12_PASSWORD     mot de passe du .p12
+      #   IOS_PROFILE_B64      profil App Store app.ayeba.mail (.mobileprovision b64)
+      #   IOS_TEAM_ID          Apple Team ID (10 caractères)
+      #   APP_STORE_CONNECT_KEY_ID / APP_STORE_CONNECT_ISSUER_ID /
+      #   APP_STORE_CONNECT_P8_B64  → upload TestFlight via xcrun altool/notarytool
+      # Sans ces secrets : build non signé (validation compile uniquement).
+      - name: Import signing assets (si secrets présents)
+        id: signing
+        env:
+          P12_B64: ${{ secrets.IOS_P12_B64 }}
+          P12_PASS: ${{ secrets.IOS_P12_PASSWORD }}
+          PROFILE_B64: ${{ secrets.IOS_PROFILE_B64 }}
+        run: |
+          if [ -z "$P12_B64" ]; then echo "signed=false" >> "$GITHUB_OUTPUT"; exit 0; fi
+          echo "signed=true" >> "$GITHUB_OUTPUT"
+          echo "$P12_B64" | base64 -d > signing.p12
+          echo "$PROFILE_B64" | base64 -d > profile.mobileprovision
+          security create-keychain -p ci build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p ci build.keychain
+          security import signing.p12 -k build.keychain -P "$P12_PASS" \
+            -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple: -s -k ci build.keychain
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          cp profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/
+
+      - name: Archive (signée si secrets, sinon compile-check)
+        run: |
+          cd ios/App
+          if [ "${{ steps.signing.outputs.signed }}" = "true" ]; then
+            xcodebuild archive \
+              -workspace App.xcworkspace -scheme App \
+              -configuration Release \
+              -archivePath ../AyebaMail.xcarchive \
+              -allowProvisioningUpdates \
+              DEVELOPMENT_TEAM="${{ secrets.IOS_TEAM_ID }}" \
+              | tail -20
+          else
+            xcodebuild archive \
+              -workspace App.xcworkspace -scheme App \
+              -configuration Release \
+              -archivePath ../AyebaMail.xcarchive \
+              CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+              | tail -20
+          fi
+
+      - name: Export IPA (si signé)
+        if: steps.signing.outputs.signed == 'true'
+        run: |
+          cd ios/App
+          cat > export.plist <<'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store</string>
+            <key>teamID</key><string>${{ secrets.IOS_TEAM_ID }}</string>
+            <key>uploadBitcode</key><false/>
+            <key>uploadSymbols</key><true/>
+          </dict></plist>
+          EOF
+          xcodebuild -exportArchive \
+            -archivePath ../AyebaMail.xcarchive \
+            -exportPath ../export \
+            -exportOptionsPlist export.plist | tail -20
+
+      - name: Upload IPA artifact
+        if: steps.signing.outputs.signed == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: AyebaMail-AppStore-ipa
+          path: mobile/ayeba-mail/ios/export/*.ipa
+          retention-days: 30
+
+      - name: Upload xcarchive (compile-check sans secrets)
+        if: steps.signing.outputs.signed != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: AyebaMail-xcarchive-unsigned
+          path: mobile/ayeba-mail/ios/AyebaMail.xcarchive/Products/Applications/*.app
+          retention-days: 14

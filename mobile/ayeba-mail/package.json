@@ -9,6 +9,7 @@
     "cap:copy": "npm run build:offline && npx cap copy",
     "android:add": "npx cap add android",
     "ios:add": "npx cap add ios",
+    "ios:assets": "node scripts/gen-ios-assets.js",
     "android": "npx cap open android",
     "ios": "npx cap open ios",
     "android:apk": "npm run build:offline && cd android && gradlew.bat assembleRelease",

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Push : "development" en source — Xcode le réécrit en "production"
+	     à l'export App Store/TestFlight (re-signature avec le profil de
+	     distribution). Le profil de provisionnement doit avoir la
+	     capability Push Notifications activée dans le portail Apple. -->
+	<key>aps-environment</key>
+	<string>development</string>
+</dict>
+</plist>
