@@ -37,7 +37,7 @@ jobs:
       # ── Signature — secrets GitHub requis pour l'IPA App Store ──
       #   IOS_P12_B64          certificat distribution (.p12 en base64)
       #   IOS_P12_PASSWORD     mot de passe du .p12
-      #   IOS_PROFILE_B64      profil App Store app.ayeba.mail (.mobileprovision b64)
+      #   IOS_MAIL_PROFILE_B64 profil App Store app.ayeba.mail (.mobileprovision b64)
       #   IOS_TEAM_ID          Apple Team ID (10 caractères)
       #   APP_STORE_CONNECT_KEY_ID / APP_STORE_CONNECT_ISSUER_ID /
       #   APP_STORE_CONNECT_P8_B64  → upload TestFlight via xcrun altool/notarytool
@@ -47,7 +47,7 @@ jobs:
         env:
           P12_B64: ${{ secrets.IOS_P12_B64 }}
           P12_PASS: ${{ secrets.IOS_P12_PASSWORD }}
-          PROFILE_B64: ${{ secrets.IOS_PROFILE_B64 }}
+          PROFILE_B64: ${{ secrets.IOS_MAIL_PROFILE_B64 }}
         run: |
           if [ -z "$P12_B64" ]; then echo "signed=false" >> "$GITHUB_OUTPUT"; exit 0; fi
           echo "signed=true" >> "$GITHUB_OUTPUT"
