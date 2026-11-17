@@ -146,6 +146,38 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      - name: Upload vers App Store Connect / TestFlight
+        if: steps.signing.outputs.signed == 'true'
+        env:
+          ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ASC_ISSUER: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          ASC_P8: ${{ secrets.APP_STORE_CONNECT_P8_B64 }}
+        run: |
+          if [ -z "$ASC_KEY_ID" ]; then
+            echo "pas de cle ASC — IPA dispo en artefact uniquement"
+            exit 0
+          fi
+          cd ios/App
+          echo "$ASC_P8" | base64 -d > "AuthKey_$ASC_KEY_ID.p8" \
+            || { echo "::error::decode APP_STORE_CONNECT_P8_B64"; exit 1; }
+          python3 - <<'PYEOF'
+          import json, os
+          key = open(f"AuthKey_{os.environ['ASC_KEY_ID']}.p8").read()
+          json.dump({
+            "key_id": os.environ["ASC_KEY_ID"],
+            "issuer_id": os.environ["ASC_ISSUER"],
+            "key": key,
+            "in_house": False,
+          }, open("../asc_key.json", "w"))
+          PYEOF
+          IPA=$(ls ../export/*.ipa | head -1)
+          echo "Upload $IPA vers TestFlight (key $ASC_KEY_ID)…"
+          fastlane pilot upload \
+            --ipa "$IPA" \
+            --api_key_path ../asc_key.json \
+            --skip_waiting_for_build_processing \
+            || { echo "::error::pilot upload a echoue (key/issuer/role ?)"; exit 1; }
+
       - name: Upload xcarchive (compile-check sans secrets)
         if: steps.signing.outputs.signed != 'true'
         uses: actions/upload-artifact@v4
