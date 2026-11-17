@@ -35,22 +35,25 @@ jobs:
           cd ios/App
           pod install --repo-update
 
-      - name: Build unsigned archive
+      - name: Build app (unsigned, device SDK)
         working-directory: mobile/ayeba-app/ios/App
         run: |
-          xcodebuild archive \
+          xcodebuild build \
             -workspace App.xcworkspace \
             -scheme App \
             -configuration Release \
-            -archivePath "$RUNNER_TEMP/AYEBA.xcarchive" \
+            -sdk iphoneos \
             -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/dd" \
             CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
             -quiet
 
       - name: Package IPA (unsigned)
         run: |
           mkdir -p Payload
-          cp -r "$RUNNER_TEMP/AYEBA.xcarchive/Products/Applications/App.app" Payload/
+          cp -r "$RUNNER_TEMP/dd/Build/Products/Release-iphoneos/App.app" Payload/
           zip -qr AYEBA-1.0.19.ipa Payload
 
       - name: Upload IPA artifact
