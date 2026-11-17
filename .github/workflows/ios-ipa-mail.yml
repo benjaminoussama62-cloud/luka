@@ -53,6 +53,13 @@ jobs:
           echo "signed=true" >> "$GITHUB_OUTPUT"
           echo "$P12_B64" | base64 -d > signing.p12
           echo "$PROFILE_B64" | base64 -d > profile.mobileprovision
+          echo "== diag: validite du p12 + mot de passe =="
+          openssl pkcs12 -in signing.p12 -passin "pass:$P12_PASS" -clcerts -nokeys 2>/dev/null \
+            | openssl x509 -noout -subject -dates \
+            || { echo "::error::P12 illisible ou mot de passe incorrect (IOS_P12_PASSWORD)"; exit 1; }
+          echo "== diag: contenu du profil =="
+          security cms -D -i profile.mobileprovision -o /tmp/prof.plist
+          /usr/libexec/PlistBuddy -c "Print :Name" -c "Print :Entitlements:application-identifier" /tmp/prof.plist
           security create-keychain -p ci build.keychain
           security default-keychain -s build.keychain
           security unlock-keychain -p ci build.keychain
