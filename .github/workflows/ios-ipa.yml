@@ -9,7 +9,7 @@ on:
 
 jobs:
   build-ipa:
-    runs-on: macos-13
+    runs-on: macos-15-intel
     defaults:
       run:
         working-directory: mobile/ayeba-app
