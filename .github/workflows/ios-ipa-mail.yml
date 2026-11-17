@@ -91,14 +91,14 @@ jobs:
               -archivePath ../AyebaMail.xcarchive \
               -allowProvisioningUpdates \
               DEVELOPMENT_TEAM="${{ secrets.IOS_TEAM_ID }}" \
-              | tail -20
+              > ../archive.log 2>&1 || { tail -40 ../archive.log; exit 1; }
           else
             xcodebuild archive \
               -workspace App.xcworkspace -scheme App \
               -configuration Release \
               -archivePath ../AyebaMail.xcarchive \
               CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
-              | tail -20
+              > ../archive.log 2>&1 || { tail -40 ../archive.log; exit 1; }
           fi
 
       - name: Export IPA (si signé)
@@ -110,6 +110,9 @@ jobs:
           <plist version="1.0"><dict>
             <key>method</key><string>app-store</string>
             <key>teamID</key><string>${{ secrets.IOS_TEAM_ID }}</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>provisioningProfiles</key>
+            <dict><key>app.ayeba.mail</key><string>Ayeba Mail App Store</string></dict>
             <key>uploadBitcode</key><false/>
             <key>uploadSymbols</key><true/>
           </dict></plist>
@@ -117,7 +120,9 @@ jobs:
           xcodebuild -exportArchive \
             -archivePath ../AyebaMail.xcarchive \
             -exportPath ../export \
-            -exportOptionsPlist export.plist | tail -20
+            -exportOptionsPlist export.plist > ../export.log 2>&1 \
+            || { tail -40 ../export.log; exit 1; }
+          ls -la ../export/
 
       - name: Upload IPA artifact
         if: steps.signing.outputs.signed == 'true'
@@ -126,6 +131,18 @@ jobs:
           name: AyebaMail-AppStore-ipa
           path: mobile/ayeba-mail/ios/export/*.ipa
           retention-days: 30
+          if-no-files-found: error
+
+      - name: Upload logs xcodebuild (si echec)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ayeba-mail-xcodebuild-logs
+          path: |
+            mobile/ayeba-mail/ios/archive.log
+            mobile/ayeba-mail/ios/export.log
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Upload xcarchive (compile-check sans secrets)
         if: steps.signing.outputs.signed != 'true'

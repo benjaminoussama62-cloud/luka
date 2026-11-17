@@ -107,7 +107,10 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ayeba-xcodebuild-log
-          path: mobile/ayeba-app/ios/xcodebuild.log
+          path: |
+            mobile/ayeba-app/ios/xcodebuild.log
+            mobile/ayeba-app/ios/export.log
+          if-no-files-found: ignore
           retention-days: 7
 
       - name: Export IPA (si signé)
@@ -130,7 +133,9 @@ jobs:
           xcodebuild -exportArchive \
             -archivePath ../AYEBA.xcarchive \
             -exportPath ../export \
-            -exportOptionsPlist export.plist | tail -20
+            -exportOptionsPlist export.plist > ../export.log 2>&1 \
+            || { tail -40 ../export.log; exit 1; }
+          ls -la ../export/
 
       - name: Upload IPA artifact
         if: steps.signing.outputs.signed == 'true'
@@ -138,6 +143,7 @@ jobs:
         with:
           name: AYEBA-AppStore-ipa
           path: mobile/ayeba-app/ios/export/*.ipa
+          if-no-files-found: error
           retention-days: 30
 
       - name: Upload xcarchive (compile-check sans secrets)
