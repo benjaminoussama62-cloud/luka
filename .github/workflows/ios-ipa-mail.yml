@@ -137,6 +137,35 @@ jobs:
           retention-days: 30
           if-no-files-found: error
 
+      - name: Upload TestFlight (si cle API App Store Connect)
+        if: steps.signing.outputs.signed == 'true'
+        env:
+          ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ASC_ISSUER: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          ASC_P8_B64: ${{ secrets.APP_STORE_CONNECT_P8_B64 }}
+        run: |
+          if [ -z "$ASC_KEY_ID" ] || [ -z "$ASC_P8_B64" ]; then
+            echo "pas de cle API ASC — telechargez l'artifact IPA et uploadez manuellement"
+            exit 0
+          fi
+          mkdir -p ~/.private_keys
+          echo "$ASC_P8_B64" | base64 -d > "$HOME/.private_keys/AuthKey_${ASC_KEY_ID}.p8"
+          cat > /tmp/asc-key.json <<EOF
+          {"key_id":"$ASC_KEY_ID","issuer_id":"$ASC_ISSUER","key_filepath":"$HOME/.private_keys/AuthKey_${ASC_KEY_ID}.p8"}
+          EOF
+          IPA=$(ls ios/export/*.ipa | head -1)
+          echo "Upload $IPA vers App Store Connect..."
+          if command -v fastlane >/dev/null 2>&1; then
+            fastlane pilot upload \
+              --api_key_path /tmp/asc-key.json \
+              --ipa "$IPA" \
+              --skip_submission true \
+              --skip_waiting_for_build_processing true
+          else
+            xcrun altool --upload-app --type ios --file "$IPA" \
+              --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER"
+          fi
+
       - name: Upload logs xcodebuild (si echec)
         if: failure()
         uses: actions/upload-artifact@v4
