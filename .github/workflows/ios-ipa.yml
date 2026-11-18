@@ -175,8 +175,14 @@ jobs:
           fastlane pilot upload \
             --ipa "$IPA" \
             --api_key_path ../asc_key.json \
-            --skip_waiting_for_build_processing \
-            || { echo "::error::pilot upload a echoue (key/issuer/role ?)"; exit 1; }
+            --skip_waiting_for_build_processing > ../pilot.log 2>&1 \
+            || {
+              tail -40 ../pilot.log
+              grep -iE "error|invalid|unauthorized|forbidden|denied|failed" ../pilot.log | head -15 | while IFS= read -r line; do
+                echo "::error::$line"
+              done
+              exit 1
+            }
 
       - name: Upload xcarchive (compile-check sans secrets)
         if: steps.signing.outputs.signed != 'true'
