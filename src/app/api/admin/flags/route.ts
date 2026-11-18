@@ -7,7 +7,7 @@ export const runtime = "nodejs";
 
 /** GET /api/admin/flags — état de tous les feature flags. */
 export async function GET() {
-  const auth = await requireSection("flags");
+  const auth = await requireSection("system");
   if (auth instanceof NextResponse) return auth;
   try {
     return NextResponse.json({ ok: true, flags: await listFlags(), known: Object.keys(KNOWN_FLAGS) });
@@ -18,7 +18,7 @@ export async function GET() {
 
 /** POST /api/admin/flags — bascule un flag. {key, enabled, note?} */
 export async function POST(req: Request) {
-  const auth = await requireSection("flags");
+  const auth = await requireSection("system");
   if (auth instanceof NextResponse) return auth;
 
   const body = (await req.json().catch(() => null)) as
