@@ -154,7 +154,7 @@ jobs:
           ASC_P8: ${{ secrets.APP_STORE_CONNECT_P8_B64 }}
         run: |
           if [ -z "$ASC_KEY_ID" ]; then
-            echo "pas de cle ASC — IPA dispo en artefact uniquement"
+            echo "::warning::Aucun secret APP_STORE_CONNECT_* — IPA dispo en artefact, PAS d'upload TestFlight"
             exit 0
           fi
           cd ios/App
