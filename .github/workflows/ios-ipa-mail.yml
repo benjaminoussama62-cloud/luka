@@ -155,16 +155,26 @@ jobs:
             '{key_id:$k, issuer_id:$i, key:$p8}' > /tmp/asc-key.json
           IPA=$(ls ios/export/*.ipa | head -1)
           echo "Upload $IPA vers App Store Connect..."
+          UPLOAD_OK=0
           if command -v fastlane >/dev/null 2>&1; then
             fastlane pilot upload \
               --api_key_path /tmp/asc-key.json \
               --ipa "$IPA" \
               --skip_submission true \
-              --skip_waiting_for_build_processing true
+              --skip_waiting_for_build_processing true \
+              > /tmp/pilot.log 2>&1 || UPLOAD_OK=1
           else
             xcrun altool --upload-app --type ios --file "$IPA" \
-              --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER"
+              --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER" \
+              > /tmp/pilot.log 2>&1 || UPLOAD_OK=1
           fi
+          if [ "$UPLOAD_OK" = "1" ]; then
+            tail -35 /tmp/pilot.log
+            grep -iE "error|invalid|unauthor|forbidden|missing|denied|expired" /tmp/pilot.log \
+              | head -15 | while IFS= read -r l; do echo "::error::$l"; done
+            exit 1
+          fi
+          tail -15 /tmp/pilot.log
 
       - name: Upload logs xcodebuild (si echec)
         if: failure()
