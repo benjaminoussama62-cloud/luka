@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { getSessionFromCookies } from "@/lib/auth-server";
 import { clientIp, rateLimit, rateLimitResponse } from "@/lib/rate-limit";
-import { createVerification, normalizePhone, validateProfile } from "@/lib/mail/mail";
+import { createVerification, normalizePhone, reviewOtpFor, validateProfile } from "@/lib/mail/mail";
 import { sendSms, smsConfigured } from "@/lib/mail/sms";
+import { flagDisabledResponse, isFeatureEnabled } from "@/lib/flags";
 
 export async function POST(req: Request) {
+  if (!await isFeatureEnabled("mail.signup")) return flagDisabledResponse("Les inscriptions Ayeba Mail");
   // Inscription autonome : la session Ayeba est facultative — si elle existe,
   // la boîte y est liée ; sinon le compte Ayeba est créé à la vérification.
   const user = await getSessionFromCookies();
@@ -26,6 +28,9 @@ export async function POST(req: Request) {
 
   const v = await createVerification(user?.id || "", phone, address, profile.profile);
   if ("error" in v) return NextResponse.json({ error: v.error }, { status: 409 });
+
+  // Canal review Apple : code fixe, aucun SMS réel à envoyer.
+  if (reviewOtpFor(phone)) return NextResponse.json({ ok: true, sms: true });
 
   const text = `Ayeba Mail — votre code de vérification : ${v.code} (valide 5 min)`;
   const sent = await sendSms(phone, text);

@@ -275,6 +275,17 @@ export function normalizePhone(raw: string): string | null {
   return p;
 }
 
+/**
+ * Canal review App Store : quand MAIL_REVIEW_PHONE et MAIL_REVIEW_CODE sont
+ * configurés, ce numéro utilise un code OTP fixe et l'envoi SMS est sauté.
+ * Permet au reviewer Apple de se connecter sans dépendre d'un téléphone réel.
+ */
+export function reviewOtpFor(phone: string): string | null {
+  const rp = normalizePhone(process.env.MAIL_REVIEW_PHONE || '');
+  const rc = String(process.env.MAIL_REVIEW_CODE || '').trim();
+  return rp && /^\d{4,8}$/.test(rc) && phone === rp ? rc : null;
+}
+
 // ── Inscription (code SMS) ─────────────────────────────────────────────────
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -324,7 +335,7 @@ export async function createVerification(
     .prepare("DELETE FROM mail_verifications WHERE phone = ? OR user_id = ?")
     .run(phone, userId);
 
-  const code = String(crypto.randomInt(100000, 999999));
+  const code = reviewOtpFor(phone) ?? String(crypto.randomInt(100000, 999999));
   const id = uid();
   await db()
     .prepare(
@@ -343,7 +354,7 @@ export async function createSigninCode(phone: string): Promise<{ code: string; }
   if ((acc.status || "active") === "suspended") return { error: "Compte suspendu." };
 
   await db().prepare("DELETE FROM mail_verifications WHERE phone = ?").run(phone);
-  const code = String(crypto.randomInt(100000, 999999));
+  const code = reviewOtpFor(phone) ?? String(crypto.randomInt(100000, 999999));
   await db()
     .prepare(
       "INSERT INTO mail_verifications (id, user_id, phone, address, code_hash, attempts, expires_at, created_at) VALUES (?, ?, ?, ?, ?, 0, ?, ?)",
@@ -1479,7 +1490,7 @@ async function insertSealedNotice(
 ) {
   const pub = await vaultPublicKey(accountId);
   if (!pub) {
-    await await insertMessage({
+    await insertMessage({
       threadId: uid(),
       accountId,
       folder: "inbox",

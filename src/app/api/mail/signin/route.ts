@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { clientIp, rateLimit, rateLimitResponse } from "@/lib/rate-limit";
-import { createSigninCode, normalizePhone } from "@/lib/mail/mail";
+import { createSigninCode, normalizePhone, reviewOtpFor } from "@/lib/mail/mail";
 import { sendSms, smsConfigured } from "@/lib/mail/sms";
 
 /** Connexion Ayeba Mail : code SMS sur le numéro du compte. */
@@ -14,6 +14,9 @@ export async function POST(req: Request) {
 
   const v = await createSigninCode(phone);
   if ("error" in v) return NextResponse.json({ error: v.error }, { status: 404 });
+
+  // Canal review Apple : code fixe, aucun SMS réel à envoyer.
+  if (reviewOtpFor(phone)) return NextResponse.json({ ok: true, sms: true });
 
   const sent = await sendSms(phone, `Ayeba Mail — votre code de connexion : ${v.code} (valide 5 min)`);
   if (sent.ok) return NextResponse.json({ ok: true, sms: true });
