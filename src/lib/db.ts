@@ -176,6 +176,29 @@ export function findUserById(id: string) {
 export async function deleteUserById(id: string) {
   const d = adb();
   await d.transaction(async (tx) => {
+    // Purge la boîte Ayeba Mail : tables liées au compte puis le compte.
+    try {
+      const accs = (await tx.all(
+        "SELECT id FROM mail_accounts WHERE user_id = ?",
+        [id],
+      )) as { id: string }[];
+      for (const { id: accId } of accs) {
+        for (const t of [
+          "mail_threads",
+          "mail_messages",
+          "mail_vault_challenges",
+          "mail_upload_blobs",
+          "mail_attachments",
+          "mail_push_tokens",
+        ]) {
+          await tx.run(`DELETE FROM ${t} WHERE account_id = ?`, [accId]);
+        }
+      }
+      await tx.run("DELETE FROM mail_accounts WHERE user_id = ?", [id]);
+      await tx.run("DELETE FROM mail_verifications WHERE user_id = ?", [id]);
+    } catch {
+      /* tables mail absentes — non bloquant */
+    }
     await tx.run("DELETE FROM users WHERE id = ?", [id]);
     for (const table of ["user_security", "user_preferences"]) {
       try {

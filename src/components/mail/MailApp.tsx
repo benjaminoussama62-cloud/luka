@@ -1595,6 +1595,8 @@ function SettingsPanel({
   const [signature, setSignature] = useState(account.signature);
   const [avatar, setAvatar] = useState(account.avatar);
   const [saving, setSaving] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const pickAvatar = (file: File | undefined) => {
@@ -1651,6 +1653,18 @@ function SettingsPanel({
       }
     } finally {
       setSaving(false);
+    }
+  };
+
+  const deleteAccount = async () => {
+    setDeleting(true);
+    const res = await fetch("/api/account", { method: "DELETE" }).catch(() => null);
+    setDeleting(false);
+    if (res?.ok) {
+      window.location.href = "/mail/signin";
+    } else {
+      onToast("Suppression impossible — écrivez à privacy@ayeba.app");
+      setConfirmDelete(false);
     }
   };
 
@@ -1737,6 +1751,38 @@ function SettingsPanel({
           <span>Compte vérifié par SMS</span>
           <span>Coffre de bout en bout</span>
           <span>Membre depuis {new Date(account.createdAt).toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}</span>
+        </div>
+
+        <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid rgba(255,85,85,.25)" }}>
+          {confirmDelete ? (
+            <div>
+              <p style={{ fontSize: 13, color: "#ff9c9c", marginBottom: 10 }}>
+                Suppression définitive du compte {account.email} — identité, boîte et coffre
+                effacés. Action irréversible.
+              </p>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button className="mail-btn" disabled={deleting} onClick={() => setConfirmDelete(false)}>
+                  Annuler
+                </button>
+                <button
+                  className="mail-btn"
+                  style={{ background: "#c92a2a", borderColor: "#c92a2a", color: "#fff" }}
+                  disabled={deleting}
+                  onClick={() => void deleteAccount()}
+                >
+                  {deleting ? "Suppression…" : "Oui, supprimer"}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              className="mail-btn"
+              style={{ fontSize: 12, color: "#ff9c9c", borderColor: "rgba(255,80,80,.4)" }}
+              onClick={() => setConfirmDelete(true)}
+            >
+              Supprimer mon compte
+            </button>
+          )}
         </div>
 
         <div className="mail-settings-foot">
