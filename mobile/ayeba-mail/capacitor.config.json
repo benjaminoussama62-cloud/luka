@@ -14,7 +14,7 @@
   },
   "ios": {
     "backgroundColor": "#050507",
-    "contentInset": "automatic",
+    "contentInset": false,
     "scrollEnabled": true
   },
   "plugins": {
