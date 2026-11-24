@@ -5,6 +5,8 @@ import Security
 import CoreLocation
 import LocalAuthentication
 import AudioToolbox
+import UserNotifications
+import KeychainAccess
 
 /// Navigateur natif AYEBA pour iOS — WKWebView flottant au-dessus du bridge
 /// Capacitor, comme le plugin Android (open/frame/hidden/tabs/capture).
@@ -23,6 +25,7 @@ public class AyebaBrowserPlugin: CAPPlugin, WKNavigationDelegate, WKUIDelegate, 
     // --- Native features for Guideline 4.2 ---
     private var locationManager: CLLocationManager?
     private var locationCallback: CAPPluginCall?
+    private var notificationCenter: UNUserNotificationCenter?
 
     // MARK: - Cycle de vie
 
@@ -445,5 +448,159 @@ public class AyebaBrowserPlugin: CAPPlugin, WKNavigationDelegate, WKUIDelegate, 
             AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
         }
         call.resolve()
+    }
+
+    // MARK: - Push Notifications
+
+    /// Request push notification permissions
+    @objc func requestNotificationPermission(_ call: CAPPluginCall) {
+        notificationCenter = UNUserNotificationCenter.current()
+        notificationCenter?.requestAuthorization(options: [.alert, .badge, .sound]) { granted, error in
+            DispatchQueue.main.async {
+                if granted {
+                    call.resolve(["granted": true])
+                } else {
+                    call.reject("Permission refusée: \(error?.localizedDescription ?? "inconnu")")
+                }
+            }
+        }
+    }
+
+    /// Schedule a local notification (e.g., new email alert, rate update)
+    @objc func scheduleNotification(_ call: CAPPluginCall) {
+        guard let title = call.getString("title"),
+              let body = call.getString("body"),
+              let delay = call.getInt("delay") else {
+            call.reject("Parametres manquants")
+            return
+        }
+
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+        content.badge = 1
+
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: TimeInterval(delay), repeats: false)
+        let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: trigger)
+
+        UNUserNotificationCenter.current().add(request) { error in
+            DispatchQueue.main.async {
+                if let error = error {
+                    call.reject("Erreur notification: \(error.localizedDescription)")
+                } else {
+                    call.resolve()
+                }
+            }
+        }
+    }
+
+    // MARK: - Native Share Sheet
+
+    /// Open native iOS share sheet for any content
+    @objc func share(_ call: CAPPluginCall) {
+        DispatchQueue.main.async {
+            guard let text = call.getString("text"),
+                  let url = call.getString("url"),
+                  let topVC = self.bridge?.viewController else {
+                call.reject("Parametres manquants ou VC indisponible")
+                return
+            }
+
+            var items: [Any] = []
+            if !text.isEmpty { items.append(text) }
+            if !url.isEmpty, let u = URL(string: url) { items.append(u) }
+
+            if items.isEmpty {
+                call.reject("Aucun contenu a partager")
+                return
+            }
+
+            let activityVC = UIActivityViewController(activityItems: items, applicationActivities: nil)
+            topVC.present(activityVC, animated: true) {
+                call.resolve()
+            }
+        }
+    }
+
+    // MARK: - Keychain Secure Storage
+
+    /// Store sensitive data securely in iOS Keychain
+    @objc func setKeychainItem(_ call: CAPPluginCall) {
+        guard let key = call.getString("key"),
+              let value = call.getString("value") else {
+            call.reject("Parametres manquants")
+            return
+        }
+
+        let keychain = KeychainAccess.Keychain(service: "app.ayeba.mobile")
+        do {
+            try keychain.set(value, key: key)
+            call.resolve()
+        } catch {
+            call.reject("Erreur Keychain: \(error.localizedDescription)")
+        }
+    }
+
+    /// Retrieve data from Keychain
+    @objc func getKeychainItem(_ call: CAPPluginCall) {
+        guard let key = call.getString("key") else {
+            call.reject("Parametres manquants")
+            return
+        }
+
+        let keychain = KeychainAccess.Keychain(service: "app.ayeba.mobile")
+        do {
+            let value = try keychain.get(key)
+            call.resolve(["value": value ?? ""])
+        } catch {
+            call.reject("Erreur Keychain: \(error.localizedDescription)")
+        }
+    }
+
+    /// Delete item from Keychain
+    @objc func deleteKeychainItem(_ call: CAPPluginCall) {
+        guard let key = call.getString("key") else {
+            call.reject("Parametres manquants")
+            return
+        }
+
+        let keychain = KeychainAccess.Keychain(service: "app.ayeba.mobile")
+        do {
+            try keychain.remove(key)
+            call.resolve()
+        } catch {
+            call.reject("Erreur Keychain: \(error.localizedDescription)")
+        }
+    }
+
+    // MARK: - Spotlight Search Integration
+
+    /// Index content in Spotlight (CSSearchableItem)
+    @objc func indexForSpotlight(_ call: CAPPluginCall) {
+        guard let title = call.getString("title"),
+              let content = call.getString("content"),
+              let url = call.getString("url") else {
+            call.reject("Parametres manquants")
+            return
+        }
+
+        let attributeSet = CSSearchableItemAttributeSet(itemContentType: "text")
+        attributeSet.title = title
+        attributeSet.contentDescription = content
+        attributeSet.keywords = title.components(separatedBy: " ")
+
+        let item = CSSearchableItem(uniqueIdentifier: UUID().uuidString, domainIdentifier: "com.ayeba.search", attributeSet: attributeSet)
+        item.expirationDate = Date().addingTimeInterval(30 * 24 * 60 * 60) // 30 days
+
+        CSSearchableIndex.default().indexSearchableItems([item]) { error in
+            DispatchQueue.main.async {
+                if let error = error {
+                    call.reject("Erreur Spotlight: \(error.localizedDescription)")
+                } else {
+                    call.resolve()
+                }
+            }
+        }
     }
 }
