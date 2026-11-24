@@ -47,6 +47,8 @@ export type AdminSection =
   | "moderation"
   | "support"
   | "billing"
+  | "mbongo"
+  | "flags"
   | "network"
   | "content"
   | "search"
@@ -67,6 +69,8 @@ export const SECTION_ROLES: Record<AdminSection, AdminRole[]> = {
   moderation: ["super_admin", "manager", "moderator", "support"],
   support: ["super_admin", "manager", "support"],
   billing: ["super_admin", "manager"],
+  mbongo: ["super_admin", "manager"],
+  flags: ["super_admin", "manager"],
   network: ["super_admin", "manager"],
   content: ["super_admin", "manager", "moderator"],
   search: ["super_admin", "manager", "analyst"],

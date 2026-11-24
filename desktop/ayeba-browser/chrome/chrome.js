@@ -415,7 +415,7 @@
     els.panelBody.innerHTML = "<div class='panel-empty'>Chargement…</div>";
 
     const data = (await api.invoke("settings:get")) || {};
-    const settings = { doNotTrack: true, blockThirdPartyCookies: false, askSavePath: false, ...data };
+    const settings = { doNotTrack: true, blockThirdPartyCookies: false, askSavePath: false, blockTrackers: true, httpsOnly: true, trimReferrer: true, restoreTabs: true, ...data };
     const engines = data.engines || state.searchEngines || [];
     const current = data.searchEngine || state.searchEngine || "ayeba";
 
@@ -458,7 +458,26 @@
           switchRow("Ne pas suivre (Do Not Track)", "Ajoute l'en-tête DNT à toutes les requêtes envoyées aux sites.", "doNotTrack", settings.doNotTrack),
         );
         content.appendChild(
+          switchRow("Bloquer les traqueurs", "Annule les requêtes vers les régies publicitaires et services d'analyse connus — ils ne sont jamais contactés.", "blockTrackers", settings.blockTrackers),
+        );
+        content.appendChild(
           switchRow("Bloquer les cookies tiers", "Supprime les cookies déposés par les domaines externes à la page visitée.", "blockThirdPartyCookies", settings.blockThirdPartyCookies),
+        );
+        content.appendChild(
+          switchRow("HTTPS d'abord", "Réécrit les navigations http:// en https:// (repli automatique si le site ne sert pas TLS).", "httpsOnly", settings.httpsOnly),
+        );
+        content.appendChild(
+          switchRow("Masquer le Referer inter-sites", "Les autres sites ne voient que l'origine de la page d'où vous venez, jamais l'adresse complète.", "trimReferrer", settings.trimReferrer),
+        );
+        content.appendChild(
+          actionRow("Autorisations des sites", "Caméra, micro, position, notifications consenties par site — révocables ici.", "Gérer", async () => {
+            await showPermissions(y, side);
+            return false;
+          }),
+        );
+        content.insertAdjacentHTML("beforeend", '<div class="settings-group-title">Onglets</div>');
+        content.appendChild(
+          switchRow("Rouvrir les onglets au démarrage", "Restaure la session précédente au prochain lancement d'AYEBA.", "restoreTabs", settings.restoreTabs),
         );
         content.insertAdjacentHTML("beforeend", '<div class="settings-group-title">Effacer les données</div>');
         content.appendChild(
@@ -664,6 +683,50 @@
       holder.querySelectorAll("[data-rm]").forEach((b) =>
         b.addEventListener("click", async () => {
           await api.invoke("pass:remove", b.dataset.rm);
+          await render();
+        }),
+      );
+    };
+    await render();
+  }
+
+  async function showPermissions(y, side) {
+    panelOpen(y, side);
+    els.panelTitle.textContent = "Autorisations des sites";
+    els.panelBody.innerHTML = "<div class='panel-empty'>Chargement…</div>";
+
+    const PERM_LABELS = {
+      media: "Caméra / micro",
+      geolocation: "Position",
+      notifications: "Notifications",
+      fullscreen: "Plein écran",
+    };
+
+    const render = async () => {
+      const list = (await api.invoke("perm:list")) || [];
+      if (!list.length) {
+        els.panelBody.innerHTML =
+          '<div class="panel-empty">Aucune autorisation enregistrée — les sites demandent au moment voulu.</div>';
+        return;
+      }
+      els.panelBody.innerHTML =
+        '<p class="panel-lead">Révoquer une autorisation force le site à redemander la prochaine fois.</p>';
+      const holder = document.createElement("div");
+      els.panelBody.appendChild(holder);
+      for (const p of list) {
+        const row = document.createElement("div");
+        row.className = "pass-row";
+        row.innerHTML = `
+          <div class="ext-badge">${escapeHtml((p.origin || "?").replace(/^https?:\/\//, "").slice(0, 1).toUpperCase())}</div>
+          <div class="pass-meta"><strong>${escapeHtml(p.origin)}</strong><span>${escapeHtml(PERM_LABELS[p.permission] || p.permission)} — ${p.allowed ? "autorisé" : "refusé"}</span></div>
+          <div class="row-actions">
+            <button type="button" class="mini-btn danger" data-revoke="${escapeHtml(p.key)}">Révoquer</button>
+          </div>`;
+        holder.appendChild(row);
+      }
+      holder.querySelectorAll("[data-revoke]").forEach((b) =>
+        b.addEventListener("click", async () => {
+          await api.invoke("perm:revoke", b.dataset.revoke);
           await render();
         }),
       );

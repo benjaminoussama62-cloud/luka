@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireSection } from "@/lib/admin/auth";
-import { getDb } from "@/lib/storage/database";
+import { adb } from "@/lib/storage/adb";
 import { SISTER_APPS } from "@/lib/oauth-provider/sister-apps";
 
 export const runtime = "nodejs";
@@ -10,17 +10,16 @@ export async function GET() {
   const auth = await requireSection("ecosystem");
   if (auth instanceof NextResponse) return auth;
 
-  const db = getDb();
-  const all = (sql: string, ...args: unknown[]) =>
-    db.prepare(sql).all(...args) as Record<string, unknown>[];
+  const db = adb();
+  const all = async (sql: string, ...args: unknown[]) =>
+    await db.all(sql, [...args]) as Record<string, unknown>[];
 
-  const clients = all(
-    `SELECT c.client_id, c.name, c.client_type, c.tier, c.verified, c.created_at,
+  const clients = await all(`SELECT c.client_id, c.name, c.client_type, c.tier, c.verified, c.created_at,
             u.email AS owner_email,
             (SELECT COUNT(*) FROM oauth_access_tokens t WHERE t.client_id = c.client_id AND t.revoked_at IS NULL) AS active_tokens,
             (SELECT COUNT(*) FROM oauth_user_consents uc WHERE uc.client_id = c.client_id) AS consents
      FROM oauth_clients c LEFT JOIN users u ON u.id = c.owner_user_id
-     ORDER BY c.created_at DESC`,
+     ORDER BY c.created_at DESC`
   );
 
   const registeredIds = new Set(clients.map((c) => String(c.client_id)));

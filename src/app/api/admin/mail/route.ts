@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireSection } from "@/lib/admin/auth";
-import { getDb } from "@/lib/storage/database";
+import { adb } from "@/lib/storage/adb";
 import { sendSystemMessage, setAccountStatus } from "@/lib/mail/mail";
 
 export const runtime = "nodejs";
@@ -13,54 +13,43 @@ export async function GET(req: Request) {
   const auth = await requireSection("mail");
   if (auth instanceof NextResponse) return auth;
 
-  const db = getDb();
+  const db = adb();
   const url = new URL(req.url);
   const q = (url.searchParams.get("q") || "").trim();
   const limit = Math.min(200, Math.max(1, Number(url.searchParams.get("limit")) || 100));
 
-  const count = (sql: string, ...args: unknown[]) =>
-    (db.prepare(sql).get(...args) as { n: number } | undefined)?.n ?? 0;
+  const count = async (sql: string, ...args: unknown[]) =>
+    (await db.get(sql, [...args]) as { n: number } | undefined)?.n ?? 0;
 
-  const accounts = (
+  let accounts = (
     (q
-      ? db
-          .prepare(
-            `SELECT a.id, a.email, a.address, a.phone, a.display_name, a.status, a.created_at, u.email AS user_email
+      ? await db.all(`SELECT a.id, a.email, a.address, a.phone, a.display_name, a.status, a.created_at, u.email AS user_email
              FROM mail_accounts a JOIN users u ON u.id = a.user_id
              WHERE a.email LIKE ? OR a.display_name LIKE ? OR u.email LIKE ?
-             ORDER BY a.created_at DESC LIMIT ?`,
-          )
-          .all(`%${q}%`, `%${q}%`, `%${q}%`, limit)
-      : db
-          .prepare(
-            `SELECT a.id, a.email, a.address, a.phone, a.display_name, a.status, a.created_at, u.email AS user_email
+             ORDER BY a.created_at DESC LIMIT ?`, [`%${q}%`, `%${q}%`, `%${q}%`, limit])
+      : await db.all(`SELECT a.id, a.email, a.address, a.phone, a.display_name, a.status, a.created_at, u.email AS user_email
              FROM mail_accounts a JOIN users u ON u.id = a.user_id
-             ORDER BY a.created_at DESC LIMIT ?`,
-          )
-          .all(limit)) as Record<string, unknown>[]
-  ).map((a) => ({
+             ORDER BY a.created_at DESC LIMIT ?`, [limit])) as Record<string, unknown>[]
+  );
+  accounts = await Promise.all(accounts.map(async (a) => ({
     ...a,
     phone: maskPhone(String(a.phone || "")),
-    messages: count(
-      "SELECT COUNT(*) AS n FROM mail_messages WHERE account_id = ? AND folder != 'trash'",
-      a.id,
-    ),
-  }));
+    messages: await count("SELECT COUNT(*) AS n FROM mail_messages WHERE account_id = ? AND folder != 'trash'",
+      String(a.id)),
+  })));
 
   return NextResponse.json({
     ok: true,
     accounts,
     stats: {
-      accounts: count("SELECT COUNT(*) AS n FROM mail_accounts"),
-      suspended: count("SELECT COUNT(*) AS n FROM mail_accounts WHERE status = 'suspended'"),
-      messages: count("SELECT COUNT(*) AS n FROM mail_messages"),
-      bounces: count("SELECT COUNT(*) AS n FROM mail_messages WHERE kind = 'bounce'"),
-      pendingVerifications: count(
-        "SELECT COUNT(*) AS n FROM mail_verifications WHERE expires_at > ?",
-        new Date().toISOString(),
+      accounts: await count("SELECT COUNT(*) AS n FROM mail_accounts"),
+      suspended: await count("SELECT COUNT(*) AS n FROM mail_accounts WHERE status = 'suspended'"),
+      messages: await count("SELECT COUNT(*) AS n FROM mail_messages"),
+      bounces: await count("SELECT COUNT(*) AS n FROM mail_messages WHERE kind = 'bounce'"),
+      pendingVerifications: await count("SELECT COUNT(*) AS n FROM mail_verifications WHERE expires_at > ?",
+        new Date().toISOString()
       ),
-      unreadInboxes: count(
-        "SELECT COUNT(*) AS n FROM mail_messages WHERE folder = 'inbox' AND is_read = 0",
+      unreadInboxes: await count("SELECT COUNT(*) AS n FROM mail_messages WHERE folder = 'inbox' AND is_read = 0"
       ),
     },
   });

@@ -11,6 +11,7 @@ import { createDepositIntent } from "@/lib/money/core";
 import { isMoneyCurrency, parseAmountToMinor } from "@/lib/money/amounts";
 import { startDepositCharge } from "@/lib/money/provider";
 import { clientIp, rateLimit, rateLimitResponse } from "@/lib/rate-limit";
+import { flagDisabledResponse, isFeatureEnabled } from "@/lib/flags";
 
 export const runtime = "nodejs";
 
@@ -21,6 +22,7 @@ export const runtime = "nodejs";
  * jamais par la réponse de ce endpoint.
  */
 export async function POST(req: Request) {
+  if (!await isFeatureEnabled("money.deposits")) return flagDisabledResponse("Les dépôts Mbongo");
   const user = await requireMoneyUser();
   if (user instanceof NextResponse) return user;
   const csrf = checkSameOrigin(req);

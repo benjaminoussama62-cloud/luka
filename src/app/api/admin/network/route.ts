@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireSection } from "@/lib/admin/auth";
-import { getDb } from "@/lib/storage/database";
+import { adb } from "@/lib/storage/adb";
 import { SISTER_AD_APPS } from "@/lib/ads/sister-access";
 
 export const runtime = "nodejs";
@@ -10,24 +10,24 @@ export async function GET() {
   const auth = await requireSection("network");
   if (auth instanceof NextResponse) return auth;
 
-  const db = getDb();
-  const all = (sql: string) => db.prepare(sql).all();
-  const count = (sql: string) =>
-    (db.prepare(sql).get() as { n: number } | undefined)?.n ?? 0;
+  const db = adb();
+  const all = async (sql: string) => db.all(sql);
+  const count = async (sql: string) =>
+    (await db.get(sql) as { n: number } | undefined)?.n ?? 0;
 
   return NextResponse.json({
     ok: true,
-    advertisers: all("SELECT * FROM advertisers ORDER BY created_at DESC LIMIT 200"),
-    publishers: all("SELECT * FROM publishers ORDER BY created_at DESC LIMIT 200"),
-    campaigns: all("SELECT * FROM campaigns ORDER BY created_at DESC LIMIT 200"),
-    creatives: all("SELECT * FROM ad_creatives ORDER BY created_at DESC LIMIT 200"),
-    placements: all("SELECT * FROM site_placements ORDER BY created_at DESC LIMIT 200"),
-    recentRequests: all("SELECT * FROM ad_requests ORDER BY timestamp DESC LIMIT 100"),
+    advertisers: await all("SELECT * FROM advertisers ORDER BY created_at DESC LIMIT 200"),
+    publishers: await all("SELECT * FROM publishers ORDER BY created_at DESC LIMIT 200"),
+    campaigns: await all("SELECT * FROM campaigns ORDER BY created_at DESC LIMIT 200"),
+    creatives: await all("SELECT * FROM ad_creatives ORDER BY created_at DESC LIMIT 200"),
+    placements: await all("SELECT * FROM site_placements ORDER BY created_at DESC LIMIT 200"),
+    recentRequests: await all("SELECT * FROM ad_requests ORDER BY timestamp DESC LIMIT 100"),
     sisterApps: SISTER_AD_APPS,
     stats: {
-      impressions: count("SELECT COUNT(*) AS n FROM impressions"),
-      clicks: count("SELECT COUNT(*) AS n FROM clicks"),
-      adRequests: count("SELECT COUNT(*) AS n FROM ad_requests"),
+      impressions: await count("SELECT COUNT(*) AS n FROM impressions"),
+      clicks: await count("SELECT COUNT(*) AS n FROM clicks"),
+      adRequests: await count("SELECT COUNT(*) AS n FROM ad_requests"),
     },
   });
 }

@@ -18,7 +18,7 @@ export async function GET() {
   const rows = await adb()
     .prepare(
       `SELECT id, app, key_prefix, label, status, created_at, revoked_at
-       FROM mail_api_keys ORDER BY created_at DESC LIMIT 200`,
+       FROM mail_api_keys ORDER BY created_at DESC LIMIT 200`
     )
     .all();
   return NextResponse.json({ keys: rows });

@@ -10,6 +10,7 @@ import {
 import { executeTransfer } from "@/lib/money/core";
 import { isMoneyCurrency, parseAmountToMinor } from "@/lib/money/amounts";
 import { clientIp, rateLimit, rateLimitResponse } from "@/lib/rate-limit";
+import { flagDisabledResponse, isFeatureEnabled } from "@/lib/flags";
 
 export const runtime = "nodejs";
 
@@ -19,6 +20,7 @@ export const runtime = "nodejs";
  * Header: Idempotency-Key (obligatoire — rejouer la requête ne débite pas deux fois).
  */
 export async function POST(req: Request) {
+  if (!await isFeatureEnabled("money.transfers")) return flagDisabledResponse("Les transferts Mbongo");
   const user = await requireMoneyUser();
   if (user instanceof NextResponse) return user;
   const csrf = checkSameOrigin(req);

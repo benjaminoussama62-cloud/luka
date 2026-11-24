@@ -29,7 +29,7 @@ export async function POST(req: Request) {
   if (!result.ok) {
     return NextResponse.json(
       { error: result.error, totpRequired: result.totpRequired === true },
-      { status: result.totpRequired ? 401 : 401 },
+      { status: result.totpRequired ? 401 : 401 }
     );
   }
 

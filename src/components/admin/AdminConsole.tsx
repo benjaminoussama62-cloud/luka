@@ -26,6 +26,8 @@ type Tab =
   | "moderation"
   | "support"
   | "billing"
+  | "mbongo"
+  | "flags"
   | "network"
   | "content"
   | "search"
@@ -47,6 +49,7 @@ const TABS: TabDef[] = [
   { id: "security", label: "Sécurité", group: "Pilotage" },
   { id: "audit", label: "Journal & alertes", group: "Pilotage" },
   { id: "incidents", label: "Incidents", group: "Pilotage" },
+  { id: "flags", label: "Flags plateforme", group: "Pilotage" },
   { id: "users", label: "Utilisateurs", group: "Utilisateurs" },
   { id: "moderation", label: "Modération", group: "Utilisateurs" },
   { id: "support", label: "Support", group: "Utilisateurs" },
@@ -55,6 +58,7 @@ const TABS: TabDef[] = [
   { id: "search", label: "Recherche & Index", group: "Produit" },
   { id: "ecosystem", label: "Écosystème", group: "Produit" },
   { id: "mail", label: "Ayeba Mail", group: "Produit" },
+  { id: "mbongo", label: "Mbongo", group: "Business" },
   { id: "billing", label: "Facturation", group: "Business" },
   { id: "network", label: "Réseau pubs", group: "Business" },
   { id: "chat", label: "Chat équipe", group: "Communication" },
@@ -204,6 +208,10 @@ export function AdminConsole({
   const [reply, setReply] = useState("");
   const [userQuery, setUserQuery] = useState("");
   const [userDossier, setUserDossier] = useState<Row | null>(null);
+  // mbongo sub-views
+  const [mbView, setMbView] = useState<"wallets" | "transactions" | "kyc" | "requests" | "ledger">("wallets");
+  const [mbRows, setMbRows] = useState<Row[]>([]);
+  const [mbLedgerWallet, setMbLedgerWallet] = useState("");
   const [newAdminEmail, setNewAdminEmail] = useState("");
   const [newAdminRole, setNewAdminRole] = useState("support");
   const [newAdminPassword, setNewAdminPassword] = useState<string | null>(null);
@@ -246,6 +254,8 @@ export function AdminConsole({
         t === "users" ? `/api/admin/users${q ? `?q=${encodeURIComponent(q)}` : ""}` :
         t === "moderation" ? "/api/admin/moderation" :
         t === "support" ? "/api/admin/support" :
+        t === "mbongo" ? "/api/admin/money?view=wallets&audit=1" :
+        t === "flags" ? "/api/admin/flags" :
         t === "billing" ? "/api/admin/billing" :
         t === "network" ? "/api/admin/network" :
         t === "content" ? "/api/admin/content" :
@@ -332,6 +342,26 @@ export function AdminConsole({
     } else {
       flash("Action échouée");
     }
+  };
+
+  // Mbongo : sous-vues (transactions, KYC, demandes, ledger) chargées à la demande.
+  const loadMbView = async (view: typeof mbView, wallet = "") => {
+    setMbView(view);
+    if (view === "wallets") {
+      void loadTab("mbongo");
+      return;
+    }
+    if (view === "ledger" && !wallet) {
+      setMbRows([]);
+      return;
+    }
+    const url =
+      view === "transactions" ? "/api/admin/money?view=transactions&limit=200" :
+      view === "kyc" ? "/api/admin/money?view=kyc&status=pending" :
+      view === "requests" ? "/api/admin/money?view=requests&status=open" :
+      `/api/admin/money?view=ledger&wallet=${encodeURIComponent(wallet)}`;
+    const d = await api<Row>(url);
+    setMbRows(((d?.transactions ?? d?.kyc ?? d?.requests ?? d?.entries) as Row[]) ?? []);
   };
 
   const g = dash?.overview?.network?.global ?? {};
@@ -493,20 +523,41 @@ export function AdminConsole({
                   </div>
                   <Btn onClick={() => setUserDossier(null)}>Fermer</Btn>
                 </div>
-                <div className="grid gap-4 lg:grid-cols-3">
+                <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
+                  <div>
+                    <p className="ayeba-kicker mb-2">Mbongo</p>
+                    {(userDossier.detail as Row)?.wallet ? (
+                      <div className="space-y-1 text-sm">
+                        <p><Badge tone={statusTone(((userDossier.detail as Row).wallet as Row)?.status)}>{s(((userDossier.detail as Row).wallet as Row)?.status)}</Badge>{" "}
+                        {s(((userDossier.detail as Row).wallet as Row)?.handle)}</p>
+                        <p className="text-xs opacity-70">
+                          USD {s((((userDossier.detail as Row).wallet as Row)?.balances as Row)?.USD, "0")} · CDF {s((((userDossier.detail as Row).wallet as Row)?.balances as Row)?.CDF, "0")}
+                        </p>
+                        <p className="text-xs opacity-60">
+                          {num(((userDossier.detail as Row).money as Row)?.transactions)} transactions · KYC {s(((userDossier.detail as Row).money as Row)?.kycStatus, "non soumis")}
+                        </p>
+                      </div>
+                    ) : <p className="text-xs opacity-50">Pas de portefeuille</p>}
+                  </div>
                   <div>
                     <p className="ayeba-kicker mb-2">Sites Studio</p>
                     <Table head={["Domaine", "Statut"]} rows={(((userDossier.detail as Row)?.sites as Row[]) ?? []).map((x) => [s(x.domain), <Badge key="s" tone={statusTone(x.status)}>{s(x.status)}</Badge>])} empty="Aucun site" />
                   </div>
                   <div>
-                    <p className="ayeba-kicker mb-2">Articles Ayebi</p>
-                    <Table head={["Article", "Créé"]} rows={(((userDossier.detail as Row)?.articles as Row[]) ?? []).map((x) => [s(x.title), dt(x.created_at)])} empty="Aucun article" />
+                    <p className="ayeba-kicker mb-2">Apps OAuth développées</p>
+                    <Table head={["App", "Tier", "Vérifiée"]} rows={(((userDossier.detail as Row)?.oauthClients as Row[]) ?? []).map((x) => [s(x.name), s(x.tier), <Badge key="v" tone={num(x.verified) === 1 ? "ok" : "warn"}>{num(x.verified) === 1 ? "oui" : "non"}</Badge>])} empty="Aucune app" />
                   </div>
                   <div>
                     <p className="ayeba-kicker mb-2">Tickets support</p>
                     <Table head={["Sujet", "Statut"]} rows={(((userDossier.detail as Row)?.tickets as Row[]) ?? []).map((x) => [s(x.subject), <Badge key="s" tone={statusTone(x.status)}>{s(x.status)}</Badge>])} empty="Aucun ticket" />
                   </div>
                 </div>
+                {(((userDossier.detail as Row)?.articles as Row[]) ?? []).length > 0 && (
+                  <div className="mt-4">
+                    <p className="ayeba-kicker mb-2">Articles Ayebi</p>
+                    <Table head={["Article", "Créé"]} rows={(((userDossier.detail as Row)?.articles as Row[]) ?? []).map((x) => [s(x.title), dt(x.created_at)])} empty="Aucun article" />
+                  </div>
+                )}
               </div>
             ) : null}
           </section>
@@ -648,6 +699,208 @@ export function AdminConsole({
                   <p className="py-8 text-center text-sm opacity-50">Sélectionne un ticket pour voir la conversation.</p>
                 )}
               </div>
+            </div>
+          </section>
+        )}
+
+        {tab === "mbongo" && (
+          <section className="space-y-4">
+            <header className="flex items-end justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-semibold">Mbongo — opérations financières</h2>
+                <p className="text-sm opacity-60">
+                  {num((data.stats as Row)?.wallets)} portefeuilles · {num((data.stats as Row)?.frozen)} gelés ·{" "}
+                  volume 24 h : {s(((data.stats as Row)?.volume24h as Row)?.USD, "0")} USD / {s(((data.stats as Row)?.volume24h as Row)?.CDF, "0")} CDF
+                </p>
+              </div>
+              <nav className="flex flex-wrap gap-2">
+                {([["wallets", "Portefeuilles"], ["transactions", "Transactions"], ["kyc", `KYC (${num((data.stats as Row)?.kycPending)})`], ["requests", "Demandes"], ["ledger", "Grand livre"]] as const).map(([v, l]) => (
+                  <Btn key={v} onClick={() => void loadMbView(v)}>{mbView === v ? `• ${l}` : l}</Btn>
+                ))}
+              </nav>
+            </header>
+
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+              <Stat label="Transactions en attente" value={num((data.stats as Row)?.pendingTx)} />
+              <Stat label="Événements provider en échec" value={num((data.stats as Row)?.failedEvents)} />
+              <Stat label="KYC en file" value={num((data.stats as Row)?.kycPending)} />
+              <Stat label="Demandes ouvertes" value={num((data.stats as Row)?.openRequests)} />
+              <Stat label="Wallets gelés" value={num((data.stats as Row)?.frozen)} hint={`sur ${num((data.stats as Row)?.wallets)}`} />
+            </div>
+
+            {mbView === "wallets" && (
+              <>
+                <div className="ayeba-panel p-4">
+                  <Table
+                    head={["Handle", "Utilisateur", "USD", "CDF", "PIN", "Statut", "Actions"]}
+                    rows={((data.wallets as Row[]) ?? []).map((w) => [
+                      <span key="h" className="font-medium">{s(w.handle)}</span>,
+                      <span key="u" className="text-xs opacity-70">{s(w.userId).slice(0, 12)}</span>,
+                      s((w.balances as Row)?.USD ? ((w.balances as Row).USD as Row).display : null, "0"),
+                      s((w.balances as Row)?.CDF ? ((w.balances as Row).CDF as Row).display : null, "0"),
+                      <Badge key="p" tone={w.hasPin ? "ok" : "warn"}>{w.hasPin ? "défini" : "absent"}</Badge>,
+                      <Badge key="st" tone={statusTone(w.status)}>{s(w.status)}</Badge>,
+                      <span key="a" className="flex flex-wrap gap-1">
+                        <Btn onClick={() => { setMbLedgerWallet(s(w.id)); void loadMbView("ledger", s(w.id)); }}>Livre</Btn>
+                        {w.status === "frozen" ? (
+                          <Btn onClick={() => void act("/api/admin/money", { action: "unfreeze", walletId: w.id }, "Portefeuille dégelé")}>Dégeler</Btn>
+                        ) : w.status === "active" ? (
+                          <Btn danger onClick={() => {
+                            const reason = window.prompt("Motif du gel (obligatoire) :");
+                            if (reason?.trim()) void act("/api/admin/money", { action: "freeze", walletId: w.id, reason }, "Portefeuille gelé");
+                          }}>Geler</Btn>
+                        ) : null}
+                      </span>,
+                    ])}
+                    empty="Aucun portefeuille"
+                  />
+                </div>
+                {Array.isArray(data.recentAudit) && data.recentAudit.length > 0 && (
+                  <div className="ayeba-panel p-4">
+                    <p className="ayeba-kicker mb-3">Audit financier récent</p>
+                    <Table
+                      head={["Action", "Wallet", "Utilisateur", "Détail", "Date"]}
+                      rows={(data.recentAudit as Row[]).slice(0, 30).map((a) => [
+                        <Badge key="a" tone="info">{s(a.action)}</Badge>,
+                        s(a.wallet_id).slice(0, 10), s(a.user_id).slice(0, 12),
+                        <span key="d" className="text-xs opacity-70">{s(a.detail).slice(0, 80)}</span>,
+                        dt(a.created_at),
+                      ])}
+                      empty="—"
+                    />
+                  </div>
+                )}
+              </>
+            )}
+
+            {mbView === "transactions" && (
+              <div className="ayeba-panel p-4">
+                <p className="ayeba-kicker mb-3">Transactions récentes (toutes les transactions du ledger)</p>
+                <Table
+                  head={["Type", "Montant", "De", "Vers", "Provider", "Statut", "Créée", "Actions"]}
+                  rows={mbRows.map((t) => [
+                    <Badge key="k" tone={t.kind === "withdrawal" ? "warn" : t.kind === "reversal" ? "info" : "dim"}>{s(t.kind)}</Badge>,
+                    <span key="m" className="font-medium">{s((t.amount as Row)?.display)} {s(t.currency)}</span>,
+                    s((t.from as Row)?.handle ?? (t.from as Row)?.walletId, "—").slice(0, 14),
+                    s((t.to as Row)?.handle ?? (t.to as Row)?.walletId, "—").slice(0, 14),
+                    s(t.provider),
+                    <Badge key="s" tone={statusTone(t.status)}>{s(t.status)}</Badge>,
+                    dt(t.createdAt),
+                    t.kind === "withdrawal" && t.status === "pending" ? (
+                      <Btn key="r" danger onClick={() => {
+                        const reason = window.prompt("Motif du reversal (obligatoire) :");
+                        if (reason?.trim()) void act("/api/admin/money", { action: "reverse_withdrawal", txId: t.id, reason }, "Retrait recrédité");
+                      }}>Reversal</Btn>
+                    ) : "—",
+                  ])}
+                  empty="Aucune transaction"
+                />
+              </div>
+            )}
+
+            {mbView === "kyc" && (
+              <div className="ayeba-panel p-4">
+                <p className="ayeba-kicker mb-3">File de vérification KYC (plus ancien d&apos;abord)</p>
+                <Table
+                  head={["Nom déclaré", "Compte", "Type de pièce", "N° pièce", "Soumis", "Actions"]}
+                  rows={mbRows.map((k) => [
+                    <span key="n" className="font-medium">{s(k.full_name)}</span>,
+                    <span key="e" className="text-xs">{s(k.email ?? k.account_name)}</span>,
+                    s(k.id_type), s(k.doc_number, "—"),
+                    dt(k.submitted_at),
+                    <span key="a" className="flex gap-1">
+                      <Btn onClick={() => void act("/api/admin/money", { action: "kyc_approve", userId: k.user_id }, "KYC approuvé")}>Approuver</Btn>
+                      <Btn danger onClick={() => {
+                        const reason = window.prompt("Motif du rejet (obligatoire) :");
+                        if (reason?.trim()) void act("/api/admin/money", { action: "kyc_reject", userId: k.user_id, reason }, "KYC rejeté");
+                      }}>Rejeter</Btn>
+                    </span>,
+                  ])}
+                  empty="Aucun dossier en attente"
+                />
+              </div>
+            )}
+
+            {mbView === "requests" && (
+              <div className="ayeba-panel p-4">
+                <p className="ayeba-kicker mb-3">Demandes de paiement ouvertes</p>
+                <Table
+                  head={["De", "Vers", "Montant", "Note", "Créée"]}
+                  rows={mbRows.map((r) => [
+                    s((r.from as Row)?.handle ?? (r.from as Row)?.userId).slice(0, 16),
+                    s(r.to).slice(0, 20),
+                    <span key="m" className="font-medium">{s(r.amount)} {s(r.currency)}</span>,
+                    s(r.note, "—"), dt(r.createdAt),
+                  ])}
+                  empty="Aucune demande ouverte"
+                />
+              </div>
+            )}
+
+            {mbView === "ledger" && (
+              <div className="ayeba-panel p-4">
+                <div className="mb-3 flex items-center gap-2">
+                  <input className="ayeba-input" placeholder="ID portefeuille…" value={mbLedgerWallet}
+                    onChange={(e) => setMbLedgerWallet(e.target.value)} />
+                  <Btn onClick={() => void loadMbView("ledger", mbLedgerWallet)}>Charger</Btn>
+                </div>
+                <Table
+                  head={["N°", "Transaction", "Type", "Mouvement", "Solde après", "Devise", "Date"]}
+                  rows={mbRows.map((e) => [
+                    `#${s(e.id)}`, s(e.txId).slice(0, 12), s(e.kind),
+                    <span key="d" className={String(e.delta).startsWith("-") ? "text-red-400" : "text-emerald-400"}>{s(e.delta)}</span>,
+                    s(e.balanceAfter), s(e.currency), dt(e.at),
+                  ])}
+                  empty={mbLedgerWallet ? "Aucune écriture" : "Entre un ID de portefeuille"}
+                />
+              </div>
+            )}
+          </section>
+        )}
+
+        {tab === "flags" && (
+          <section className="space-y-4">
+            <header>
+              <h2 className="text-xl font-semibold">Flags plateforme</h2>
+              <p className="text-sm opacity-60">
+                Kill-switches produit — une bascule est appliquée sous ~30 s sur toutes les routes concernées.
+              </p>
+            </header>
+            <div className="ayeba-panel p-4">
+              <Table
+                head={["Fonctionnalité", "État", "Défaut", "Description", "Modifié par", "Actions"]}
+                rows={((data.flags as Row[]) ?? []).map((f) => [
+                  <span key="k" className="font-mono text-xs">{s(f.key)}{f.custom ? " ·" : ""}</span>,
+                  <Badge key="e" tone={f.enabled ? "ok" : "bad"}>{f.enabled ? "activé" : "COUPÉ"}</Badge>,
+                  <Badge key="d" tone={f.defaultEnabled ? "dim" : "warn"}>{f.defaultEnabled ? "on" : "off"}</Badge>,
+                  <span key="desc" className="text-xs opacity-70">{s(f.description)}</span>,
+                  <span key="u" className="text-xs opacity-60">{s(f.updatedBy, "—")} · {dt(f.updatedAt)}</span>,
+                  <span key="a" className="flex gap-1">
+                    <Btn danger={Boolean(f.enabled)} onClick={() => {
+                      const label = f.enabled ? `COUPER ${s(f.key)} ?` : `Réactiver ${s(f.key)} ?`;
+                      const note = window.prompt(`${label}\nMotif (optionnel) :`);
+                      if (note === null) return;
+                      void act("/api/admin/flags", { key: f.key, enabled: !f.enabled, note }, `${s(f.key)} ${f.enabled ? "coupé" : "activé"}`);
+                    }}>{f.enabled ? "Couper" : "Activer"}</Btn>
+                  </span>,
+                ])}
+                empty="Aucun flag"
+              />
+            </div>
+            <div className="ayeba-panel p-4">
+              <p className="ayeba-kicker mb-2">Créer un flag custom</p>
+              <form className="flex gap-2" onSubmit={(e) => {
+                e.preventDefault();
+                const fd = new FormData(e.currentTarget);
+                const key = String(fd.get("key") || "").trim();
+                const note = String(fd.get("note") || "").trim();
+                if (key) void act("/api/admin/flags", { key, enabled: false, note }, `Flag ${key} créé (coupé)`);
+                e.currentTarget.reset();
+              }}>
+                <input name="key" className="ayeba-input" placeholder="produit.feature (ex: search.live)" pattern="[a-z0-9._-]{2,64}" required />
+                <input name="note" className="ayeba-input" placeholder="Description…" />
+                <button type="submit" className="rounded-md px-2.5 py-1 text-xs font-medium" style={{ border: "1px solid var(--line-bright)", background: "rgba(232,93,4,0.10)" }}>Créer (coupé)</button>
+              </form>
             </div>
           </section>
         )}
@@ -808,11 +1061,26 @@ export function AdminConsole({
 
         {tab === "search" && (
           <section className="space-y-4">
-            <header>
-              <h2 className="text-xl font-semibold">Recherche & Index</h2>
-              <p className="text-sm opacity-60">
-                {num(((data.index as Row)?.totalDocuments))} documents indexés · {num(((data.queue as Row)?.pending))} URLs en file
-              </p>
+            <header className="flex items-end justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-semibold">Recherche & Index</h2>
+                <p className="text-sm opacity-60">
+                  {num(((data.index as Row)?.totalDocuments))} documents indexés · {num(((data.queue as Row)?.pending))} URLs en file
+                </p>
+              </div>
+              <nav className="flex gap-2">
+                <Btn onClick={() => {
+                  if (window.confirm(`Relancer les ${num(((data.queue as Row)?.failed))} URLs en échec ?`)) {
+                    void act("/api/admin/search", { action: "retry_failed" }, "File de crawl relancée");
+                  }
+                }}>Relancer les échecs</Btn>
+                <Btn danger onClick={() => {
+                  const d = window.prompt("Domaine à purger de l'index (ex: spam-site.com) :");
+                  if (d?.trim() && window.confirm(`Supprimer tous les documents et URLs de « ${d.trim()} » ?`)) {
+                    void act("/api/admin/search", { action: "purge_domain", domain: d.trim() }, `Domaine ${d.trim()} purgé`);
+                  }
+                }}>Purger un domaine</Btn>
+              </nav>
             </header>
             <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
               <Stat label="Documents indexés" value={num(((data.index as Row)?.totalDocuments)).toLocaleString("fr-CD")} hint={`${num(((data.index as Row)?.localDocuments))} locaux (RDC)`} />
@@ -820,6 +1088,24 @@ export function AdminConsole({
               <Stat label="Recherches totales" value={num(((data.queries as Row)?.totalSearches)).toLocaleString("fr-CD")} />
               <Stat label="Impressions 7j" value={num(((data.queries as Row)?.impressions7d))} hint={`${num(((data.queries as Row)?.clicks7d))} clics`} />
             </div>
+            {Array.isArray(data.upstream) && data.upstream.length > 0 && (
+              <div className="ayeba-panel p-4">
+                <p className="ayeba-kicker mb-3">Santé des upstreams live (24 h) — HTTP 200 + 0 résultat = parser cassé</p>
+                <Table
+                  head={["Source", "Sondes", "Succès", "Latence moy.", "Résultats", "200 vides", "Dernière erreur"]}
+                  rows={(data.upstream as Row[]).map((u) => [
+                    <Badge key="s" tone={num(u.ok_rate) >= 80 ? "ok" : num(u.ok_rate) >= 50 ? "warn" : "bad"}>{s(u.source)}</Badge>,
+                    num(u.probes),
+                    <span key="r" className="font-medium">{num(u.ok_rate)}%</span>,
+                    `${num(u.avg_ms)} ms`,
+                    num(u.hits),
+                    num(u.empty_200) > 0 ? <Badge key="z" tone="warn">{num(u.empty_200)}</Badge> : "0",
+                    <span key="e" className="text-xs opacity-60">{s(u.last_error, "—").slice(0, 60)}</span>,
+                  ])}
+                  empty="Aucune sonde"
+                />
+              </div>
+            )}
             <div className="grid gap-4 lg:grid-cols-2">
               <div className="ayeba-panel p-4">
                 <p className="ayeba-kicker mb-3">Top requêtes (7 jours)</p>

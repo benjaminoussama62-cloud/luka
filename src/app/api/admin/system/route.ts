@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireSection } from "@/lib/admin/auth";
-import { currentDbMode, getDb } from "@/lib/storage/database";
+import { currentDbMode } from "@/lib/storage/database";
+import { adb } from "@/lib/storage/adb";
 
 export const runtime = "nodejs";
 
@@ -35,33 +36,25 @@ export async function GET() {
   const auth = await requireSection("system");
   if (auth instanceof NextResponse) return auth;
 
-  const db = getDb();
+  const db = adb();
   const tableCounts: Record<string, number> = {};
   for (const t of COUNTED_TABLES) {
     try {
-      tableCounts[t] = (db.prepare(`SELECT COUNT(*) AS n FROM ${t}`).get() as { n: number }).n;
+      tableCounts[t] = (await db.get(`SELECT COUNT(*) AS n FROM ${t}`) as { n: number }).n;
     } catch {
       tableCounts[t] = -1; // table absente
     }
   }
 
   const day = new Date(Date.now() - 86400_000).toISOString();
-  const api = db
-    .prepare(
-      `SELECT COUNT(*) AS calls,
+  const api = await db.get(`SELECT COUNT(*) AS calls,
               SUM(CASE WHEN status_code >= 400 THEN 1 ELSE 0 END) AS errors,
               AVG(latency_ms) AS avg_latency
-       FROM developer_api_logs WHERE created_at >= ?`,
-    )
-    .get(day) as { calls: number | null; errors: number | null; avg_latency: number | null };
+       FROM developer_api_logs WHERE created_at >= ?`, [day]) as { calls: number | null; errors: number | null; avg_latency: number | null };
 
-  const jobs = db
-    .prepare("SELECT job_type, status, detail, started_at, finished_at FROM job_runs ORDER BY started_at DESC LIMIT 30")
-    .all() as Record<string, unknown>[];
+  const jobs = await db.all("SELECT job_type, status, detail, started_at, finished_at FROM job_runs ORDER BY started_at DESC LIMIT 30") as Record<string, unknown>[];
 
-  const alerts = db
-    .prepare("SELECT id, type, title, message, created_at, read FROM admin_notifications ORDER BY created_at DESC LIMIT 20")
-    .all() as Record<string, unknown>[];
+  const alerts = await db.all("SELECT id, type, title, message, created_at, read FROM admin_notifications ORDER BY created_at DESC LIMIT 20") as Record<string, unknown>[];
 
   return NextResponse.json({
     ok: true,

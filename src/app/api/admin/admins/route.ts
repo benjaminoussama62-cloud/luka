@@ -3,7 +3,7 @@ import bcrypt from "bcryptjs";
 import { NextResponse } from "next/server";
 import { requireSection } from "@/lib/admin/auth";
 import { adminCore } from "@/lib/admin/admin-core";
-import { getDb } from "@/lib/storage/database";
+import { adb } from "@/lib/storage/adb";
 import type { AdminRole } from "@/lib/admin/admin-types";
 
 export const runtime = "nodejs";
@@ -51,7 +51,7 @@ export async function POST(req: Request) {
     if (!email || !role || !ROLES.includes(role as AdminRole)) {
       return NextResponse.json({ error: "email et rôle valide requis" }, { status: 400 });
     }
-    const db = getDb();
+    const db = adb();
     const cleanEmail = email.trim().toLowerCase();
     const now = new Date().toISOString();
 
@@ -60,18 +60,14 @@ export async function POST(req: Request) {
     const temporaryPassword = `Ayeba-${randomBytes(9).toString("base64url")}!${randomBytes(2).toString("hex")}`;
     const hash = bcrypt.hashSync(temporaryPassword, 12);
 
-    let user = db
-      .prepare("SELECT id, name FROM users WHERE email = ?")
-      .get(cleanEmail) as { id: string; name: string } | undefined;
+    let user = await db.get("SELECT id, name FROM users WHERE email = ?", [cleanEmail]) as { id: string; name: string } | undefined;
     if (!user) {
       const uid = randomUUID();
-      db.prepare(
-        `INSERT INTO users (id, name, email, password_hash, avatar_color, provider, role, created_at)
-         VALUES (?, ?, ?, ?, '#e85d04', 'email', 'contributor', ?)`,
-      ).run(uid, name?.trim() || cleanEmail.split("@")[0], cleanEmail, hash, now);
+      await db.run(`INSERT INTO users (id, name, email, password_hash, avatar_color, provider, role, created_at)
+         VALUES (?, ?, ?, ?, '#e85d04', 'email', 'contributor', ?)`, [uid, name?.trim() || cleanEmail.split("@")[0], cleanEmail, hash, now]);
       user = { id: uid, name: name?.trim() || cleanEmail.split("@")[0] };
     } else {
-      db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(hash, user.id);
+      await db.run("UPDATE users SET password_hash = ? WHERE id = ?", [hash, user.id]);
     }
 
     if (adminCore.getAdminByUserId(user.id)) {
@@ -106,7 +102,7 @@ export async function POST(req: Request) {
   if (targetIsLastSuper && wouldLoseSuper) {
     return NextResponse.json(
       { error: "Impossible : c'est le dernier super_admin actif" },
-      { status: 409 },
+      { status: 409 }
     );
   }
 

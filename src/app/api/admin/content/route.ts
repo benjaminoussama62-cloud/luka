@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireSection } from "@/lib/admin/auth";
-import { getDb } from "@/lib/storage/database";
+import { adb } from "@/lib/storage/adb";
 
 export const runtime = "nodejs";
 
@@ -11,49 +11,46 @@ export async function GET() {
   const auth = await requireSection("content");
   if (auth instanceof NextResponse) return auth;
 
-  const db = getDb();
-  const all = (sql: string) => db.prepare(sql).all();
-  const count = (sql: string) =>
-    (db.prepare(sql).get() as { n: number } | undefined)?.n ?? 0;
+  const db = adb();
+  const all = async (sql: string) => db.all(sql);
+  const count = async (sql: string) =>
+    (await db.get(sql) as { n: number } | undefined)?.n ?? 0;
 
   return NextResponse.json({
     ok: true,
     ayebi: {
       stats: {
-        articles: count("SELECT COUNT(*) AS n FROM ayebi_articles"),
-        revisions: count("SELECT COUNT(*) AS n FROM ayebi_revisions"),
-        openFlags: count("SELECT COUNT(*) AS n FROM ayebi_flags WHERE status = 'open'"),
-        portals: count("SELECT COUNT(*) AS n FROM ayebi_portals"),
-        categories: count("SELECT COUNT(*) AS n FROM ayebi_categories"),
-        pageViews: count("SELECT COUNT(*) AS n FROM ayebi_page_views"),
+        articles: await count("SELECT COUNT(*) AS n FROM ayebi_articles"),
+        revisions: await count("SELECT COUNT(*) AS n FROM ayebi_revisions"),
+        openFlags: await count("SELECT COUNT(*) AS n FROM ayebi_flags WHERE status = 'open'"),
+        portals: await count("SELECT COUNT(*) AS n FROM ayebi_portals"),
+        categories: await count("SELECT COUNT(*) AS n FROM ayebi_categories"),
+        pageViews: await count("SELECT COUNT(*) AS n FROM ayebi_page_views"),
       },
-      flags: all("SELECT * FROM ayebi_flags ORDER BY created_at DESC LIMIT 200"),
-      recentArticles: all(
-        "SELECT slug, title, category, protection, revision, updated_at, updated_by_name FROM ayebi_articles ORDER BY updated_at DESC LIMIT 100",
+      flags: await all("SELECT * FROM ayebi_flags ORDER BY created_at DESC LIMIT 200"),
+      recentArticles: await all("SELECT slug, title, category, protection, revision, updated_at, updated_by_name FROM ayebi_articles ORDER BY updated_at DESC LIMIT 100"
       ),
     },
     studio: {
-      sites: all(
-        `SELECT s.id, s.domain, s.status, s.verified_at, s.created_at, u.email AS owner_email
+      sites: await all(`SELECT s.id, s.domain, s.status, s.verified_at, s.created_at, u.email AS owner_email
          FROM studio_sites s LEFT JOIN users u ON u.id = s.user_id
-         ORDER BY s.created_at DESC LIMIT 200`,
+         ORDER BY s.created_at DESC LIMIT 200`
       ),
       stats: {
-        sites: count("SELECT COUNT(*) AS n FROM studio_sites"),
-        traceEvents: count("SELECT COUNT(*) AS n FROM trace_events"),
-        velocityAudits: count("SELECT COUNT(*) AS n FROM velocity_audits"),
+        sites: await count("SELECT COUNT(*) AS n FROM studio_sites"),
+        traceEvents: await count("SELECT COUNT(*) AS n FROM trace_events"),
+        velocityAudits: await count("SELECT COUNT(*) AS n FROM velocity_audits"),
       },
     },
     oauth: {
-      clients: all(
-        `SELECT c.client_id, c.name, c.verified, c.tier, c.created_at, u.email AS owner_email
+      clients: await all(`SELECT c.client_id, c.name, c.verified, c.tier, c.created_at, u.email AS owner_email
          FROM oauth_clients c LEFT JOIN users u ON u.id = c.owner_user_id
-         ORDER BY c.created_at DESC LIMIT 200`,
+         ORDER BY c.created_at DESC LIMIT 200`
       ),
       stats: {
-        clients: count("SELECT COUNT(*) AS n FROM oauth_clients"),
-        tokens: count("SELECT COUNT(*) AS n FROM oauth_access_tokens"),
-        consents: count("SELECT COUNT(*) AS n FROM oauth_user_consents"),
+        clients: await count("SELECT COUNT(*) AS n FROM oauth_clients"),
+        tokens: await count("SELECT COUNT(*) AS n FROM oauth_access_tokens"),
+        consents: await count("SELECT COUNT(*) AS n FROM oauth_user_consents"),
       },
     },
   });

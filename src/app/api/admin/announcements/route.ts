@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireSection } from "@/lib/admin/auth";
-import { getDb } from "@/lib/storage/database";
+import { adb } from "@/lib/storage/adb";
 
 export const runtime = "nodejs";
 
@@ -9,22 +9,16 @@ const STATUSES = new Set(["draft", "active", "archived"]);
 
 type Auth = Exclude<Awaited<ReturnType<typeof requireSection>>, NextResponse>;
 
-function audit(auth: Auth, action: string, entityId: string, changes: Record<string, unknown>) {
+async function audit(auth: Auth, action: string, entityId: string, changes: Record<string, unknown>) {
   try {
-    getDb()
-      .prepare(
-        `INSERT INTO admin_audit_log (id, admin_id, admin_name, action, entity_type, entity_id, changes, timestamp)
-         VALUES (?, ?, ?, ?, 'announcement', ?, ?, ?)`,
-      )
-      .run(
-        crypto.randomUUID(),
+    await adb().run(`INSERT INTO admin_audit_log (id, admin_id, admin_name, action, entity_type, entity_id, changes, timestamp)
+         VALUES (?, ?, ?, ?, 'announcement', ?, ?, ?)`, [crypto.randomUUID(),
         auth.admin?.id ?? "env",
         auth.admin?.name ?? auth.user.name,
         action,
         entityId,
         JSON.stringify(changes),
-        new Date().toISOString(),
-      );
+        new Date().toISOString()]);
   } catch {
     /* audit best-effort */
   }
@@ -35,13 +29,9 @@ export async function GET() {
   const auth = await requireSection("broadcast");
   if (auth instanceof NextResponse) return auth;
 
-  const rows = getDb()
-    .prepare(
-      `SELECT a.*, COALESCE(au.name, a.created_by) AS author
+  const rows = await adb().all(`SELECT a.*, COALESCE(au.name, a.created_by) AS author
        FROM announcements a LEFT JOIN admin_users au ON au.id = a.created_by
-       ORDER BY a.created_at DESC LIMIT 200`,
-    )
-    .all();
+       ORDER BY a.created_at DESC LIMIT 200`);
   return NextResponse.json({ ok: true, announcements: rows });
 }
 
@@ -66,14 +56,10 @@ export async function POST(req: Request) {
 
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
-  getDb()
-    .prepare(
-      `INSERT INTO announcements (id, title, body, severity, status, created_by, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    )
-    .run(id, title.slice(0, 200), text.slice(0, 2000), severity, status, auth.admin?.id ?? null, now, now);
+  await adb().run(`INSERT INTO announcements (id, title, body, severity, status, created_by, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, [id, title.slice(0, 200), text.slice(0, 2000), severity, status, auth.admin?.id ?? null, now, now]);
 
-  audit(auth, "create_announcement", id, { title, severity, status });
+  await audit(auth, "create_announcement", id, { title, severity, status });
   return NextResponse.json({ ok: true, id });
 }
 
@@ -91,7 +77,7 @@ export async function PATCH(req: Request) {
   };
   if (!body.id) return NextResponse.json({ error: "id requis." }, { status: 400 });
 
-  const existing = getDb().prepare("SELECT * FROM announcements WHERE id = ?").get(body.id) as
+  const existing = await adb().get("SELECT * FROM announcements WHERE id = ?", [body.id]) as
     | Record<string, unknown>
     | undefined;
   if (!existing) return NextResponse.json({ error: "Annonce introuvable." }, { status: 404 });
@@ -101,11 +87,9 @@ export async function PATCH(req: Request) {
   const severity = SEVERITIES.has(body.severity ?? "") ? body.severity! : (existing.severity as string);
   const status = STATUSES.has(body.status ?? "") ? body.status! : (existing.status as string);
 
-  getDb()
-    .prepare("UPDATE announcements SET title = ?, body = ?, severity = ?, status = ?, updated_at = ? WHERE id = ?")
-    .run(title, text, severity, status, new Date().toISOString(), body.id);
+  await adb().run("UPDATE announcements SET title = ?, body = ?, severity = ?, status = ?, updated_at = ? WHERE id = ?", [title, text, severity, status, new Date().toISOString(), body.id]);
 
-  audit(auth, "update_announcement", body.id, { status, severity });
+  await audit(auth, "update_announcement", body.id, { status, severity });
   return NextResponse.json({ ok: true });
 }
 
@@ -117,7 +101,7 @@ export async function DELETE(req: Request) {
   const id = new URL(req.url).searchParams.get("id");
   if (!id) return NextResponse.json({ error: "id requis." }, { status: 400 });
 
-  getDb().prepare("DELETE FROM announcements WHERE id = ?").run(id);
-  audit(auth, "delete_announcement", id, {});
+  await adb().run("DELETE FROM announcements WHERE id = ?", [id]);
+  await audit(auth, "delete_announcement", id, {});
   return NextResponse.json({ ok: true });
 }
