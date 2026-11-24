@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { AyebaWordmark } from "@/components/brand/AyebaIcon";
 import { OAuthButton } from "@/components/auth/OAuthLogos";
 import { useAuth } from "@/lib/auth";
+import { Capacitor } from "@capacitor/core";
+import AyebaNative from "@/plugins/AyebaNative";
 
 // Compte Ayeba obligatoire sur les produits (Mbongo, Mail, Studio,
 // Developers, Ayebi) — comme Google, un seul compte unifié.
@@ -58,6 +60,7 @@ export function ConnexionClient({ next }: { next: string }) {
   const [oauthVisible, setOauthVisible] = useState(false);
   const [mode, setMode] = useState<"magic" | "password">("magic");
   const [magicSent, setMagicSent] = useState(false);
+  const [biometricAvailable, setBiometricAvailable] = useState(false);
 
   useEffect(() => {
     if (ready && user) router.replace(dest);
@@ -80,6 +83,28 @@ export function ConnexionClient({ next }: { next: string }) {
       setOauthVisible(true);
     }
   }, []);
+
+  // Native biometric check for iOS — Guideline 4.2
+  useEffect(() => {
+    if (Capacitor.getPlatform() === "ios") {
+      setBiometricAvailable(true);
+    }
+  }, []);
+
+  async function handleBiometric() {
+    if (!Capacitor.isNativePlatform()) return;
+    try {
+      await AyebaNative.authenticateBiometric({ reason: "Connexion rapide à votre compte Ayeba" });
+      // Haptic feedback
+      await AyebaNative.haptic({ type: "success" });
+      setError(null);
+      // Proceed with magic link for now — biometric just proves device ownership
+      setMode("magic");
+    } catch (e) {
+      await AyebaNative.haptic({ type: "error" });
+      setError("Biométrie refusée ou indisponible");
+    }
+  }
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -146,6 +171,16 @@ export function ConnexionClient({ next }: { next: string }) {
             </div>
           </div>
         ) : null}
+
+        {biometricAvailable && (
+          <button
+            type="button"
+            onClick={handleBiometric}
+            className="mb-4 w-full rounded-xl border border-[var(--line)] bg-white/[0.03] py-3 text-xs font-[family-name:var(--font-mono)] text-[var(--muted)] transition-colors hover:border-[var(--line-bright)] hover:text-white"
+          >
+            Connexion Face ID / Touch ID
+          </button>
+        )}
 
         {magicSent ? (
           <div className="rounded-xl border border-[var(--line-bright)] bg-white/[0.03] p-5 text-center">

@@ -49,5 +49,9 @@
 	<string>UIStatusBarStyleLightContent</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>AYEBA utilise votre position pour afficher des resultats locaux et des informations pertinentes (taux de change, lieux). Votre position n'est jamais stockee sur nos serveurs.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Utilisez Face ID pour une authentification rapide et securisee de votre compte AYEBA.</string>
 </dict>
 </plist>

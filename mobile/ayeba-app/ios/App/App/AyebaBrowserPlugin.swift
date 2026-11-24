@@ -2,11 +2,14 @@ import Capacitor
 import WebKit
 import UIKit
 import Security
+import CoreLocation
+import LocalAuthentication
+import AudioToolbox
 
 /// Navigateur natif AYEBA pour iOS — WKWebView flottant au-dessus du bridge
 /// Capacitor, comme le plugin Android (open/frame/hidden/tabs/capture).
 @objc(AyebaBrowserPlugin)
-public class AyebaBrowserPlugin: CAPPlugin, WKNavigationDelegate, WKUIDelegate {
+public class AyebaBrowserPlugin: CAPPlugin, WKNavigationDelegate, WKUIDelegate, CLLocationManagerDelegate {
 
     private var container: UIView?
     private var browserWebView: WKWebView?
@@ -16,6 +19,10 @@ public class AyebaBrowserPlugin: CAPPlugin, WKNavigationDelegate, WKUIDelegate {
     private var currentTabId: String?
     private var pendingSslChallenge: ((URLSession.AuthChallengeDisposition, URLCredential?) -> Void)?
     private var pendingSslTrust: SecTrust?
+
+    // --- Native features for Guideline 4.2 ---
+    private var locationManager: CLLocationManager?
+    private var locationCallback: CAPPluginCall?
 
     // MARK: - Cycle de vie
 
@@ -343,5 +350,100 @@ public class AyebaBrowserPlugin: CAPPlugin, WKNavigationDelegate, WKUIDelegate {
             "historyList": wv.backForwardList.backList.map { $0.url.absoluteString },
             "historyIndex": wv.backForwardList.backList.count,
         ])
+    }
+
+    // MARK: - Native Features (Guideline 4.2)
+
+    /// Geolocation native — donne la position actuelle pour resultats locaux
+    @objc func getCurrentLocation(_ call: CAPPluginCall) {
+        locationCallback = call
+        if locationManager == nil {
+            locationManager = CLLocationManager()
+            locationManager?.delegate = self
+            locationManager?.desiredAccuracy = kCLLocationAccuracyHundredMeters
+        }
+
+        if CLLocationManager.authorizationStatus() == .notDetermined {
+            locationManager?.requestWhenInUseAuthorization()
+        } else if CLLocationManager.authorizationStatus() == .denied {
+            call.reject("Permission geolocalisation refusee")
+            locationCallback = nil
+        } else {
+            locationManager?.requestLocation()
+        }
+    }
+
+    public func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        guard let loc = locations.last, let cb = locationCallback else { return }
+        cb.resolve([
+            "latitude": loc.coordinate.latitude,
+            "longitude": loc.coordinate.longitude,
+            "accuracy": loc.horizontalAccuracy
+        ])
+        locationCallback = nil
+    }
+
+    public func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        guard let cb = locationCallback else { return }
+        cb.reject("Echec geolocalisation: \(error.localizedDescription)")
+        locationCallback = nil
+    }
+
+    public func locationManager(_ manager: CLLocationManager, didChangeAuthorization status: CLAuthorizationStatus) {
+        if status == .authorizedWhenInUse || status == .authorizedAlways {
+            locationManager?.requestLocation()
+        } else if status == .denied {
+            locationCallback?.reject("Permission geolocalisation refusee")
+            locationCallback = nil
+        }
+    }
+
+    /// Biometric authentication (Face ID / Touch ID) — pour authentification forte
+    @objc func authenticateBiometric(_ call: CAPPluginCall) {
+        let context = LAContext()
+        var error: NSError?
+
+        if context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error) {
+            let reason = call.getString("reason") ?? "Authentifiez-vous pour continuer"
+            context.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, localizedReason: reason) { success, err in
+                DispatchQueue.main.async {
+                    if success {
+                        call.resolve(["success": true])
+                    } else {
+                        call.reject("Biometrique echoue: \(err?.localizedDescription ?? "inconnu")")
+                    }
+                }
+            }
+        } else {
+            call.reject("Biometrique non disponible: \(error?.localizedDescription ?? "inconnu")")
+        }
+    }
+
+    /// Haptic feedback — retour tactile natif
+    @objc func haptic(_ call: CAPPluginCall) {
+        let type = call.getString("type") ?? "light"
+        switch type {
+        case "light":
+            let generator = UIImpactFeedbackGenerator(style: .light)
+            generator.impactOccurred()
+        case "medium":
+            let generator = UIImpactFeedbackGenerator(style: .medium)
+            generator.impactOccurred()
+        case "heavy":
+            let generator = UIImpactFeedbackGenerator(style: .heavy)
+            generator.impactOccurred()
+        case "success":
+            let generator = UINotificationFeedbackGenerator()
+            generator.notificationOccurred(.success)
+        case "warning":
+            let generator = UINotificationFeedbackGenerator()
+            generator.notificationOccurred(.warning)
+        case "error":
+            let generator = UINotificationFeedbackGenerator()
+            generator.notificationOccurred(.error)
+        default:
+            AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
+        }
+        call.resolve()
     }
 }
