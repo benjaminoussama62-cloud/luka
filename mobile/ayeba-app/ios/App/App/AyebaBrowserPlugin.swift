@@ -6,7 +6,6 @@ import CoreLocation
 import LocalAuthentication
 import AudioToolbox
 import UserNotifications
-import KeychainAccess
 
 /// Navigateur natif AYEBA pour iOS — WKWebView flottant au-dessus du bridge
 /// Capacitor, comme le plugin Android (open/frame/hidden/tabs/capture).
@@ -523,7 +522,17 @@ public class AyebaBrowserPlugin: CAPPlugin, WKNavigationDelegate, WKUIDelegate, 
         }
     }
 
-    // MARK: - Keychain Secure Storage
+    // MARK: - Keychain Secure Storage (native Security framework)
+
+    private let keychainService = "app.ayeba.mobile"
+
+    private func keychainQuery(key: String) -> NSMutableDictionary {
+        let query = NSMutableDictionary()
+        query[kSecClass as String] = kSecClassGenericPassword
+        query[kSecAttrService as String] = keychainService
+        query[kSecAttrAccount as String] = key
+        return query
+    }
 
     /// Store sensitive data securely in iOS Keychain
     @objc func setKeychainItem(_ call: CAPPluginCall) {
@@ -533,12 +542,16 @@ public class AyebaBrowserPlugin: CAPPlugin, WKNavigationDelegate, WKUIDelegate, 
             return
         }
 
-        let keychain = KeychainAccess.Keychain(service: "app.ayeba.mobile")
-        do {
-            try keychain.set(value, key: key)
+        let query = keychainQuery(key: key)
+        query[kSecValueData as String] = value.data(using: .utf8)
+
+        SecItemDelete(query as CFDictionary) // Delete existing if any
+
+        let status = SecItemAdd(query as CFDictionary, nil)
+        if status == errSecSuccess {
             call.resolve()
-        } catch {
-            call.reject("Erreur Keychain: \(error.localizedDescription)")
+        } else {
+            call.reject("Erreur Keychain: \(status)")
         }
     }
 
@@ -549,12 +562,19 @@ public class AyebaBrowserPlugin: CAPPlugin, WKNavigationDelegate, WKUIDelegate, 
             return
         }
 
-        let keychain = KeychainAccess.Keychain(service: "app.ayeba.mobile")
-        do {
-            let value = try keychain.get(key)
-            call.resolve(["value": value ?? ""])
-        } catch {
-            call.reject("Erreur Keychain: \(error.localizedDescription)")
+        let query = keychainQuery(key: key)
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+
+        if status == errSecSuccess, let data = result as? Data, let value = String(data: data, encoding: .utf8) {
+            call.resolve(["value": value])
+        } else if status == errSecItemNotFound {
+            call.resolve(["value": ""])
+        } else {
+            call.reject("Erreur Keychain: \(status)")
         }
     }
 
@@ -565,12 +585,13 @@ public class AyebaBrowserPlugin: CAPPlugin, WKNavigationDelegate, WKUIDelegate, 
             return
         }
 
-        let keychain = KeychainAccess.Keychain(service: "app.ayeba.mobile")
-        do {
-            try keychain.remove(key)
+        let query = keychainQuery(key: key)
+        let status = SecItemDelete(query as CFDictionary)
+
+        if status == errSecSuccess || status == errSecItemNotFound {
             call.resolve()
-        } catch {
-            call.reject("Erreur Keychain: \(error.localizedDescription)")
+        } else {
+            call.reject("Erreur Keychain: \(status)")
         }
     }
 
