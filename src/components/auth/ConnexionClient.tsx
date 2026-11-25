@@ -5,8 +5,22 @@ import { useRouter } from "next/navigation";
 import { AyebaWordmark } from "@/components/brand/AyebaIcon";
 import { OAuthButton } from "@/components/auth/OAuthLogos";
 import { useAuth } from "@/lib/auth";
-import { Capacitor } from "@capacitor/core";
-import AyebaNative from "@/plugins/AyebaNative";
+// Capacitor est injecté en global par le runtime natif (même convention que
+// src/lib/native-browser.ts) — pas d'import @capacitor : absent du bundle web.
+type CapacitorGlobal = {
+  getPlatform(): string;
+  isNativePlatform(): boolean;
+  Plugins?: {
+    AyebaBrowserPlugin?: {
+      authenticateBiometric(o: { reason: string }): Promise<{ success: boolean }>;
+      haptic(o: { type: string }): Promise<void>;
+    };
+  };
+};
+const cap = () =>
+  typeof window !== "undefined"
+    ? (window as { Capacitor?: CapacitorGlobal }).Capacitor ?? null
+    : null;
 
 // Compte Ayeba obligatoire sur les produits (Mbongo, Mail, Studio,
 // Developers, Ayebi) — comme Google, un seul compte unifié.
@@ -60,7 +74,7 @@ export function ConnexionClient({ next }: { next: string }) {
   const [oauthVisible, setOauthVisible] = useState(false);
   const [mode, setMode] = useState<"magic" | "password">("magic");
   const [magicSent, setMagicSent] = useState(false);
-  const [biometricAvailable, setBiometricAvailable] = useState(false);
+  const [biometricAvailable] = useState(() => cap()?.getPlatform() === "ios");
 
   useEffect(() => {
     if (ready && user) router.replace(dest);
@@ -84,24 +98,18 @@ export function ConnexionClient({ next }: { next: string }) {
     }
   }, []);
 
-  // Native biometric check for iOS — Guideline 4.2
-  useEffect(() => {
-    if (Capacitor.getPlatform() === "ios") {
-      setBiometricAvailable(true);
-    }
-  }, []);
-
   async function handleBiometric() {
-    if (!Capacitor.isNativePlatform()) return;
+    const plugin = cap()?.Plugins?.AyebaBrowserPlugin;
+    if (!cap()?.isNativePlatform() || !plugin) return;
     try {
-      await AyebaNative.authenticateBiometric({ reason: "Connexion rapide à votre compte Ayeba" });
+      await plugin.authenticateBiometric({ reason: "Connexion rapide à votre compte Ayeba" });
       // Haptic feedback
-      await AyebaNative.haptic({ type: "success" });
+      await plugin.haptic({ type: "success" });
       setError(null);
       // Proceed with magic link for now — biometric just proves device ownership
       setMode("magic");
-    } catch (e) {
-      await AyebaNative.haptic({ type: "error" });
+    } catch {
+      await plugin.haptic({ type: "error" });
       setError("Biométrie refusée ou indisponible");
     }
   }
