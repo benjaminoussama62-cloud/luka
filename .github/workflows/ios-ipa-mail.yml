@@ -89,6 +89,7 @@ jobs:
               -workspace App.xcworkspace -scheme App \
               -configuration Release \
               -archivePath ../AyebaMail.xcarchive \
+              CURRENT_PROJECT_VERSION=${{ github.run_number }} \
               > ../archive.log 2>&1 || {
                 tail -40 ../archive.log
                 grep -iE "error:|fatal error|requires|failed" ../archive.log | head -20 | while IFS= read -r line; do
@@ -101,6 +102,7 @@ jobs:
               -workspace App.xcworkspace -scheme App \
               -configuration Release \
               -archivePath ../AyebaMail.xcarchive \
+              CURRENT_PROJECT_VERSION=${{ github.run_number }} \
               CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
               > ../archive.log 2>&1 || { tail -40 ../archive.log; exit 1; }
           fi
