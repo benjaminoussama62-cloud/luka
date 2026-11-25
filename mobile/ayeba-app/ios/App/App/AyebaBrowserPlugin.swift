@@ -6,6 +6,7 @@ import CoreLocation
 import LocalAuthentication
 import AudioToolbox
 import UserNotifications
+import CoreSpotlight
 
 /// Navigateur natif AYEBA pour iOS — WKWebView flottant au-dessus du bridge
 /// Capacitor, comme le plugin Android (open/frame/hidden/tabs/capture).
