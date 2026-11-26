@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth";
+import { isMobileApp } from "@/lib/mobile-app";
 import { decryptBytes, decryptUtf8, openContentKey, type VaultSession } from "@/lib/mail/e2ee";
 import { sendSealedMessage } from "@/components/mail/send-sealed";
 import { SecurityPane, VaultCreate, VaultUnlock, type VaultInfo } from "@/components/mail/VaultScreens";
@@ -921,6 +922,13 @@ export function MailApp() {
   const unsubscribe = () => {
     const u = open?.unsubscribe?.trim();
     if (!u) return;
+    if (isMobileApp()) {
+      // App native : window.open sort vers Safari — on desabonne en silencieux.
+      if (/^https?:\/\//i.test(u)) void fetch(u, { mode: "no-cors" }).catch(() => {});
+      else if (/^mailto:/i.test(u)) window.location.href = u;
+      showToast("Demande de désabonnement envoyée.");
+      return;
+    }
     if (/^https?:\/\//i.test(u)) window.open(u, "_blank", "noopener,noreferrer");
     else if (/^mailto:/i.test(u)) window.location.href = u;
     showToast("Demande de désabonnement ouverte.");
@@ -1381,9 +1389,11 @@ export function MailApp() {
                         <button onClick={() => downloadEml({ msg: open, subject: open.subject, body: open.body, files: openFiles })}>
                           <IcDownload size={14} /> Télécharger (.eml)
                         </button>
-                        <button onClick={() => printMessage({ msg: open, subject: open.subject, body: open.body, files: openFiles })}>
-                          <IcPrint size={14} /> Imprimer
-                        </button>
+                        {!isMobileApp() && (
+                          <button onClick={() => printMessage({ msg: open, subject: open.subject, body: open.body, files: openFiles })}>
+                            <IcPrint size={14} /> Imprimer
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>

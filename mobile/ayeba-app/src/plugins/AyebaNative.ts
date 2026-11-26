@@ -13,6 +13,6 @@ export interface AyebaNativePlugin {
   indexForSpotlight(options: { title: string; content: string; url: string }): Promise<void>;
 }
 
-const AyebaNative = registerPlugin<AyebaNativePlugin>('AyebaBrowserPlugin');
+const AyebaNative = registerPlugin<AyebaNativePlugin>('AyebaBrowser');
 
 export default AyebaNative;

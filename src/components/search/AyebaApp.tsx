@@ -360,6 +360,7 @@ function EmptyVertical({ label }: { label: string }) {
 
 function EmptyResults() {
   const { response, search } = useAyeba();
+  const { openWebTab } = useBrowserShell();
   if (!response || response.results.length > 0) return null;
   // Calcul / réponse instantanée = résultat direct — ne pas afficher le vide.
   if (
@@ -379,7 +380,11 @@ function EmptyResults() {
       <button
         type="button"
         className="ayeba-ghost mt-4 px-4 py-2 text-sm"
-        onClick={() => window.open(`https://duckduckgo.com/?q=${encodeURIComponent(response.query)}`, "_blank")}
+        onClick={() => {
+          const ddg = `https://duckduckgo.com/?q=${encodeURIComponent(response.query)}`;
+          if (isMobileApp()) openWebTab(ddg, "DuckDuckGo");
+          else window.open(ddg, "_blank");
+        }}
       >
         Ouvrir sur DuckDuckGo
       </button>

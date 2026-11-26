@@ -11,7 +11,7 @@ type CapacitorGlobal = {
   getPlatform(): string;
   isNativePlatform(): boolean;
   Plugins?: {
-    AyebaBrowserPlugin?: {
+    AyebaBrowser?: {
       authenticateBiometric(o: { reason: string }): Promise<{ success: boolean }>;
       haptic(o: { type: string }): Promise<void>;
     };
@@ -72,7 +72,12 @@ export function ConnexionClient({ next }: { next: string }) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [oauthVisible, setOauthVisible] = useState(false);
-  const [mode, setMode] = useState<"magic" | "password">("magic");
+  // Sur l'app iOS native : mot de passe par défaut — le lien magique ouvre le
+  // navigateur par défaut (le mail s'ouvre dans Safari), ce qu'Apple rejette
+  // (Guideline 4 — la connexion doit rester dans l'app).
+  const [mode, setMode] = useState<"magic" | "password">(
+    () => (typeof window !== "undefined" && cap()?.isNativePlatform?.() ? "password" : "magic"),
+  );
   const [magicSent, setMagicSent] = useState(false);
   const [biometricAvailable] = useState(() => cap()?.getPlatform() === "ios");
 
@@ -99,7 +104,7 @@ export function ConnexionClient({ next }: { next: string }) {
   }, []);
 
   async function handleBiometric() {
-    const plugin = cap()?.Plugins?.AyebaBrowserPlugin;
+    const plugin = cap()?.Plugins?.AyebaBrowser;
     if (!cap()?.isNativePlatform() || !plugin) return;
     try {
       await plugin.authenticateBiometric({ reason: "Connexion rapide à votre compte Ayeba" });
@@ -226,13 +231,15 @@ export function ConnexionClient({ next }: { next: string }) {
             <button type="submit" disabled={loading} className="ayeba-cta w-full py-3">
               {loading ? "…" : mode === "magic" ? "Recevoir le lien de connexion" : "Entrer"}
             </button>
-            <button
-              type="button"
-              onClick={() => { setMode(mode === "magic" ? "password" : "magic"); setError(null); }}
-              className="w-full text-center text-xs text-[var(--faint)] hover:text-[var(--muted)]"
-            >
-              {mode === "magic" ? "J'ai un mot de passe →" : "← Recevoir un lien par mail"}
-            </button>
+            {!cap()?.isNativePlatform?.() && (
+              <button
+                type="button"
+                onClick={() => { setMode(mode === "magic" ? "password" : "magic"); setError(null); }}
+                className="w-full text-center text-xs text-[var(--faint)] hover:text-[var(--muted)]"
+              >
+                {mode === "magic" ? "J'ai un mot de passe →" : "← Recevoir un lien par mail"}
+              </button>
+            )}
           </form>
         )}
 

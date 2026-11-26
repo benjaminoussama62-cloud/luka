@@ -21,4 +21,15 @@ CAP_PLUGIN(AyebaBrowserPlugin, "AyebaBrowser",
     CAP_PLUGIN_METHOD(saveTab, CAPPluginReturnPromise);
     CAP_PLUGIN_METHOD(restoreTab, CAPPluginReturnPromise);
     CAP_PLUGIN_METHOD(removeTab, CAPPluginReturnPromise);
+    CAP_PLUGIN_METHOD(getCurrentLocation, CAPPluginReturnPromise);
+    CAP_PLUGIN_METHOD(authenticateBiometric, CAPPluginReturnPromise);
+    CAP_PLUGIN_METHOD(haptic, CAPPluginReturnPromise);
+    CAP_PLUGIN_METHOD(requestNotificationPermission, CAPPluginReturnPromise);
+    CAP_PLUGIN_METHOD(scheduleNotification, CAPPluginReturnPromise);
+    CAP_PLUGIN_METHOD(share, CAPPluginReturnPromise);
+    CAP_PLUGIN_METHOD(setKeychainItem, CAPPluginReturnPromise);
+    CAP_PLUGIN_METHOD(getKeychainItem, CAPPluginReturnPromise);
+    CAP_PLUGIN_METHOD(deleteKeychainItem, CAPPluginReturnPromise);
+    CAP_PLUGIN_METHOD(indexForSpotlight, CAPPluginReturnPromise);
+    CAP_PLUGIN_METHOD(speechRecognize, CAPPluginReturnPromise);
 )

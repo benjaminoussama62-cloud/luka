@@ -13,12 +13,37 @@ type SpeechRecognitionCtor = new () => {
   stop: () => void;
 };
 
+type CapacitorGlobal = {
+  isNativePlatform?: () => boolean;
+  Plugins?: {
+    AyebaBrowser?: {
+      speechRecognize(o: { lang: string }): Promise<{ text: string }>;
+      haptic?(o: { type: string }): Promise<void>;
+    };
+  };
+};
+
+const cap = () =>
+  typeof window !== "undefined"
+    ? (window as { Capacitor?: CapacitorGlobal }).Capacitor ?? null
+    : null;
+
 export function VoiceSearchButton({ onResult }: { onResult: (text: string) => void }) {
   const [listening, setListening] = useState(false);
   const [supported, setSupported] = useState(false);
   const recRef = useRef<InstanceType<SpeechRecognitionCtor> | null>(null);
+  const nativeSpeech = useRef<NonNullable<NonNullable<CapacitorGlobal["Plugins"]>["AyebaBrowser"]> | null>(null);
 
   useEffect(() => {
+    // iOS natif : la Web Speech API est absente/inerte dans WKWebView —
+    // on route vers SFSpeechRecognizer via le plugin AyebaBrowser.
+    const native = cap()?.isNativePlatform?.() ? cap()?.Plugins?.AyebaBrowser : null;
+    if (native?.speechRecognize) {
+      nativeSpeech.current = native;
+      const t = window.setTimeout(() => setSupported(true), 0);
+      return () => window.clearTimeout(t);
+    }
+
     const w = window as Window & {
       SpeechRecognition?: SpeechRecognitionCtor;
       webkitSpeechRecognition?: SpeechRecognitionCtor;
@@ -44,22 +69,47 @@ export function VoiceSearchButton({ onResult }: { onResult: (text: string) => vo
 
   if (!supported) return null;
 
-  function toggle() {
-    const rec = recRef.current;
-    if (!rec) return;
+  async function toggle() {
     if (listening) {
+      if (nativeSpeech.current) {
+        setListening(false);
+        return; // auto-stop natif (timeout 10s / fin de phrase)
+      }
+      const rec = recRef.current;
+      if (!rec) return;
       rec.stop();
       setListening(false);
       return;
     }
+
+    if (nativeSpeech.current) {
+      setListening(true);
+      void nativeSpeech.current.haptic?.({ type: "light" });
+      try {
+        const { text } = await nativeSpeech.current.speechRecognize({ lang: "fr-FR" });
+        const clean = text?.trim();
+        if (clean) onResult(clean);
+      } catch {
+        // Permission refusée ou reconnaissance indisponible — rien à faire.
+      }
+      setListening(false);
+      return;
+    }
+
+    const rec = recRef.current;
+    if (!rec) return;
     setListening(true);
-    rec.start();
+    try {
+      rec.start();
+    } catch {
+      setListening(false);
+    }
   }
 
   return (
     <button
       type="button"
-      onClick={toggle}
+      onClick={() => void toggle()}
       className={`ayeba-ghost shrink-0 rounded-full p-2 ${listening ? "animate-pulse border-[var(--accent)] text-[var(--accent)]" : ""}`}
       aria-label="Recherche vocale"
       title="Recherche vocale"

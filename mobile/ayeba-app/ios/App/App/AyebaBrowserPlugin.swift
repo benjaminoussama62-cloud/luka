@@ -7,6 +7,8 @@ import LocalAuthentication
 import AudioToolbox
 import UserNotifications
 import CoreSpotlight
+import Speech
+import AVFoundation
 
 /// Navigateur natif AYEBA pour iOS — WKWebView flottant au-dessus du bridge
 /// Capacitor, comme le plugin Android (open/frame/hidden/tabs/capture).
@@ -26,6 +28,11 @@ public class AyebaBrowserPlugin: CAPPlugin, WKNavigationDelegate, WKUIDelegate, 
     private var locationManager: CLLocationManager?
     private var locationCallback: CAPPluginCall?
     private var notificationCenter: UNUserNotificationCenter?
+    private var audioEngine: AVAudioEngine?
+    private var speechRequest: SFSpeechAudioBufferRecognitionRequest?
+    private var speechTask: SFSpeechRecognitionTask?
+    private var speechCall: CAPPluginCall?
+    private var speechFinalText = ""
 
     // MARK: - Cycle de vie
 
@@ -623,6 +630,102 @@ public class AyebaBrowserPlugin: CAPPlugin, WKNavigationDelegate, WKUIDelegate, 
                     call.resolve()
                 }
             }
+        }
+    }
+
+    // MARK: - Speech Recognition (recherche vocale native)
+
+    /// Recherche vocale native via SFSpeechRecognizer — la Web Speech API
+    /// n'est pas disponible dans WKWebView : cette méthode donne un vrai
+    /// micro à la barre de recherche de l'app.
+    @objc func speechRecognize(_ call: CAPPluginCall) {
+        let lang = call.getString("lang") ?? "fr-FR"
+
+        SFSpeechRecognizer.requestAuthorization { [weak self] status in
+            DispatchQueue.main.async {
+                guard status == .authorized else {
+                    call.reject("Reconnaissance vocale non autorisee")
+                    return
+                }
+                self?.beginSpeechSession(call: call, lang: lang)
+            }
+        }
+    }
+
+    private func beginSpeechSession(call: CAPPluginCall, lang: String) {
+        guard let recognizer = SFSpeechRecognizer(locale: Locale(identifier: lang)) ?? SFSpeechRecognizer(),
+              recognizer.isAvailable else {
+            call.reject("Reconnaissance vocale indisponible")
+            return
+        }
+
+        stopSpeechSession(resolveCall: false)
+
+        let engine = AVAudioEngine()
+        let request = SFSpeechAudioBufferRecognitionRequest()
+        request.shouldReportPartialResults = false
+
+        speechCall = call
+        speechFinalText = ""
+        audioEngine = engine
+        speechRequest = request
+
+        let input = engine.inputNode
+        let format = input.outputFormat(forBus: 0)
+        input.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
+            request.append(buffer)
+        }
+
+        let session = AVAudioSession.sharedInstance()
+        do {
+            try session.setCategory(.record, mode: .measurement, options: .duckOthers)
+            try session.setActive(true, options: .notifyOthersOnDeactivation)
+        } catch {
+            call.reject("Micro indisponible")
+            return
+        }
+
+        speechTask = recognizer.recognitionTask(with: request) { [weak self] result, error in
+            guard let self = self else { return }
+            if let result = result {
+                self.speechFinalText = result.bestTranscription.formattedString
+            }
+            if error != nil || result?.isFinal == true {
+                self.stopSpeechSession(resolveCall: true)
+            }
+        }
+
+        // Auto-stop : silence de ~2.5s apres la derniere parole geree par
+        // shouldReportPartialResults=false + timeout de securite 10s.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in
+            self?.stopSpeechSession(resolveCall: true)
+        }
+
+        engine.prepare()
+        do {
+            try engine.start()
+            notifyListeners("speechState", data: ["listening": true])
+        } catch {
+            stopSpeechSession(resolveCall: false)
+            call.reject("Erreur audio: \(error.localizedDescription)")
+        }
+    }
+
+    private func stopSpeechSession(resolveCall: Bool) {
+        audioEngine?.stop()
+        audioEngine?.inputNode.removeTap(onBus: 0)
+        speechRequest?.endAudio()
+        speechTask?.cancel()
+        audioEngine = nil
+        speechRequest = nil
+        speechTask = nil
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+
+        guard let call = speechCall else { return }
+        speechCall = nil
+        notifyListeners("speechState", data: ["listening": false])
+        if resolveCall {
+            call.resolve(["text": speechFinalText])
         }
     }
 }

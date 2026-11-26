@@ -55,5 +55,9 @@
 	<string>Utilisez Face ID pour une authentification rapide et securisee de votre compte AYEBA.</string>
 	<key>NSUserNotificationsUsageDescription</key>
 	<string>Recevez des notifications pour vos nouveaux emails, mises a jour de taux de change et alertes importantes.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>AYEBA utilise le micro pour la recherche vocale : parlez et votre requete est transcrite dans la barre de recherche.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>AYEBA transcrit votre voix en texte pour la recherche vocale. L'audio est traite par le service de reconnaissance vocale d'Apple et n'est jamais stocke.</string>
 </dict>
 </plist>
