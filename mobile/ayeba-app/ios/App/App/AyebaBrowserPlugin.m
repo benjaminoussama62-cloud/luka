@@ -32,4 +32,5 @@ CAP_PLUGIN(AyebaBrowserPlugin, "AyebaBrowser",
     CAP_PLUGIN_METHOD(deleteKeychainItem, CAPPluginReturnPromise);
     CAP_PLUGIN_METHOD(indexForSpotlight, CAPPluginReturnPromise);
     CAP_PLUGIN_METHOD(speechRecognize, CAPPluginReturnPromise);
+    CAP_PLUGIN_METHOD(openSafariView, CAPPluginReturnPromise);
 )

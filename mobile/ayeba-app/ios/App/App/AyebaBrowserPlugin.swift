@@ -9,6 +9,7 @@ import UserNotifications
 import CoreSpotlight
 import Speech
 import AVFoundation
+import SafariServices
 
 /// Navigateur natif AYEBA pour iOS — WKWebView flottant au-dessus du bridge
 /// Capacitor, comme le plugin Android (open/frame/hidden/tabs/capture).
@@ -629,6 +630,28 @@ public class AyebaBrowserPlugin: CAPPlugin, WKNavigationDelegate, WKUIDelegate, 
                 } else {
                     call.resolve()
                 }
+            }
+        }
+    }
+
+    // MARK: - Safari View Controller (liens externes in-app)
+
+    /// Ouvre une URL dans SFSafariViewController — navigateur modal in-app
+    /// recommande par Apple : l'utilisateur ne quitte jamais l'app vers
+    /// Safari (Guideline 4).
+    @objc func openSafariView(_ call: CAPPluginCall) {
+        guard let urlStr = call.getString("url"), let url = URL(string: urlStr),
+              url.scheme == "https" || url.scheme == "http" else {
+            call.reject("URL invalide")
+            return
+        }
+        DispatchQueue.main.async {
+            let svc = SFSafariViewController(url: url)
+            svc.preferredBarTintColor = UIColor(red: 5/255, green: 5/255, blue: 7/255, alpha: 1)
+            svc.preferredControlTintColor = UIColor(red: 232/255, green: 114/255, blue: 26/255, alpha: 1)
+            svc.modalPresentationStyle = .automatic
+            self.bridge?.viewController?.present(svc, animated: true) {
+                call.resolve()
             }
         }
     }

@@ -9,6 +9,7 @@
  */
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { openExternal } from "@/lib/mobile-app";
 import { ExtrasNav, MoneyExtras } from "./MoneyExtras";
 
 type MoneyCurrency = "USD" | "CDF";
@@ -979,7 +980,7 @@ function MovePanel({
         })) as { transaction: { checkoutUrl?: string | null } };
         const url = r.transaction.checkoutUrl;
         onClose(true, url ? "Validez le paiement sur la page du partenaire" : "Validez le dépôt sur votre téléphone");
-        if (url) window.open(url, "_blank", "noopener");
+        if (url) openExternal(url);
       } else {
         await api("/api/mbongo/withdraw", {
           method: "POST",

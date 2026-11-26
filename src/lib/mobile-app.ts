@@ -33,3 +33,23 @@ export function externalLinkProps(): { target?: string; rel?: string } {
   if (typeof window !== "undefined" && isMobileApp()) return {};
   return { target: "_blank", rel: "noopener noreferrer" };
 }
+
+/**
+ * Ouvre une URL externe sans quitter l'app :
+ * - iOS natif : SFSafariViewController modal (recommande par Apple)
+ * - web : nouvel onglet classique
+ */
+export function openExternal(url: string): void {
+  if (typeof window === "undefined") return;
+  const cap = (window as Window & {
+    Capacitor?: {
+      isNativePlatform?: () => boolean;
+      Plugins?: { AyebaBrowser?: { openSafariView?(o: { url: string }): Promise<void> } };
+    };
+  }).Capacitor;
+  if (cap?.isNativePlatform?.() && cap.Plugins?.AyebaBrowser?.openSafariView) {
+    void cap.Plugins.AyebaBrowser.openSafariView({ url });
+    return;
+  }
+  window.open(url, "_blank", "noopener,noreferrer");
+}
