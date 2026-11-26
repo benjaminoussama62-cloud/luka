@@ -656,6 +656,38 @@ public class AyebaBrowserPlugin: CAPPlugin, WKNavigationDelegate, WKUIDelegate, 
         }
     }
 
+    /// Enregistre un fichier via la feuille de partage native —
+    /// les telechargements "a.download" sont inertes dans WKWebView :
+    /// le web envoie du base64, l'utilisateur choisit "Enregistrer
+    /// dans Fichiers" (comportement iOS standard).
+    @objc func shareFile(_ call: CAPPluginCall) {
+        guard let name = call.getString("name"),
+              let dataStr = call.getString("data"),
+              let data = Data(base64Encoded: dataStr) else {
+            call.reject("Parametres manquants")
+            return
+        }
+        let mime = call.getString("mime")
+        _ = mime // conserve pour evolution future (UTI)
+        DispatchQueue.main.async {
+            do {
+                let tmp = FileManager.default.temporaryDirectory.appendingPathComponent(name)
+                try data.write(to: tmp)
+                let vc = UIActivityViewController(activityItems: [tmp], applicationActivities: nil)
+                if let pop = vc.popoverPresentationController, let view = self.bridge?.webView {
+                    pop.sourceView = view
+                    pop.sourceRect = CGRect(x: view.bounds.midX, y: view.bounds.midY, width: 0, height: 0)
+                    pop.permittedArrowDirections = []
+                }
+                self.bridge?.viewController?.present(vc, animated: true) {
+                    call.resolve()
+                }
+            } catch {
+                call.reject("Erreur fichier: \(error.localizedDescription)")
+            }
+        }
+    }
+
     // MARK: - Speech Recognition (recherche vocale native)
 
     /// Recherche vocale native via SFSpeechRecognizer — la Web Speech API

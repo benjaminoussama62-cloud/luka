@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useAyeba } from "@/lib/store";
+import { downloadGeneratedFile } from "@/lib/mobile-app";
 import type { DeepResearchReport, DeepResearchStep, SearchResponse } from "@/lib/types";
 
 /**
@@ -148,12 +149,7 @@ ${report.sections.map((s) => `<h2>${escapeHtml(s.heading)}</h2><p>${escapeHtml(s
 <h2>Sources</h2><ul>${report.sources.map((s) => `<li>[${s.credibility}] <a href="${s.url}">${escapeHtml(s.title)}</a></li>`).join("")}</ul>
 <script>setTimeout(()=>window.print(),400)</script></body></html>`;
     const blob = new Blob([html], { type: "text/html;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `ayeba-rapport-${q.replace(/\s+/g, "-").toLowerCase()}.html`;
-    a.click();
-    URL.revokeObjectURL(url);
+    void downloadGeneratedFile(`ayeba-rapport-${q.replace(/\s+/g, "-").toLowerCase()}.html`, blob);
   }
 
   return (

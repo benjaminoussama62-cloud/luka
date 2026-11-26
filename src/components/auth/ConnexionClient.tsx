@@ -14,6 +14,9 @@ type CapacitorGlobal = {
     AyebaBrowser?: {
       authenticateBiometric(o: { reason: string }): Promise<{ success: boolean }>;
       haptic(o: { type: string }): Promise<void>;
+      setKeychainItem(o: { key: string; value: string }): Promise<void>;
+      getKeychainItem(o: { key: string }): Promise<{ value: string }>;
+      requestNotificationPermission(): Promise<{ granted: boolean }>;
     };
   };
 };
@@ -103,18 +106,35 @@ export function ConnexionClient({ next }: { next: string }) {
     }
   }, []);
 
+  // Face ID / Touch ID : déverrouille la session — les identifiants sont
+  // stockés dans le Keychain iOS après une première connexion par mot de
+  // passe, puis rejoués ici après succès biométrique.
   async function handleBiometric() {
     const plugin = cap()?.Plugins?.AyebaBrowser;
     if (!cap()?.isNativePlatform() || !plugin) return;
     try {
       await plugin.authenticateBiometric({ reason: "Connexion rapide à votre compte Ayeba" });
-      // Haptic feedback
-      await plugin.haptic({ type: "success" });
-      setError(null);
-      // Proceed with magic link for now — biometric just proves device ownership
-      setMode("magic");
+      let savedEmail = "";
+      let savedPass = "";
+      try { savedEmail = (await plugin.getKeychainItem({ key: "ayeba.email" })).value ?? ""; } catch { /* absent */ }
+      try { savedPass = (await plugin.getKeychainItem({ key: "ayeba.password" })).value ?? ""; } catch { /* absent */ }
+      if (!savedEmail || !savedPass) {
+        await plugin.haptic({ type: "warning" });
+        setError("Connecte-toi une première fois avec ton mot de passe pour activer Face ID.");
+        return;
+      }
+      setLoading(true);
+      const err = await loginWithEmail(savedEmail, savedPass);
+      setLoading(false);
+      if (err) {
+        await plugin.haptic({ type: "error" });
+        setError(err);
+      } else {
+        await plugin.haptic({ type: "success" });
+        window.location.href = dest;
+      }
     } catch {
-      await plugin.haptic({ type: "error" });
+      await plugin.haptic({ type: "error" }).catch(() => {});
       setError("Biométrie refusée ou indisponible");
     }
   }
@@ -140,6 +160,19 @@ export function ConnexionClient({ next }: { next: string }) {
     if (err) {
       setError(err);
     } else {
+      // Mémorise pour la connexion Face ID (Keychain iOS — jamais en clair).
+      const plugin = cap()?.Plugins?.AyebaBrowser;
+      if (cap()?.isNativePlatform?.() && plugin?.setKeychainItem) {
+        void plugin.setKeychainItem({ key: "ayeba.email", value: email }).catch(() => {});
+        void plugin.setKeychainItem({ key: "ayeba.password", value: password }).catch(() => {});
+        // Notifications contextuelles (alertes mail/taux) — demande post-login.
+        try {
+          if (sessionStorage.getItem("ayeba.push-asked") !== "1") {
+            sessionStorage.setItem("ayeba.push-asked", "1");
+            void plugin.requestNotificationPermission?.().catch(() => {});
+          }
+        } catch { /* private mode */ }
+      }
       window.location.href = dest;
     }
   }

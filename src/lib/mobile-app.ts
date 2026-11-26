@@ -53,3 +53,37 @@ export function openExternal(url: string): void {
   }
   window.open(url, "_blank", "noopener,noreferrer");
 }
+
+/**
+ * Telecharge un fichier genere en JS :
+ * - iOS natif : feuille de partage "Enregistrer dans Fichiers"
+ *   (a.download est inerte dans WKWebView)
+ * - web : telechargement classique
+ */
+export async function downloadGeneratedFile(name: string, blob: Blob): Promise<void> {
+  const cap = (window as Window & {
+    Capacitor?: {
+      isNativePlatform?: () => boolean;
+      Plugins?: {
+        AyebaBrowser?: { shareFile?(o: { name: string; data: string; mime?: string }): Promise<void> };
+      };
+    };
+  }).Capacitor;
+
+  if (cap?.isNativePlatform?.() && cap.Plugins?.AyebaBrowser?.shareFile) {
+    const buf = new Uint8Array(await blob.arrayBuffer());
+    let bin = "";
+    for (let i = 0; i < buf.length; i += 0x8000) {
+      bin += String.fromCharCode(...buf.subarray(i, i + 0x8000));
+    }
+    await cap.Plugins.AyebaBrowser.shareFile({ name, data: btoa(bin), mime: blob.type });
+    return;
+  }
+
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(url);
+}

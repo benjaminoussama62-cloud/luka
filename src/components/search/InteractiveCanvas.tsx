@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useAyeba } from "@/lib/store";
+import { downloadGeneratedFile } from "@/lib/mobile-app";
 import type { CanvasTable } from "@/lib/types";
 
 function toCsv(table: CanvasTable) {
@@ -41,12 +42,7 @@ export function InteractiveCanvas() {
 
   function exportExcel(table: CanvasTable) {
     const blob = new Blob([toCsv(table)], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${table.title.replace(/\s+/g, "-").toLowerCase()}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    void downloadGeneratedFile(`${table.title.replace(/\s+/g, "-").toLowerCase()}.csv`, blob);
   }
 
   return (

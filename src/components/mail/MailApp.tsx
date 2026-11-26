@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth";
-import { isMobileApp } from "@/lib/mobile-app";
+import { isMobileApp, downloadGeneratedFile } from "@/lib/mobile-app";
 import { decryptBytes, decryptUtf8, openContentKey, type VaultSession } from "@/lib/mail/e2ee";
 import { sendSealedMessage } from "@/components/mail/send-sealed";
 import { SecurityPane, VaultCreate, VaultUnlock, type VaultInfo } from "@/components/mail/VaultScreens";
@@ -512,12 +512,7 @@ export function MailApp() {
     const copy = new ArrayBuffer(plain.byteLength);
     new Uint8Array(copy).set(plain);
     const blob = new Blob([copy], { type: file.mime || "application/octet-stream" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = file.name || "piece-jointe";
-    a.click();
-    URL.revokeObjectURL(url);
+    await downloadGeneratedFile(file.name || "piece-jointe", blob);
   };
 
   // Répondre / Transférer — citation façon clients mails.
@@ -776,12 +771,7 @@ export function MailApp() {
 
   const downloadEml = (t: ThreadMsg) => {
     const blob = new Blob([emlOf(t)], { type: "message/rfc822" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${(t.subject || "message").replace(/[^\wÀ-ÿ -]/g, "").slice(0, 60) || "message"}.eml`;
-    a.click();
-    URL.revokeObjectURL(url);
+    void downloadGeneratedFile(`${(t.subject || "message").replace(/[^\wÀ-ÿ -]/g, "").slice(0, 60) || "message"}.eml`, blob);
     setMenuFor(null);
   };
 
